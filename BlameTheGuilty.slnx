@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/backend/">
+    <Project Path="backend/BlameTheGuilty.Api.csproj" />
+  </Folder>
+  <Folder Name="/desktop/">
+    <Project Path="desktop/BlameTheGuilty.Desktop.csproj" />
+  </Folder>
+</Solution>

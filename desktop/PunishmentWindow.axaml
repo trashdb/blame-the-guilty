@@ -1,0 +1,66 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="BlameTheGuilty.Desktop.PunishmentWindow"
+        Title="Punishment"
+        WindowState="Maximized"
+        Topmost="True"
+        WindowDecorations="None"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Background="#1a1a2e"
+        Closing="Window_Closing"
+        Deactivated="Window_Deactivated">
+    <Grid Margin="40">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="💀 CASTIGO 💀"
+                   FontSize="36" FontWeight="Bold"
+                   Foreground="#e94560"
+                   HorizontalAlignment="Center" Margin="0,0,0,20"/>
+
+        <TextBlock Grid.Row="1" Text="Has hecho merge sin correr los tests."
+                   FontSize="18" Foreground="White"
+                   HorizontalAlignment="Center" TextWrapping="Wrap"
+                   Margin="0,0,0,10"/>
+
+        <TextBlock x:Name="DetailsText" Grid.Row="2"
+                   FontSize="13" Foreground="#888"
+                   HorizontalAlignment="Center" TextWrapping="Wrap"
+                   Margin="0,0,0,30"/>
+
+        <StackPanel Grid.Row="3" HorizontalAlignment="Center">
+            <TextBlock Text="Escribe la frase exacta para desbloquear:"
+                       FontSize="14" Foreground="#aaa"
+                       Margin="0,0,0,10" HorizontalAlignment="Center"/>
+            <Border BorderBrush="#e94560" BorderThickness="2" CornerRadius="4"
+                    HorizontalAlignment="Center">
+                <TextBox x:Name="RedemptionText"
+                         Width="450" Height="40"
+                         FontSize="14" Foreground="White"
+                         Background="#16213e"
+                         BorderThickness="0"
+                         TextAlignment="Center"
+                         VerticalContentAlignment="Center"
+                         Padding="10,0"
+                         KeyDown="RedemptionText_KeyDown"
+                         KeyUp="RedemptionText_KeyUp"/>
+            </Border>
+        </StackPanel>
+
+        <TextBlock x:Name="ErrorText" Grid.Row="4"
+                   Text="" Foreground="#e94560" FontSize="14"
+                   HorizontalAlignment="Center" Margin="0,15,0,0"/>
+
+        <TextBlock Grid.Row="5"
+                   Text="No puedes cerrar esta ventana hasta que escribas la frase correcta."
+                   FontSize="11" Foreground="#555"
+                   HorizontalAlignment="Center" VerticalAlignment="Bottom"/>
+    </Grid>
+</Window>
