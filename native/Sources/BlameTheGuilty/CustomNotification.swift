@@ -19,7 +19,7 @@ struct VisualEffectBackground: NSViewRepresentable {
 
 struct NotificationBannerView: View {
     let title: String
-    let body: String
+    let message: String
     let subtitle: String?
     let hasURL: Bool
     let onDismiss: () -> Void
@@ -30,10 +30,12 @@ struct NotificationBannerView: View {
     var body: some View {
         ZStack {
             VisualEffectBackground(material: .hudWindow)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-                )
+
+            // Red tint overlay
+            Color(red: 0.82, green: 0.08, blue: 0.08).opacity(0.10)
+
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color(red: 0.82, green: 0.08, blue: 0.08).opacity(0.25), lineWidth: 1)
 
             HStack(alignment: .top, spacing: 10) {
                 // Warning icon
@@ -56,7 +58,7 @@ struct NotificationBannerView: View {
                             .lineLimit(1)
                     }
 
-                    Text(body)
+                    Text(message)
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                         .lineLimit(2)
@@ -114,9 +116,8 @@ final class NotificationBanner: NSObject {
     private var timer: Timer?
 
     func show(title: String, body: String, subtitle: String?, actionURL: URL?) {
-        DispatchQueue.main.async { [weak self] in
-            self?.present(title: title, body: body, subtitle: subtitle, actionURL: actionURL)
-        }
+        // Already called from @MainActor — present directly without extra dispatch
+        present(title: title, body: body, subtitle: subtitle, actionURL: actionURL)
     }
 
     private func present(title: String, body: String, subtitle: String?, actionURL: URL?) {
@@ -139,16 +140,19 @@ final class NotificationBanner: NSObject {
             defer: false
         )
         p.isFloatingPanel = true
-        p.level = .floating
-        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        // Use .screenSaver level so the banner appears above all windows
+        // even when the app has .accessory activation policy
+        p.level = NSWindow.Level(rawValue: Int(CGWindowLevelKey.screenSaverWindow.rawValue) - 1)
+        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         p.backgroundColor = .clear
         p.hasShadow = true
         p.isOpaque = false
         p.isReleasedWhenClosed = false
+        p.ignoresMouseEvents = false
 
         let bannerView = NotificationBannerView(
             title: title,
-            body: body,
+            message: body,
             subtitle: subtitle,
             hasURL: actionURL != nil,
             onDismiss: { [weak self] in self?.dismiss() },
@@ -180,4 +184,8 @@ final class NotificationBanner: NSObject {
         panel = nil
     }
 }
+
+
+
+
 

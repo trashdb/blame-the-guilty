@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -24,40 +25,75 @@ public partial class PunishmentWindow : Window
         DetailsText.Text = $"@{culprit} \u00b7 {repo} \u00b7 run #{runId}";
     }
 
-    private void ForceForeground()
+    private async void ForceForeground()
     {
         Topmost = true;
-        WindowState = WindowState.Maximized;
-        Activate();
+        // Small delay to ensure native window handle is ready
+        await Task.Delay(100);
+        MakeKeyAndOrderFrontNative();
         RedemptionText.Focus();
+    }
+
+    private void Window_Activated(object? sender, EventArgs e)
+    {
+        Topmost = true;
+        RedemptionText.Focus();
+    }
+
+    private async void Window_Deactivated(object? sender, EventArgs e)
+    {
+        await Task.Delay(50);
+        Dispatcher.UIThread.Post(() =>
+        {
+            Topmost = true;
+            MakeKeyAndOrderFrontNative();
+        });
+    }
+
+    private void MakeKeyAndOrderFrontNative()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            Activate();
+            return;
+        }
+
+        try
+        {
+            var handle = TryGetPlatformHandle();
+            if (handle == null || handle.Handle == IntPtr.Zero) return;
+
+            var nsWindow = handle.Handle;
+
+            // Make key and order front (bring to front and focus)
+            _ = objc_msgSend(nsWindow, sel_registerName("makeKeyAndOrderFront:"), IntPtr.Zero);
+
+            // Set level to NSScreenSaverWindowLevel (1000) — above everything
+            _ = objc_msgSend(nsWindow, sel_registerName("setLevel:"), (IntPtr)1000);
+
+            // Appear in all spaces and over full-screen apps
+            // NSWindowCollectionBehaviorCanJoinAllSpaces (1) | NSWindowCollectionBehaviorFullScreenAuxiliary (256)
+            _ = objc_msgSend(nsWindow, sel_registerName("setCollectionBehavior:"), (IntPtr)257);
+        }
+        catch
+        {
+            Activate();
+        }
     }
 
     private void Window_Closing(object? sender, WindowClosingEventArgs e)
     {
-        // Do not allow closing unless CloseByRedemption flag was set
         if (!_redeemed)
             e.Cancel = true;
     }
 
     private bool _redeemed;
 
-    private void Window_Deactivated(object? sender, EventArgs e)
-    {
-        Dispatcher.UIThread.Post(() =>
-        {
-            Topmost = true;
-            WindowState = WindowState.Maximized;
-            Activate();
-        });
-    }
-
     private void RedemptionText_KeyDown(object? sender, KeyEventArgs e)
     {
-        // Block Alt+F4
         if (e.Key == Key.F4 && (e.KeyModifiers & KeyModifiers.Alt) == KeyModifiers.Alt)
             e.Handled = true;
 
-        // Block paste (Ctrl+V / Cmd+V)
         if (e.Key == Key.V && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Meta)) != 0)
             e.Handled = true;
     }
@@ -78,4 +114,11 @@ public partial class PunishmentWindow : Window
             RedemptionText.Focus();
         }
     }
+
+    // Native macOS Objective-C interop
+    [DllImport("/usr/lib/libobjc.dylib")]
+    private static extern IntPtr objc_msgSend(IntPtr receiver, IntPtr selector, IntPtr arg);
+
+    [DllImport("/usr/lib/libobjc.dylib")]
+    private static extern IntPtr sel_registerName(string name);
 }

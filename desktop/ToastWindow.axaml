@@ -1,0 +1,62 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="BlameTheGuilty.Desktop.ToastWindow"
+        Title="Blame the Guilty"
+        Width="380" Height="140"
+        WindowStartupLocation="Manual"
+        Topmost="True"
+        WindowDecorations="None"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Background="#1a1a2e"
+        Closing="Window_Closing"
+        Activated="Window_Activated"
+        Deactivated="Window_Deactivated"
+        Opacity="0.95">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <DockPanel Grid.Row="0">
+            <Button x:Name="DismissButton"
+                    Content="&#x2715;"
+                    Width="28" Height="28"
+                    HorizontalAlignment="Right"
+                    DockPanel.Dock="Right"
+                    Background="Transparent"
+                    Foreground="#888"
+                    BorderThickness="0"
+                    FontSize="14"
+                    Cursor="Hand"
+                    Click="DismissButton_Click" />
+            <TextBlock Text="&#x26a0;&#xfe0f; Blame the Guilty"
+                       FontSize="16" FontWeight="Bold"
+                       Foreground="#e94560"
+                       VerticalAlignment="Center"
+                       Margin="0,0,40,0"/>
+        </DockPanel>
+
+        <TextBlock x:Name="MessageText" Grid.Row="1"
+                   TextWrapping="Wrap"
+                   FontSize="14" Foreground="White"
+                   Margin="0,8,0,0"/>
+
+        <TextBlock x:Name="DetailsText" Grid.Row="2"
+                   TextWrapping="Wrap"
+                   FontSize="12" Foreground="#888"
+                   Margin="0,4,0,0"
+                   VerticalAlignment="Top"/>
+
+        <TextBlock Grid.Row="3"
+                   FontSize="10" Foreground="#555"
+                   HorizontalAlignment="Right"
+                   Margin="0,8,0,0">
+            <Run Text="&#x2715;"/>
+            <Run Text="Clic para cerrar esta notificaci&#x00f3;n"/>
+        </TextBlock>
+    </Grid>
+</Window>

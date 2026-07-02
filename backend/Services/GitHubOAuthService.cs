@@ -54,12 +54,13 @@ public class GitHubOAuthService
         if (string.IsNullOrEmpty(accessToken))
             return null;
 
-        // Get user info with the token
-        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("BlameTheGuilty");
-        _httpClient.DefaultRequestHeaders.Authorization =
+        // Get user info with the token (using per-request headers, not shared DefaultRequestHeaders)
+        using var userRequest = new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/user");
+        userRequest.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        userRequest.Headers.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
 
-        var userResponse = await _httpClient.GetAsync("https://api.github.com/user");
+        var userResponse = await _httpClient.SendAsync(userRequest);
         userResponse.EnsureSuccessStatusCode();
 
         var userContent = await userResponse.Content.ReadAsStringAsync();

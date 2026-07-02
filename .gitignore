@@ -6,3 +6,19 @@ obj/
 .vs/
 .DS_Store
 
+# Swift / Xcode build artifacts
+native/.build/
+native/.swiftpm/
+native/publish/
+*.xcuserstate
+xcuserdata/
+# .NET publish output
+backend/publish/
+desktop/publish/
+# JetBrains IDE
+.idea/
+# Deploy secrets
+backend/appsettings.Production.json
+backend/appsettings.Development.json
+# macOS
+.DS_Store

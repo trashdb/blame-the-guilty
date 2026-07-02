@@ -7,7 +7,7 @@ namespace BlameTheGuilty.Desktop;
 
 public partial class MainWindow : Window
 {
-    private const string BackendUrl = "https://https://moonlike-silenced-sprung.ngrok-free.dev";
+    private const string BackendUrl = "https://moonlike-silenced-sprung.ngrok-free.dev";
 
     private readonly OAuthService _oauth;
     private readonly SignalRService _signalR;
@@ -62,13 +62,11 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void OnPunishmentTriggered(JsonElement data)
+    private void OnPunishmentTriggered(JsonElement data)
     {
-        await Dispatcher.UIThread.InvokeAsync(async () =>
-        {
-            var punishment = new PunishmentWindow(data);
-            await punishment.ShowDialog(this);
-        });
+        Dispatcher.UIThread.Post(() =>
+            NotificationService.ShowPunishmentNotification(data)
+        );
     }
 
     protected override void OnClosing(WindowClosingEventArgs e)

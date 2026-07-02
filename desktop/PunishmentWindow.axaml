@@ -2,14 +2,16 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="BlameTheGuilty.Desktop.PunishmentWindow"
         Title="Punishment"
-        WindowState="Maximized"
+        Width="600" Height="450"
+        WindowStartupLocation="CenterScreen"
         Topmost="True"
         WindowDecorations="None"
         CanResize="False"
         ShowInTaskbar="False"
         Background="#1a1a2e"
         Closing="Window_Closing"
-        Deactivated="Window_Deactivated">
+        Deactivated="Window_Deactivated"
+        Activated="Window_Activated">
     <Grid Margin="40">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
