@@ -14,7 +14,7 @@ dotnet publish -c Release --self-contained true -r linux-x64 -o ./publish
 echo "=== Uploading to VPS ==="
 ssh "$VPS" "sudo mkdir -p $REMOTE && sudo chown \$USER:\$USER $REMOTE"
 rsync -az --delete ./publish/ "$VPS:$REMOTE/"
-rsync -az --delete "$SCRIPT_DIR/deploy/" "$VPS:$REMOTE/"
+rsync -az "$SCRIPT_DIR/deploy/" "$VPS:$REMOTE/deploy/"
 
 echo "=== Copying production config ==="
 if [ -f appsettings.Production.json ]; then
