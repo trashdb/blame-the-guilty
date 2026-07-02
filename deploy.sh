@@ -12,7 +12,7 @@ echo "=== Building self-contained binary ==="
 dotnet publish -c Release --self-contained true -r linux-x64 -o ./publish
 
 echo "=== Uploading to VPS ==="
-ssh "$VPS" "sudo mkdir -p $REMOTE && sudo chown \$USER:$USER $REMOTE"
+ssh "$VPS" "sudo mkdir -p $REMOTE && sudo chown \$USER:\$USER $REMOTE"
 rsync -az --delete ./publish/ "$VPS:$REMOTE/"
 rsync -az --delete "$SCRIPT_DIR/deploy/" "$VPS:$REMOTE/"
 
