@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/ngrok http --domain=moonlike-silenced-sprung.ngrok-free.dev 5000
+ExecStart=/usr/bin/ngrok http --domain=moonlike-silenced-sprung.ngrok-free.dev 5000
 Restart=always
 RestartSec=10
 
