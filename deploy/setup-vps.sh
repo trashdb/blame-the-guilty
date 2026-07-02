@@ -4,10 +4,8 @@ set -euo pipefail
 
 APP_DIR="/opt/blame-the-guilty"
 
-echo "=== Creating user and directory ==="
+echo "=== Creating directory ==="
 sudo mkdir -p "$APP_DIR"
-sudo useradd --system --no-create-home --shell /usr/sbin/nologin blame 2>/dev/null || true
-sudo chown blame:blame "$APP_DIR"
 
 echo "=== Installing ngrok ==="
 if ! command -v ngrok &>/dev/null; then

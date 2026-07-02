@@ -4,7 +4,6 @@ After=network.target
 
 [Service]
 Type=simple
-User=blame
 WorkingDirectory=/opt/blame-the-guilty
 ExecStart=/opt/blame-the-guilty/BlameTheGuilty.Api
 Restart=always
