@@ -22,3 +22,6 @@ backend/appsettings.Production.json
 backend/appsettings.Development.json
 # macOS
 .DS_Store
+*.db-shm
+*.db-wal
+*.db-journal
