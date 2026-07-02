@@ -1,0 +1,16 @@
+[Unit]
+Description=Blame the Guilty API
+After=network.target
+
+[Service]
+Type=simple
+User=blame
+WorkingDirectory=/opt/blame-the-guilty
+ExecStart=/opt/blame-the-guilty/BlameTheGuilty.Api
+Restart=always
+RestartSec=5
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ASPNETCORE_URLS=http://localhost:5000
+
+[Install]
+WantedBy=multi-user.target
