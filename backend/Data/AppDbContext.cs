@@ -8,6 +8,7 @@ public class AppDbContext : DbContext
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
     public DbSet<GitHubUser> GitHubUsers => Set<GitHubUser>();
+    public DbSet<PunishmentEvent> PunishmentEvents => Set<PunishmentEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -15,6 +16,12 @@ public class AppDbContext : DbContext
         {
             entity.HasIndex(u => u.GitHubUsername).IsUnique();
             entity.HasIndex(u => u.GitHubId).IsUnique();
+        });
+
+        modelBuilder.Entity<PunishmentEvent>(entity =>
+        {
+            entity.HasIndex(e => e.OccurredAt);
+            entity.HasIndex(e => e.CulpritLogin);
         });
     }
 }

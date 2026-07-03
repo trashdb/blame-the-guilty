@@ -48,6 +48,20 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
+    // Ensure the PunishmentEvents table exists even on existing DBs
+    db.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS "PunishmentEvents" (
+            "Id" INTEGER NOT NULL CONSTRAINT "PK_PunishmentEvents" PRIMARY KEY AUTOINCREMENT,
+            "RunId" INTEGER NOT NULL,
+            "CulpritLogin" TEXT NOT NULL,
+            "CulpritGitHubId" INTEGER,
+            "RepoFullName" TEXT NOT NULL,
+            "WorkflowName" TEXT,
+            "WorkflowUrl" TEXT,
+            "OccurredAt" TEXT NOT NULL,
+            "WasNotified" INTEGER NOT NULL DEFAULT 0
+        );
+        """);
 }
 
 app.UseCors("SignalR");

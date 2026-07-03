@@ -104,6 +104,9 @@ struct MenuBarContent: View {
     let onLogout:    () -> Void
 
     @State private var launchAtLogin = (SMAppService.mainApp.status == .enabled)
+    @State private var history: [HistoryEvent] = []
+    @State private var historyError: String?
+    private let historyService = HistoryService()
 
     private let crimsonGradient = LinearGradient(
         colors: [Color(red: 0.82, green: 0.10, blue: 0.10),
@@ -120,6 +123,10 @@ struct MenuBarContent: View {
                 Divider()
                 lastFailureSection(event)
             }
+            if isLoggedIn, !history.isEmpty {
+                Divider()
+                historySection
+            }
             if !isLoggedIn {
                 Divider()
                 loginSection
@@ -130,6 +137,7 @@ struct MenuBarContent: View {
             quitButton
         }
         .frame(width: 262)
+        .task { await fetchHistory() }
     }
 
     // MARK: Header
@@ -188,11 +196,8 @@ struct MenuBarContent: View {
     private func lastFailureSection(_ event: PunishmentEvent) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Image(systemName: "exclamationmark.octagon.fill")
-                    .font(.system(size: 11)).foregroundColor(.red)
                 Text("Last Failure")
                     .font(.system(size: 11, weight: .semibold)).foregroundColor(.red)
-                Spacer()
                 Text(event.date, style: .relative)
                     .font(.system(size: 10)).foregroundColor(.secondary)
             }
@@ -216,6 +221,56 @@ struct MenuBarContent: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+    }
+
+    // MARK: History (last 7 days)
+
+    private var historySection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.system(size: 10)).foregroundColor(.secondary)
+                Text("Recent failures (7d)")
+                    .font(.system(size: 10, weight: .semibold)).foregroundColor(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 8)
+
+            ForEach(history.prefix(5)) { event in
+                Button {
+                    if let url = event.workflowUrl.flatMap({ URL(string: $0) }) {
+                        NSWorkspace.shared.open(url)
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("@\(event.culpritLogin)")
+                                .font(.system(size: 11, weight: .medium))
+                            Text(event.repoFullName)
+                                .font(.system(size: 10)).lineLimit(1)
+                        }
+                        Spacer()
+                        Text(event.occurredAt, style: .relative)
+                            .font(.system(size: 9))
+                    }
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.primary.opacity(0.7))
+                .padding(.horizontal, 14)
+            }
+            .padding(.bottom, 6)
+        }
+    }
+
+    private func fetchHistory() async {
+        guard isLoggedIn else { return }
+        do {
+            let result = try await historyService.fetchRecent(baseUrl: BackendUrl)
+            await MainActor.run { history = result; historyError = nil }
+        } catch {
+            await MainActor.run { historyError = error.localizedDescription }
+        }
     }
 
     // MARK: Login

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using BlameTheGuilty.Api.Data;
 using BlameTheGuilty.Api.Hubs;
+using BlameTheGuilty.Api.Models;
 
 namespace BlameTheGuilty.Api.Controllers;
 
@@ -52,10 +53,31 @@ public class WebhookController : ControllerBase
         _logger.LogInformation(
             "Culprit resolved: login={Login}, id={Id}", culprit.Login, culprit.Id);
 
+        // Save to history regardless of connection status
+        var repoFullName = payload.GetProperty("repository").GetProperty("full_name").GetString() ?? "unknown";
+        var runId = workflowRun.GetProperty("id").GetInt64();
+        var workflowName = workflowRun.TryGetProperty("name", out var wn) ? wn.GetString() : null;
+        var workflowUrl = workflowRun.TryGetProperty("html_url", out var wu) ? wu.GetString() : null;
+
+        var historyEvent = new PunishmentEvent
+        {
+            RunId = runId,
+            CulpritLogin = culprit.Login,
+            CulpritGitHubId = culprit.Id,
+            RepoFullName = repoFullName,
+            WorkflowName = workflowName,
+            WorkflowUrl = workflowUrl,
+            OccurredAt = DateTime.UtcNow
+        };
+
         // Look up user by GitHubId (immutable) first, then by username
         var user = culprit.Id.HasValue
             ? await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == culprit.Id.Value && u.SignalRConnectionId != null)
             : await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubUsername == culprit.Login && u.SignalRConnectionId != null);
+
+        historyEvent.WasNotified = user != null;
+        _db.PunishmentEvents.Add(historyEvent);
+        await _db.SaveChangesAsync();
 
         if (user == null)
         {
