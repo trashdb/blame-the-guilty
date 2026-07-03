@@ -195,6 +195,14 @@ class OAuthService {
                     }
                 }
 
+                Task {
+                    try? await Task.sleep(for: .seconds(120))
+                    if !handled.value {
+                        handled.value = true
+                        continuation.resume(throwing: OAuthError.timeout)
+                    }
+                }
+
                 listener.start(queue: .main)
                 NSWorkspace.shared.open(URL(string: loginUrl)!)
             } catch {
@@ -205,5 +213,6 @@ class OAuthService {
 
     enum OAuthError: Error {
         case failed
+        case timeout
     }
 }
