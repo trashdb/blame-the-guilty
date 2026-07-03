@@ -29,7 +29,7 @@ struct BlameTheGuiltyApp: App {
                 onLogout: logout
             )
         } label: {
-            Image(systemName: "exclamationmark.octagon.fill")
+            Image(systemName: "flame.fill")
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(menuBarIconColor)
                 .onAppear {
@@ -135,66 +135,50 @@ struct MenuBarContent: View {
     // MARK: Header
 
     private var header: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "exclamationmark.octagon.fill")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundColor(.white)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Blame the Guilty")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(.white)
-                Text("CI/CD Punishment System")
-                    .font(.system(size: 10))
-                    .foregroundColor(.white.opacity(0.70))
-            }
-            Spacer()
+        HStack(spacing: 0) {
+            Text("Blame the Guilty")
+                .font(.system(size: 12))
+                .foregroundColor(.red)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 13)
+        .padding(.vertical, 6)
         .background(crimsonGradient)
     }
 
     // MARK: Status
 
     private var statusSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 0) {
             connectionRow
             if isLoggedIn { userRow }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 12)
     }
 
     @ViewBuilder
     private var connectionRow: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 5) {
             if isLoading && !isLoggedIn {
                 ProgressView().scaleEffect(0.65).frame(width: 8, height: 8)
                 Text("Authenticating...")
-                    .font(.system(size: 12)).foregroundColor(.secondary)
+                    .font(.system(size: 12)).foregroundColor(Color(white: 0.9))
             } else if isLoggedIn {
                 Circle()
                     .fill(signalR.isConnected ? Color.green : Color.orange)
                     .frame(width: 8, height: 8)
                 Text(signalR.isConnected ? "Connected & watching" : "Reconnecting...")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 12))
                     .foregroundColor(signalR.isConnected ? .green : .orange)
             } else {
-                Circle().fill(Color.secondary.opacity(0.40)).frame(width: 8, height: 8)
-                Text("Not signed in").font(.system(size: 12)).foregroundColor(.secondary)
+                Circle().fill(Color(white: 0.4)).frame(width: 8, height: 8)
+                Text("Not signed in").font(.system(size: 12)).foregroundColor(Color(white: 0.7))
             }
-            Spacer()
         }
     }
 
     private var userRow: some View {
-        HStack(spacing: 8) {
-            ZStack {
-                Circle().fill(Color.accentColor.opacity(0.15)).frame(width: 22, height: 22)
-                Image(systemName: "person.fill").font(.system(size: 10)).foregroundColor(.accentColor)
-            }
-            Text("@\(username)").font(.system(size: 12, weight: .medium))
-            Spacer()
+        HStack(spacing: 5) {
+            Text("@\(username)").font(.system(size: 12))
         }
     }
 
@@ -288,9 +272,8 @@ struct MenuBarContent: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
-            .foregroundColor(.secondary)
+            .foregroundColor(Color(white: 0.7))
             .padding(.horizontal, 14)
-            .padding(.bottom, 4)
 
             if isLoggedIn {
                 Button(role: .destructive, action: onLogout) {
@@ -302,9 +285,8 @@ struct MenuBarContent: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.plain)
-                .foregroundColor(.secondary)
+                .foregroundColor(Color(white: 0.7))
                 .padding(.horizontal, 14)
-                .padding(.bottom, 8)
             }
         }
     }

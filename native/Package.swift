@@ -10,12 +10,6 @@ let package = Package(
             name: "BlameTheGuilty",
             linkerSettings: [
                 .linkedFramework("ServiceManagement"),
-                // Embed Info.plist in the binary so macOS can read CFBundleIdentifier
-                // without a .app bundle (needed for TCC, Keychain, SMAppService).
-                .unsafeFlags([
-                    "-sectcreate", "__TEXT", "__info_plist",
-                    "Sources/BlameTheGuilty/Info.plist"
-                ])
             ]
         )
     ]

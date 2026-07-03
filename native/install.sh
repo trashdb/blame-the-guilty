@@ -1,14 +1,14 @@
 #!/bin/bash
 # install.sh
-# Packages the Xcode-built executable into a proper .app bundle and installs it
+# Packages the built executable into a proper .app bundle and installs it
 # in ~/Applications. After running this, clicking notifications opens the browser.
 #
 # Usage:
-#   1. Build in Xcode  (⌘B)
-#   2. Run this script (./install.sh)
+#   1. swift build -c release
+#   2. bash install.sh
 #   3. Done — the app runs from ~/Applications/BlameTheGuilty.app
 
-set -e
+set -euo pipefail
 
 APP_NAME="BlameTheGuilty"
 INSTALL_DIR="$HOME/Applications"
@@ -16,20 +16,44 @@ APP_BUNDLE="$INSTALL_DIR/$APP_NAME.app"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INFO_PLIST="$SCRIPT_DIR/Sources/$APP_NAME/Info.plist"
 
-echo "🔍 Searching for the latest build in DerivedData..."
+echo "🔍 Searching for the latest build..."
 
-EXECUTABLE=$(
-  find "$HOME/Library/Developer/Xcode/DerivedData" \
-       -name "$APP_NAME" \
-       -path "*/Debug/$APP_NAME" \
-       ! -name "*.app" \
-       2>/dev/null \
-  | xargs ls -t 2>/dev/null \
-  | head -1
-)
+# Prefer swift build output, fall back to Xcode DerivedData
+EXECUTABLE=""
+if [ -f ".build/release/$APP_NAME" ]; then
+  EXECUTABLE="$(pwd)/.build/release/$APP_NAME"
+  echo "  → swift build -c release: $EXECUTABLE"
+elif [ -f ".build/debug/$APP_NAME" ]; then
+  EXECUTABLE="$(pwd)/.build/debug/$APP_NAME"
+  echo "  → swift build (debug): $EXECUTABLE"
+else
+  EXECUTABLE=$(
+    find "$HOME/Library/Developer/Xcode/DerivedData" \
+         -name "$APP_NAME" \
+         -path "*/Release/$APP_NAME" \
+         ! -name "*.app" \
+         2>/dev/null \
+    | xargs ls -t 2>/dev/null \
+    | head -1
+  )
+  if [ -z "$EXECUTABLE" ]; then
+    EXECUTABLE=$(
+      find "$HOME/Library/Developer/Xcode/DerivedData" \
+           -name "$APP_NAME" \
+           -path "*/Debug/$APP_NAME" \
+           ! -name "*.app" \
+           2>/dev/null \
+      | xargs ls -t 2>/dev/null \
+      | head -1
+    )
+  fi
+  if [ -n "$EXECUTABLE" ]; then
+    echo "  → Xcode: $EXECUTABLE"
+  fi
+fi
 
 if [ -z "$EXECUTABLE" ]; then
-  echo "❌  Executable not found. Build the project in Xcode first (⌘B)."
+  echo "❌  Executable not found. Run 'swift build -c release' or build in Xcode first."
   exit 1
 fi
 
