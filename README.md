@@ -1,59 +1,59 @@
 # Blame the Guilty
 
-> Cuando un workflow de GitHub Actions falla tras un merge, el culpable recibe una notificación inmediata en el menú de macOS. No más enterarse horas después.
+> When a GitHub Actions workflow fails after a merge, the culprit gets an instant notification in their macOS menu bar. No more finding out hours later.
 
-## Cómo funciona
+## How it works
 
 ```
-Workflow falla en GitHub ──► Webhook ──► Backend (VPS) ──► SignalR ──► Tu Mac (menú bar 🔥)
+Workflow fails on GitHub ──► Webhook ──► Backend (VPS) ──► SignalR ──► Your Mac (menu bar 🔥)
                                                               │
-                                                    Identifica quién
-                                                    hizo el merge
+                                                    Identifies who
+                                                    merged it
 ```
 
-El backend ya está corriendo en un VPS y conectado por ngrok. No necesitas montar nada.
+The backend is already running on a VPS, exposed via ngrok. No need to set it up yourself.
 
-## Requisitos
+## Requirements
 
-- macOS (Sequoia o superior)
-- Xcode CLI tools (`xcode-select --install`) o Xcode
-- Una cuenta de GitHub
+- macOS (Sequoia or newer)
+- Xcode CLI tools (`xcode-select --install`) or Xcode
+- A GitHub account
 
-## Instalación (una vez)
+## Installation (one-time)
 
 ```bash
-# Clonar el repo
+# Clone the repo
 git clone git@github.com:trashdb/blame-the-guilty.git
 cd blame-the-guilty/native
 
-# Compilar e instalar
+# Build and install
 swift build -c release
 bash install.sh
 ```
 
-Esto instala `BlameTheGuilty.app` en `~/Applications/` y lo lanza automáticamente. Aparecerá un icono 🔥 en tu menú bar.
+This installs `BlameTheGuilty.app` in `~/Applications/` and launches it automatically. A 🔥 icon will appear in your menu bar.
 
-## Uso diario
+## Daily usage
 
-1. Haz clic en el icono 🔥 de la menú bar
-2. Haz clic en **"Sign in with GitHub"**
-3. Se abre el navegador — autoriza la app
-4. Vuelve al menú: verás **"Connected & watching"** en verde
+1. Click the 🔥 icon in the menu bar
+2. Click **"Sign in with GitHub"**
+3. Your browser opens — authorize the app
+4. Go back to the menu: you'll see **"Connected & watching"** in green
 
-A partir de ahí, cuando alguien mergee un workflow que falle, te llegará una notificación con el culpable, el repo y el run. Haz clic en la notificación para abrir el workflow en el navegador.
+From now on, whenever someone merges a failing workflow, you'll get a notification with the culprit, repo, and run ID. Click the notification to open the workflow in your browser.
 
-## Conectar vuestros repos
+## Connect your repos
 
-Cada repo que queráis vigilar necesita un webhook apuntando al backend:
+Each repo you want to monitor needs a webhook pointing at the backend:
 
-1. En GitHub: **Settings → Webhooks → Add webhook**
+1. On GitHub: **Settings → Webhooks → Add webhook**
 2. **Payload URL:** `https://moonlike-silenced-sprung.ngrok-free.dev/api/webhook/github`
 3. **Content type:** `application/json`
-4. **Events:** "Let me select individual events" → marca **"Workflow runs"**
+4. **Events:** "Let me select individual events" → check **"Workflow runs"**
 5. **Active:** ✅
 6. **Add webhook**
 
-## Cómo probar (sin romper nada)
+## How to test (without breaking anything)
 
 ```bash
 curl -X POST https://moonlike-silenced-sprung.ngrok-free.dev/api/webhook/github \
@@ -63,33 +63,33 @@ curl -X POST https://moonlike-silenced-sprung.ngrok-free.dev/api/webhook/github 
     "workflow_run": {
       "id": 999,
       "conclusion": "failure",
-      "head_commit": { "author": { "username": "el-usuario-del-culpable" } },
+      "head_commit": { "author": { "username": "the-culprits-username" } },
       "pull_requests": [{
-        "merged_by": { "id": 12345, "login": "el-usuario-del-culpable" },
-        "user": { "id": 12345, "login": "el-usuario-del-culpable" }
+        "merged_by": { "id": 12345, "login": "the-culprits-username" },
+        "user": { "id": 12345, "login": "the-culprits-username" }
       }]
     },
-    "repository": { "full_name": "tu-org/tu-repo" },
-    "sender": { "id": 12345, "login": "el-usuario-del-culpable" }
+    "repository": { "full_name": "your-org/your-repo" },
+    "sender": { "id": 12345, "login": "the-culprits-username" }
   }'
 ```
 
-Si la app está abierta y conectada, te saltará la notificación.
+If the app is open and connected, you'll get the notification.
 
-## Estructura del repo
+## Repo structure
 
 ```
 blame-the-guilty/
-├── backend/          # API .NET + SignalR (ya desplegada en VPS)
+├── backend/          # .NET API + SignalR (already deployed on VPS)
 │   ├── Controllers/  # WebhookController, AuthController
 │   ├── Hubs/         # SignalR hub
 │   └── appsettings.*.json
-├── native/           # Cliente macOS (SwiftUI, menú bar)
+├── native/           # macOS client (SwiftUI, menu bar app)
 │   ├── Sources/BlameTheGuilty/
-│   │   ├── App.swift        # UI de la menú bar
+│   │   ├── App.swift        # Menu bar UI
 │   │   ├── SignalRService.swift
 │   │   ├── OAuthService.swift
 │   │   └── CustomNotification.swift
 │   └── install.sh
-└── deploy/           # Scripts de despliegue del backend
+└── deploy/           # Backend deployment scripts
 ```
