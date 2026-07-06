@@ -237,6 +237,13 @@ public class WebhookController : ControllerBase
                 }
             }
 
+            if (payload.TryGetProperty("sender", out var sender))
+            {
+                var id = sender.TryGetProperty("id", out var sid) ? sid.GetInt64() : (long?)null;
+                var login = sender.GetProperty("login").GetString()!;
+                return new CulpritInfo(login, id);
+            }
+
             if (run.TryGetProperty("head_commit", out var commit) &&
                 commit.ValueKind != JsonValueKind.Null &&
                 commit.TryGetProperty("author", out var author))
@@ -247,13 +254,6 @@ public class WebhookController : ControllerBase
 
                 if (!string.IsNullOrEmpty(username))
                     return new CulpritInfo(username, null);
-            }
-
-            if (payload.TryGetProperty("sender", out var sender))
-            {
-                var id = sender.TryGetProperty("id", out var sid) ? sid.GetInt64() : (long?)null;
-                var login = sender.GetProperty("login").GetString()!;
-                return new CulpritInfo(login, id);
             }
         }
         catch (Exception ex)
