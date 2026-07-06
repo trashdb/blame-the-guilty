@@ -67,6 +67,25 @@ public class WebhookController : ControllerBase
         var branch = run.TryGetProperty("head_branch", out var hb) ? hb.GetString() : null;
         var url = run.TryGetProperty("html_url", out var hu) ? hu.GetString() : null;
         var runId = run.GetProperty("id").GetInt64();
+        var startedAt = run.TryGetProperty("run_started_at", out var rsa) ? rsa.GetDateTime() : DateTime.UtcNow;
+
+        // Persist to DB
+        var existing = await _db.WorkflowRuns.FirstOrDefaultAsync(w => w.RunId == runId);
+        if (existing == null)
+        {
+            _db.WorkflowRuns.Add(new WorkflowRun
+            {
+                RunId = runId,
+                GitHubId = user.GitHubId,
+                WorkflowName = name,
+                Repo = repo,
+                Actor = culprit.Login,
+                HtmlUrl = url,
+                Status = "in_progress",
+                StartedAt = startedAt
+            });
+            await _db.SaveChangesAsync();
+        }
 
         await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("WorkflowRunStarted", new
         {
@@ -93,6 +112,39 @@ public class WebhookController : ControllerBase
         var runId = workflowRun.GetProperty("id").GetInt64();
         var workflowName = workflowRun.TryGetProperty("name", out var wn) ? wn.GetString() : null;
         var workflowUrl = workflowRun.TryGetProperty("html_url", out var wu) ? wu.GetString() : null;
+
+        // Update WorkflowRuns table
+        var dbRun = await _db.WorkflowRuns.FirstOrDefaultAsync(w => w.RunId == runId);
+        if (dbRun != null)
+        {
+            dbRun.Status = conclusion switch
+            {
+                "success" => "success",
+                "failure" => "failure",
+                _ => dbRun.Status
+            };
+        }
+        else if (conclusion == "success" || conclusion == "failure")
+        {
+            // Run wasn't tracked during in_progress (e.g., backend was down),
+            // try to find the user from the culprit
+            var userForDb = await FindConnectedUser(culprit.Login, culprit.Id);
+            if (userForDb != null)
+            {
+                _db.WorkflowRuns.Add(new WorkflowRun
+                {
+                    RunId = runId,
+                    GitHubId = userForDb.GitHubId,
+                    WorkflowName = workflowName,
+                    Repo = repoFullName,
+                    Actor = culprit.Login,
+                    HtmlUrl = workflowUrl,
+                    Status = conclusion switch { "success" => "success", _ => "failure" },
+                    StartedAt = DateTime.UtcNow
+                });
+            }
+        }
+        await _db.SaveChangesAsync();
 
         // If it was a success → notify completed, else → trigger punishment
         if (conclusion == "success")

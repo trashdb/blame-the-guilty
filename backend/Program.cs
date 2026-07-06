@@ -64,6 +64,32 @@ using (var scope = app.Services.CreateScope())
         """);
 
     db.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS "WorkflowRuns" (
+            "Id" INTEGER NOT NULL CONSTRAINT "PK_WorkflowRuns" PRIMARY KEY AUTOINCREMENT,
+            "RunId" INTEGER NOT NULL,
+            "GitHubId" INTEGER NOT NULL,
+            "WorkflowName" TEXT,
+            "Repo" TEXT NOT NULL,
+            "Actor" TEXT NOT NULL,
+            "HtmlUrl" TEXT,
+            "Status" TEXT NOT NULL DEFAULT 'in_progress',
+            "StartedAt" TEXT NOT NULL
+        );
+        """);
+
+    db.Database.ExecuteSqlRaw("""
+        CREATE INDEX IF NOT EXISTS "IX_WorkflowRuns_GitHubId" ON "WorkflowRuns" ("GitHubId");
+        """);
+
+    db.Database.ExecuteSqlRaw("""
+        CREATE INDEX IF NOT EXISTS "IX_WorkflowRuns_Status" ON "WorkflowRuns" ("Status");
+        """);
+
+    db.Database.ExecuteSqlRaw("""
+        CREATE INDEX IF NOT EXISTS "IX_WorkflowRuns_RunId" ON "WorkflowRuns" ("RunId");
+        """);
+
+    db.Database.ExecuteSqlRaw("""
         CREATE TABLE IF NOT EXISTS "CheckSuiteEvents" (
             "Id" INTEGER NOT NULL CONSTRAINT "PK_CheckSuiteEvents" PRIMARY KEY AUTOINCREMENT,
             "CheckSuiteId" INTEGER NOT NULL,

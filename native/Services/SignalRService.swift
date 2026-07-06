@@ -1,6 +1,28 @@
 import Combine
 import Foundation
 
+private struct ApiWorkflowRun: Decodable {
+    let runId: Int64
+    let workflowName: String?
+    let repo: String
+    let actor: String
+    let status: String
+    let htmlUrl: String?
+    let startedAt: Date
+
+    func toWorkflowRun() -> WorkflowRun {
+        WorkflowRun(
+            id: runId,
+            workflowName: workflowName ?? "Workflow",
+            repo: repo,
+            actor: actor,
+            status: status,
+            htmlUrl: htmlUrl ?? "",
+            startedAt: startedAt
+        )
+    }
+}
+
 enum RunStatus: Equatable {
     case idle, running, success, failure
 }
@@ -22,10 +44,12 @@ class SignalRService: ObservableObject {
 
     func connect(gitHubId: Int64) {
         self.gitHubId = gitHubId
-        loadPersistedHistory()
         task?.cancel()
         task = Task { [weak self] in
             guard let self else { return }
+
+            await syncFromApi(gitHubId: gitHubId)
+
             while !Task.isCancelled {
                 do {
                     try await connectAndListen(gitHubId: gitHubId)
@@ -35,6 +59,26 @@ class SignalRService: ObservableObject {
                 }
             }
         }
+    }
+
+    private func syncFromApi(gitHubId: Int64) async {
+        guard let url = URL(string: "\(baseUrl)/api/workflows/runs?gitHubId=\(gitHubId)&limit=20") else {
+            await MainActor.run { loadPersistedHistory() }
+            return
+        }
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            if let runs = try? JSONDecoder().decode([ApiWorkflowRun].self, from: data) {
+                let mapped = runs.map { $0.toWorkflowRun() }
+                await MainActor.run {
+                    runningWorkflows = mapped.filter { $0.status == "in_progress" }
+                    recentWorkflows = mapped
+                    persistHistory()
+                }
+                return
+            }
+        } catch {}
+        await MainActor.run { loadPersistedHistory() }
     }
 
     private func loadPersistedHistory() {
@@ -66,6 +110,7 @@ class SignalRService: ObservableObject {
     }
 
     private func connectAndListen(gitHubId: Int64) async throws {
+        await syncFromApi(gitHubId: gitHubId)
         let url = hubWebSocketUrl
         let ws = URLSession.shared.webSocketTask(with: url)
         ws.resume()

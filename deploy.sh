@@ -13,7 +13,7 @@ dotnet publish -c Release --self-contained true -r linux-x64 -o ./publish
 
 echo "=== Uploading to VPS ==="
 ssh "$VPS" "sudo mkdir -p $REMOTE"
-rsync -az --delete ./publish/ "$VPS:$REMOTE/"
+rsync -az --delete --exclude='*.db' ./publish/ "$VPS:$REMOTE/"
 rsync -az "$SCRIPT_DIR/deploy/" "$VPS:$REMOTE/deploy/"
 
 echo "=== Copying production config ==="
