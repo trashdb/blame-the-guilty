@@ -48,9 +48,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		2CF370BD2FFA808D002F6748 /* btg */ = {
+		2CF370BD2FFA808D002F6748 /* BlameTheGuilty */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 2CF370C92FFA808E002F6748 /* Build configuration list for PBXNativeTarget "btg" */;
+			buildConfigurationList = 2CF370C92FFA808E002F6748 /* Build configuration list for PBXNativeTarget "BlameTheGuilty" */;
 			buildPhases = (
 				2CF370BA2FFA808D002F6748 /* Sources */,
 				2CF370BB2FFA808D002F6748 /* Frameworks */,
@@ -63,11 +63,11 @@
 			fileSystemSynchronizedGroups = (
 				2CF370C02FFA808D002F6748 /* Sources */,
 			);
-			name = btg;
+			name = BlameTheGuilty;
 			packageProductDependencies = (
 			);
-			productName = btg;
-			productReference = 2CF370BE2FFA808D002F6748 /* btg.app */;
+			productName = BlameTheGuilty;
+			productReference = 2CF370BE2FFA808D002F6748 /* BlameTheGuilty.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -99,7 +99,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				2CF370BD2FFA808D002F6748 /* btg */,
+				2CF370BD2FFA808D002F6748 /* BlameTheGuilty */,
 			);
 		};
 /* End PBXProject section */
