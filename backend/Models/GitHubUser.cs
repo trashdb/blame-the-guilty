@@ -18,6 +18,8 @@ public class GitHubUser
 
     public bool IsOnline => SignalRConnectionId != null;
 
+    public string? AccessToken { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? LastLoginAt { get; set; }

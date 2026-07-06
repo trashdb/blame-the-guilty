@@ -153,6 +153,9 @@ using (var scope = app.Services.CreateScope())
     db.Database.ExecuteSqlRaw("""
         CREATE INDEX IF NOT EXISTS "IX_PrComments_PrNumber" ON "PrComments" ("PrNumber");
         """);
+
+    // Add AccessToken column to existing GitHubUsers table if missing
+    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "GitHubUsers" ADD COLUMN "AccessToken" TEXT;"""); } catch { }
 }
 
 app.UseCors("SignalR");

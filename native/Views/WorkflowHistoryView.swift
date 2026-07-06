@@ -7,34 +7,38 @@ struct WorkflowHistoryView: View {
         ZStack {
             VisualEffectBackground(material: .sidebar)
 
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Workflow History")
-                    .font(.system(size: 20, weight: .bold))
-
-                Divider()
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                    Text("Workflow History")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
 
                 if signalR.recentWorkflows.isEmpty {
-                    Spacer()
                     Text("No workflows yet")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity)
-                    Spacer()
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 6)
+                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
                 } else {
-                    ScrollView {
-                        VStack(spacing: 8) {
-                            ForEach(signalR.recentWorkflows) { run in
-                                WorkflowRunRow(run: run)
+                    GeometryReader { geo in
+                        ScrollView {
+                            VStack(spacing: 4) {
+                                ForEach(signalR.recentWorkflows) { run in
+                                    WorkflowRunRow(run: run)
+                                }
                             }
                         }
                     }
                 }
-
-                Spacer()
             }
-            .padding(24)
+            .padding(16)
         }
-        .frame(width: 520, height: 500)
     }
 }
 
@@ -66,25 +70,21 @@ struct WorkflowRunRow: View {
                 .foregroundStyle(statusColor)
                 .frame(width: 18)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(run.workflowName)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color(white: 0.85))
                     .lineLimit(1)
 
-                HStack(spacing: 4) {
+                HStack(spacing: 5) {
                     Text(run.repo)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
-                    Text("·")
+                        .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                     Text("@\(run.actor)")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
-                    Text("·")
+                        .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                     Text(run.startedAt, style: .relative)
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -96,7 +96,7 @@ struct WorkflowRunRow: View {
                     NSWorkspace.shared.open(url)
                 } label: {
                     Image(systemName: "arrow.up.right")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                         .padding(6)
                         .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))

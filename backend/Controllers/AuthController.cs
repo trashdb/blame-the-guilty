@@ -40,7 +40,7 @@ public class AuthController : ControllerBase
         if (userInfo == null)
             return BadRequest("Failed to authenticate with GitHub.");
 
-        // Upsert by immutable GitHubId, update username in case it changed
+        // Upsert by immutable GitHubId, update username + access token
         var existing = await _db.GitHubUsers
             .FirstOrDefaultAsync(u => u.GitHubId == userInfo.Id);
 
@@ -50,6 +50,7 @@ public class AuthController : ControllerBase
             {
                 GitHubId = userInfo.Id,
                 GitHubUsername = userInfo.Login,
+                AccessToken = userInfo.AccessToken,
                 CreatedAt = DateTime.UtcNow,
                 LastLoginAt = DateTime.UtcNow
             });
@@ -57,6 +58,7 @@ public class AuthController : ControllerBase
         else
         {
             existing.GitHubUsername = userInfo.Login;
+            existing.AccessToken = userInfo.AccessToken;
             existing.LastLoginAt = DateTime.UtcNow;
         }
 

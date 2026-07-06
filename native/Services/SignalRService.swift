@@ -75,6 +75,8 @@ class SignalRService: ObservableObject {
                 let headBranch: String?
                 let baseBranch: String?
                 let prUrl: String?
+                let status: String?
+                let conclusion: String?
             }
             if let prs = try? JSONDecoder().decode([ApiPR].self, from: data) {
                 await MainActor.run {
@@ -84,7 +86,9 @@ class SignalRService: ObservableObject {
                             repo: pr.repoFullName,
                             headBranch: pr.headBranch ?? "",
                             baseBranch: pr.baseBranch ?? "",
-                            htmlUrl: URL(string: pr.prUrl ?? "")
+                            htmlUrl: URL(string: pr.prUrl ?? ""),
+                            status: pr.status ?? "open",
+                            conclusion: pr.conclusion
                         )
                     }
                 }
@@ -303,7 +307,13 @@ class SignalRService: ObservableObject {
         let headBranch = data["headBranch"] as? String ?? ""
         let baseBranch = data["baseBranch"] as? String ?? ""
         let htmlUrl = (data["htmlUrl"] as? String).flatMap { URL(string: $0) }
-        return PullRequest(prNumber: prNumber, title: title, repo: repo, headBranch: headBranch, baseBranch: baseBranch, htmlUrl: htmlUrl)
+        let status = data["status"] as? String ?? "open"
+        let conclusion = data["conclusion"] as? String
+        return PullRequest(
+            prNumber: prNumber, title: title, repo: repo,
+            headBranch: headBranch, baseBranch: baseBranch,
+            htmlUrl: htmlUrl, status: status, conclusion: conclusion
+        )
     }
 
     private func handlePROpened(_ data: [String: Any]) {
@@ -325,12 +335,21 @@ class SignalRService: ObservableObject {
         let prNumber = data["prNumber"] as? Int64 ?? 0
         let conclusion = data["conclusion"] as? String ?? "unknown"
         let repo = data["repo"] as? String ?? "unknown"
+        let prStatus = data["status"] as? String ?? "open"
 
         let url = URL(string: "https://github.com/\(repo)/pull/\(prNumber)")
         let titleText = "PR \(conclusion == "success" ? "Ready for Merge" : "Checks Failed")"
         let body = "PR #\(prNumber) in \(repo) — \(conclusion)"
 
         Task { @MainActor in
+            if let idx = activePRs.firstIndex(where: { $0.prNumber == prNumber && $0.repo == repo }) {
+                let pr = activePRs[idx]
+                activePRs[idx] = PullRequest(
+                    prNumber: pr.prNumber, title: pr.title, repo: pr.repo,
+                    headBranch: pr.headBranch, baseBranch: pr.baseBranch,
+                    htmlUrl: pr.htmlUrl, status: prStatus, conclusion: conclusion
+                )
+            }
             showNotification(title: titleText, body: body, actionURL: url)
         }
     }

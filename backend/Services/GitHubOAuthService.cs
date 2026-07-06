@@ -27,7 +27,7 @@ public class GitHubOAuthService
             ? Uri.EscapeDataString(redirectUri)
             : string.Empty;
 
-        return $"https://github.com/login/oauth/authorize?client_id={_options.ClientId}&redirect_uri={_options.RedirectUri}&scope=read:user&state={state}";
+        return $"https://github.com/login/oauth/authorize?client_id={_options.ClientId}&redirect_uri={_options.RedirectUri}&scope=read:user,repo&state={state}";
     }
 
     public async Task<GitHubUserInfo?> ExchangeCodeForUserInfoAsync(string code)
@@ -68,9 +68,10 @@ public class GitHubOAuthService
 
         return new GitHubUserInfo(
             Id: userData.GetProperty("id").GetInt64(),
-            Login: userData.GetProperty("login").GetString()!
+            Login: userData.GetProperty("login").GetString()!,
+            AccessToken: accessToken
         );
     }
 }
 
-public record GitHubUserInfo(long Id, string Login);
+public record GitHubUserInfo(long Id, string Login, string AccessToken);

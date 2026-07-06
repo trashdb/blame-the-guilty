@@ -9,9 +9,8 @@ struct ContentView: View {
     @State private var gitHubId: Int64 = 0
     @State private var isLoading = false
     @State private var loginError: String?
-
     var body: some View {
-        VStack(alignment: .leading) {
+        VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 6) {
                     Image(systemName: "flame.fill")
@@ -24,6 +23,7 @@ struct ContentView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
+                
                 Divider()
 
                 if isLoggedIn {
@@ -35,16 +35,17 @@ struct ContentView: View {
                 
                 Divider()
 
+                if isLoggedIn {
+                    ActivePRsView(prs: signalR.activePRs, gitHubId: gitHubId)
+                }
+                
+                Divider()
+                
                 if isLoggedIn, !signalR.runningWorkflows.isEmpty {
                     RunningWorkflowsIndicatorView(
                         count: signalR.runningWorkflows.count,
-                        onTap: openWorkflowHistoryWindow
+                        onTap: { WorkflowHistoryPanelManager.shared.show(signalR: signalR) }
                     )
-                    .padding(.bottom, 4)
-                }
-
-                if isLoggedIn {
-                    ActivePRsView(prs: signalR.activePRs)
                 }
 
                 if isLoggedIn {
@@ -54,15 +55,16 @@ struct ContentView: View {
                         EmptyNotificationView()
                     }
                 }
-
+                
                 Divider()
+                    .padding(.bottom, 6)
             }
             .foregroundStyle(Color(white: 0.7))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 16)
             .padding(.horizontal, 16)
 
-            Spacer()
+            Spacer(minLength: 0)
 
             HStack {
                 Button {
@@ -79,7 +81,7 @@ struct ContentView: View {
                 .cursor(.pointingHand)
 
                 Button {
-                    openWorkflowHistoryWindow()
+                    WorkflowHistoryPanelManager.shared.show(signalR: signalR)
                 } label: {
                     Image(systemName: "clock.arrow.circlepath")
                         .font(.system(size: 13))
@@ -157,10 +159,6 @@ struct ContentView: View {
     private func openSettingsWindow() {
         SettingsPanelManager.shared.show()
     }
-
-    private func openWorkflowHistoryWindow() {
-        WorkflowHistoryPanelManager.shared.show(signalR: signalR)
-    }
 }
 
 final class SettingsPanelManager {
@@ -204,10 +202,10 @@ final class WorkflowHistoryPanelManager {
 
     func show(signalR: SignalRService) {
         if panel == nil {
-            let hostingController = NSHostingController(rootView: WorkflowHistoryView(signalR: signalR))
+            let hostingController = NSHostingController(rootView: WorkflowHistoryView(signalR: signalR).frame(width: 560, height: 480))
 
             panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 520, height: 500),
+                contentRect: NSRect(x: 0, y: 0, width: 560, height: 480),
                 styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
                 backing: .buffered,
                 defer: false
@@ -267,16 +265,32 @@ struct EmptyNotificationView: View {
 
 struct ActivePRsView: View {
     let prs: [PullRequest]
+    let gitHubId: Int64
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 5) {
-                Image(systemName: "arrow.triangle.pull")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.blue)
+                let mergedCount = prs.filter { $0.isMerged }.count
+                let readyCount = prs.filter { $0.isReadyToMerge }.count
+                let failedCount = prs.filter { $0.isFailed }.count
                 Text("Active PRs (\(prs.count))")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.blue)
+                if failedCount > 0 {
+                    Text("\(failedCount) failing")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.red)
+                }
+                if mergedCount > 0 {
+                    Text("\(mergedCount) merged")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.purple)
+                }
+                if readyCount > 0 {
+                    Text("\(readyCount) ready")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.green)
+                }
                 Spacer()
             }
 
@@ -288,45 +302,87 @@ struct ActivePRsView: View {
                     .padding(.vertical, 6)
                     .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
             } else {
-                ForEach(prs.prefix(3)) { pr in
-                    Button {
-                        NSWorkspace.shared.open(pr.prUrl)
-                    } label: {
-                        HStack(spacing: 8) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(pr.title)
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(Color(white: 0.85))
-                                    .lineLimit(1)
-                                HStack(spacing: 4) {
-                                    Text("\(pr.repo)#\(pr.prNumber)")
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(.tertiary)
-                                    Text("→")
-                                        .font(.system(size: 9))
-                                        .foregroundStyle(.tertiary)
-                                    Text(pr.baseBranch)
-                                        .font(.system(size: 10, design: .monospaced))
-                                        .foregroundStyle(.blue)
+                ForEach(prs.prefix(5)) { pr in
+                    HStack(spacing: 6) {
+                        Button {
+                            NSWorkspace.shared.open(pr.prUrl)
+                        } label: {
+                            HStack(spacing: 8) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(pr.title)
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(Color(white: 0.85))
+                                        .lineLimit(1)
+                                    HStack(spacing: 4) {
+                                        Text("\(pr.repo)#\(pr.prNumber)")
+                                            .font(.system(size: 10))
+                                            .foregroundStyle(.tertiary)
+                                        Text("→")
+                                            .font(.system(size: 9))
+                                            .foregroundStyle(.tertiary)
+                                        Text(pr.baseBranch)
+                                            .font(.system(size: 10, design: .monospaced))
+                                            .foregroundStyle(.blue)
+                                    }
                                 }
+                                Spacer()
                             }
-                            Spacer()
-                            Image(systemName: "arrow.up.right")
-                                .font(.system(size: 9))
-                                .foregroundStyle(.tertiary)
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 6)
-                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                        .buttonStyle(.plain)
+                        .cursor(.pointingHand)
+
+                        if pr.isReadyToMerge {
+                            Button {
+                                mergePR(pr)
+                            } label: {
+                                Image(systemName: "arrow.triangle.merge")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.green)
+                                    .padding(4)
+                                    .background(.green.opacity(0.15), in: RoundedRectangle(cornerRadius: 4))
+                            }
+                            .buttonStyle(.plain)
+                            .cursor(.pointingHand)
+                            .help("Merge PR")
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .cursor(.pointingHand)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(pr.isMerged ? .purple.opacity(0.12) : pr.isFailed ? .red.opacity(0.1) : pr.isReadyToMerge ? .green.opacity(0.08) : .white.opacity(0.04))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(
+                                pr.isMerged ? .purple.opacity(0.35) : pr.isFailed ? .red.opacity(0.3) : pr.isReadyToMerge ? .green.opacity(0.25) : .white.opacity(0.06),
+                                lineWidth: 1
+                            )
+                    )
                 }
             }
         }
-        .padding(.horizontal, 12)
         .padding(.top, 2)
-        .padding(.bottom, 6)
+        .padding(.bottom, 4)
+    }
+
+    private func mergePR(_ pr: PullRequest) {
+        Task {
+            guard let url = URL(string: "\(backendUrl)/api/pullrequests/merge") else { return }
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            let body = try? JSONSerialization.data(withJSONObject: [
+                "repoFullName": pr.repo,
+                "prNumber": pr.prNumber,
+                "gitHubId": gitHubId
+            ])
+            request.httpBody = body
+
+            do {
+                let (_, _) = try await URLSession.shared.data(for: request)
+            } catch {}
+        }
     }
 }
 

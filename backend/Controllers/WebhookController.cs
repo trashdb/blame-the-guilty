@@ -344,30 +344,45 @@ public class WebhookController : ControllerBase
 
         var user = await FindConnectedUser(authorLogin, authorId);
         checkEvent.WasNotified = user != null;
-        _db.CheckSuiteEvents.Add(checkEvent);
-        await _db.SaveChangesAsync();
+    _db.CheckSuiteEvents.Add(checkEvent);
 
-        if (user == null)
+    // Update the PullRequestEvent with the check conclusion
+    if (prNumber.HasValue)
+    {
+        var prEvent = await _db.PullRequestEvents
+            .Where(e => e.PrNumber == prNumber.Value && e.Status == "open")
+            .OrderByDescending(e => e.Id)
+            .FirstOrDefaultAsync();
+        if (prEvent != null)
         {
-            _logger.LogInformation("User '{Login}' not connected.", authorLogin);
-            return Ok($"User '{authorLogin}' is not currently connected.");
+            prEvent.Conclusion = conclusion;
         }
+    }
 
-        var succeeded = conclusion == "success";
-        await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("CheckSuiteCompleted", new
+    await _db.SaveChangesAsync();
+
+    if (user == null)
+    {
+        _logger.LogInformation("User '{Login}' not connected.", authorLogin);
+        return Ok($"User '{authorLogin}' is not currently connected.");
+    }
+
+    var succeeded = conclusion == "success";
+    await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("CheckSuiteCompleted", new
+    {
+        checkSuiteId, conclusion, succeeded, prNumber,
+        repo = repoFullName, headBranch, prAuthor = authorLogin
+    });
+
+    // Also send PR-specific notification if this check suite is on a PR
+    if (prNumber.HasValue)
+    {
+        var prStatus = conclusion == "success" ? "ready" : "checks_failed";
+        await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("PullRequestChecksCompleted", new
         {
-            checkSuiteId, conclusion, succeeded, prNumber,
-            repo = repoFullName, headBranch, prAuthor = authorLogin
+            prNumber, succeeded, conclusion, status = prStatus, repo = repoFullName
         });
-
-        // Also send PR-specific notification if this check suite is on a PR
-        if (prNumber.HasValue)
-        {
-            await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("PullRequestChecksCompleted", new
-            {
-                prNumber, succeeded, conclusion, repo = repoFullName
-            });
-        }
+    }
 
         _logger.LogInformation("Check suite notification sent to {Login} ({Conclusion})", authorLogin, conclusion);
         return Ok(new { notified = authorLogin, conclusion });

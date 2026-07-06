@@ -13,7 +13,9 @@ struct RunningWorkflowsIndicatorView: View {
                 Text("\(count) \(count == 1 ? "workflow" : "workflows") running...")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.orange)
+                Spacer()
             }
+            .frame(maxWidth: .infinity)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))

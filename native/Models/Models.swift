@@ -30,6 +30,20 @@ struct PullRequest: Identifiable {
     let headBranch: String
     let baseBranch: String
     let htmlUrl: URL?
+    let status: String
+    let conclusion: String?
 
     var prUrl: URL { htmlUrl ?? URL(string: "https://github.com/\(repo)/pull/\(prNumber)")! }
+
+    var isReadyToMerge: Bool {
+        status == "open" && conclusion == "success"
+    }
+
+    var isFailed: Bool {
+        conclusion == "failure"
+    }
+
+    var isMerged: Bool {
+        status == "merged"
+    }
 }
