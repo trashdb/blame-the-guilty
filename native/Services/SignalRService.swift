@@ -9,6 +9,7 @@ private struct ApiWorkflowRun: Decodable {
     let status: String
     let htmlUrl: String?
     let startedAt: Date
+    let targetGitHubId: Int64?
 
     func toWorkflowRun() -> WorkflowRun {
         WorkflowRun(
@@ -19,7 +20,8 @@ private struct ApiWorkflowRun: Decodable {
             actor: actor,
             status: status,
             htmlUrl: htmlUrl ?? "",
-            startedAt: startedAt
+            startedAt: startedAt,
+            targetGitHubId: targetGitHubId
         )
     }
 }
@@ -105,7 +107,8 @@ class SignalRService: ObservableObject {
                         workflowName: run.workflowName,
                         repo: run.repo, actor: run.actor,
                         status: "failure",
-                        htmlUrl: run.htmlUrl, startedAt: run.startedAt
+                        htmlUrl: run.htmlUrl, startedAt: run.startedAt,
+                        targetGitHubId: run.targetGitHubId
                     )
                 }
                 return run
@@ -196,7 +199,7 @@ class SignalRService: ObservableObject {
             let run = WorkflowRun(
                 id: UUID(), runId: runId, workflowName: name, repo: repo,
                 actor: actor, status: "in_progress",
-                htmlUrl: htmlUrl, startedAt: startedAt
+                htmlUrl: htmlUrl, startedAt: startedAt, targetGitHubId: nil
             )
 
             runningWorkflows.insert(run, at: 0)
@@ -230,7 +233,8 @@ class SignalRService: ObservableObject {
                 actor: actor,
                 status: succeeded ? "success" : "failure",
                 htmlUrl: htmlUrl ?? "https://github.com/\(repo)/actions/runs/\(runId)",
-                startedAt: originalStartedAt
+                startedAt: originalStartedAt,
+                targetGitHubId: nil
             )
 
             if let idx = recentWorkflows.firstIndex(where: { $0.runId == runId && $0.status == "in_progress" }) {
@@ -265,6 +269,31 @@ class SignalRService: ObservableObject {
             try? await Task.sleep(nanoseconds: 8_000_000_000)
             guard !Task.isCancelled else { return }
             runStatus = .idle
+        }
+    }
+
+    func setTargetGitHubId(for runId: Int64, targetId: Int64?) {
+        Task { @MainActor in
+            for i in recentWorkflows.indices where recentWorkflows[i].runId == runId {
+                let old = recentWorkflows[i]
+                recentWorkflows[i] = WorkflowRun(
+                    id: old.id, runId: old.runId,
+                    workflowName: old.workflowName, repo: old.repo,
+                    actor: old.actor, status: old.status,
+                    htmlUrl: old.htmlUrl, startedAt: old.startedAt,
+                    targetGitHubId: targetId
+                )
+            }
+            for i in runningWorkflows.indices where runningWorkflows[i].runId == runId {
+                let old = runningWorkflows[i]
+                runningWorkflows[i] = WorkflowRun(
+                    id: old.id, runId: old.runId,
+                    workflowName: old.workflowName, repo: old.repo,
+                    actor: old.actor, status: old.status,
+                    htmlUrl: old.htmlUrl, startedAt: old.startedAt,
+                    targetGitHubId: targetId
+                )
+            }
         }
     }
 

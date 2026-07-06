@@ -29,4 +29,6 @@ public class WorkflowRun
     public string Status { get; set; } = "in_progress";
 
     public DateTime StartedAt { get; set; }
+
+    public long? TargetGitHubId { get; set; }
 }

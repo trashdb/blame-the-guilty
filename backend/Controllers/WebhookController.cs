@@ -161,20 +161,32 @@ public class WebhookController : ControllerBase
         }
         await _db.SaveChangesAsync();
 
-        // If it was a success → notify completed via SignalR if connected
+        // Notify both the culprit and the target user (if set) via SignalR
+        async Task NotifyCompleted(long gitHubId, bool succeeded)
+        {
+            await _hubContext.Clients.Group(gitHubId.ToString()).SendAsync("WorkflowRunCompleted", new
+            {
+                runId, succeeded, conclusion,
+                workflowName, repo = repoFullName, actor = culprit.Login,
+                htmlUrl = workflowUrl
+            });
+        }
+
         if (conclusion == "success")
         {
             var user = await FindConnectedUser(culprit.Login, culprit.Id);
             if (user != null)
             {
-                await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("WorkflowRunCompleted", new
-                {
-                    runId, succeeded = true, conclusion = "success",
-                    workflowName, repo = repoFullName, actor = culprit.Login,
-                    htmlUrl = workflowUrl
-                });
+                await NotifyCompleted(user.GitHubId, true);
                 _logger.LogInformation("Workflow success notified to {Login}", culprit.Login);
             }
+
+            if (dbRun?.TargetGitHubId != null && dbRun.TargetGitHubId != user?.GitHubId)
+            {
+                await NotifyCompleted(dbRun.TargetGitHubId.Value, true);
+                _logger.LogInformation("Workflow success also notified to target user {TargetId}", dbRun.TargetGitHubId);
+            }
+
             return Ok(new { runId, conclusion });
         }
 
@@ -197,13 +209,14 @@ public class WebhookController : ControllerBase
         // Notify via SignalR if connected
         if (user2 != null)
         {
-            await _hubContext.Clients.Group(user2.GitHubId.ToString()).SendAsync("WorkflowRunCompleted", new
-            {
-                runId, succeeded = false, conclusion = "failure",
-                workflowName, repo = repoFullName, actor = culprit.Login,
-                htmlUrl = workflowUrl
-            });
+            await NotifyCompleted(user2.GitHubId, false);
             _logger.LogInformation("Punishment sent to {Login}", culprit.Login);
+        }
+
+        if (dbRun?.TargetGitHubId != null && dbRun.TargetGitHubId != user2?.GitHubId)
+        {
+            await NotifyCompleted(dbRun.TargetGitHubId.Value, false);
+            _logger.LogInformation("Punishment also notified to target user {TargetId}", dbRun.TargetGitHubId);
         }
 
         return Ok(new { runId, conclusion });

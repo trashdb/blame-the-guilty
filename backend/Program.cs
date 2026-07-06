@@ -104,6 +104,11 @@ using (var scope = app.Services.CreateScope())
             "WasNotified" INTEGER NOT NULL DEFAULT 0
         );
         """);
+    // Add AccessToken column to existing GitHubUsers table if missing
+    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "GitHubUsers" ADD COLUMN "AccessToken" TEXT;"""); } catch { }
+
+    // Add TargetGitHubId column to existing WorkflowRuns table if missing
+    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "WorkflowRuns" ADD COLUMN "TargetGitHubId" INTEGER;"""); } catch { }
 }
 
 app.UseCors("SignalR");

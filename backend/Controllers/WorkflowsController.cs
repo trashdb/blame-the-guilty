@@ -33,10 +33,58 @@ public class WorkflowsController : ControllerBase
                 w.Actor,
                 w.Status,
                 w.HtmlUrl,
-                w.StartedAt
+                w.StartedAt,
+                TargetGitHubId = w.TargetGitHubId
             })
             .ToListAsync();
 
         return Ok(runs);
+    }
+
+    [HttpPut("runs/{runId}/target")]
+    public async Task<IActionResult> SetTarget(long runId, [FromBody] SetTargetRequest request)
+    {
+        var run = await _db.WorkflowRuns
+            .Where(w => w.RunId == runId && w.Status == "in_progress")
+            .FirstOrDefaultAsync();
+
+        if (run == null)
+            return NotFound("No in-progress workflow run found with that runId.");
+
+        run.TargetGitHubId = request.TargetGitHubId;
+        await _db.SaveChangesAsync();
+
+        return Ok(new { runId, targetGitHubId = run.TargetGitHubId });
+    }
+
+    public class SetTargetRequest
+    {
+        public long? TargetGitHubId { get; set; }
+    }
+}
+
+[ApiController]
+[Route("api/users")]
+public class UsersController : ControllerBase
+{
+    private readonly AppDbContext _db;
+
+    public UsersController(AppDbContext db)
+    {
+        _db = db;
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetUsers()
+    {
+        var users = await _db.GitHubUsers
+            .Select(u => new
+            {
+                u.GitHubId,
+                Login = u.GitHubUsername
+            })
+            .ToListAsync();
+
+        return Ok(users);
     }
 }
