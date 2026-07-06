@@ -319,38 +319,16 @@ struct ActivePRsView: View {
                                         .font(.system(size: 11, weight: .medium))
                                         .foregroundStyle(Color(white: 0.85))
                                         .lineLimit(1)
-                                    HStack(spacing: 4) {
-                                        Text("\(pr.repo)#\(pr.prNumber)")
-                                            .font(.system(size: 10))
-                                            .foregroundStyle(.tertiary)
-                                        Text("→")
-                                            .font(.system(size: 9))
-                                            .foregroundStyle(.tertiary)
-                                        Text(pr.baseBranch)
-                                            .font(.system(size: 10, design: .monospaced))
-                                            .foregroundStyle(.blue)
-                                    }
+                                    Text("\(pr.repo) → \(pr.baseBranch)")
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(.tertiary)
+                                        .lineLimit(1)
                                 }
                                 Spacer()
                             }
                         }
                         .buttonStyle(.plain)
                         .cursor(.pointingHand)
-
-                        if pr.isReadyToMerge {
-                            Button {
-                                mergePR(pr)
-                            } label: {
-                                Image(systemName: "arrow.triangle.merge")
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(.green)
-                                    .padding(4)
-                                    .background(.green.opacity(0.15), in: RoundedRectangle(cornerRadius: 4))
-                            }
-                            .buttonStyle(.plain)
-                            .cursor(.pointingHand)
-                            .help("Merge PR")
-                        }
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
