@@ -66,7 +66,25 @@ public class WebhookController : ControllerBase
         var runId = run.GetProperty("id").GetInt64();
         var startedAt = run.TryGetProperty("run_started_at", out var rsa) ? rsa.GetDateTime() : DateTime.UtcNow;
 
-        // Always insert a new row so each rerun has its own history entry
+        // Update existing in_progress row, or create new one for reruns
+        var existingInProgress = await _db.WorkflowRuns
+            .Where(w => w.RunId == runId && w.Status == "in_progress")
+            .FirstOrDefaultAsync();
+        if (existingInProgress != null)
+        {
+            // Already tracking this run — likely a duplicate webhook event
+            await _db.SaveChangesAsync();
+            return Ok(new { runId });
+        }
+
+        var existingFinal = await _db.WorkflowRuns
+            .Where(w => w.RunId == runId && (w.Status == "success" || w.Status == "failure"))
+            .FirstOrDefaultAsync();
+        if (existingFinal != null)
+        {
+            // This is a rerun — create a new entry
+        }
+
         var gitHubId = culprit.Id ?? (await FindUserByLogin(culprit.Login))?.GitHubId;
         _db.WorkflowRuns.Add(new WorkflowRun
         {
