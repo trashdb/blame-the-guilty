@@ -320,18 +320,15 @@ struct ActivePRsView: View {
                                         .foregroundStyle(Color(white: 0.85))
                                         .lineLimit(1)
                                     HStack(spacing: 4) {
-                                        Text(pr.headBranch)
-                                            .font(.system(size: 10, design: .monospaced))
-                                            .foregroundStyle(.blue)
+                                        Text("\(pr.repo)#\(pr.prNumber)")
+                                            .font(.system(size: 10))
+                                            .foregroundStyle(.tertiary)
                                         Text("→")
                                             .font(.system(size: 9))
                                             .foregroundStyle(.tertiary)
                                         Text(pr.baseBranch)
                                             .font(.system(size: 10, design: .monospaced))
-                                            .foregroundStyle(.blue.opacity(0.7))
-                                        Text("\(pr.repo)#\(pr.prNumber)")
-                                            .font(.system(size: 9))
-                                            .foregroundStyle(.tertiary)
+                                            .foregroundStyle(.blue)
                                     }
                                 }
                                 Spacer()
