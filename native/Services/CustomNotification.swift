@@ -1,8 +1,6 @@
 import AppKit
 import SwiftUI
 
-// MARK: - Frosted glass background
-
 struct VisualEffectBackground: NSViewRepresentable {
     var material: NSVisualEffectView.Material = .hudWindow
     func makeNSView(context: Context) -> NSVisualEffectView {
@@ -15,8 +13,6 @@ struct VisualEffectBackground: NSViewRepresentable {
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }
 
-// MARK: - Banner SwiftUI view
-
 struct NotificationBannerView: View {
     let title: String
     let message: String
@@ -25,88 +21,63 @@ struct NotificationBannerView: View {
     let onDismiss: () -> Void
     let onOpen: () -> Void
 
-    @State private var hovered = false
-
     var body: some View {
-        ZStack {
-            VisualEffectBackground(material: .hudWindow)
+        HStack(alignment: .top, spacing: 14) {
+            Circle()
+                .fill(.red)
+                .frame(width: 8, height: 8)
+                .padding(.top, 6)
 
-            // Red tint overlay
-            Color(red: 0.82, green: 0.08, blue: 0.08).opacity(0.10)
-
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color(red: 0.82, green: 0.08, blue: 0.08).opacity(0.25), lineWidth: 1)
-
-            HStack(alignment: .top, spacing: 10) {
-                // Warning icon
-                Image(systemName: "exclamationmark.octagon.fill")
-                    .font(.system(size: 28))
-                    .foregroundStyle(.red)
-                    .padding(.top, 1)
-
-                // Text
-                VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
                     Text(title)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.primary)
-                        .lineLimit(1)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
 
                     if let sub = subtitle {
                         Text(sub)
                             .font(.system(size: 11))
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-                    }
-
-                    Text(message)
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    if hasURL {
-                        Text("Click to open workflow ↗")
-                            .font(.system(size: 10))
-                            .foregroundColor(.blue.opacity(0.8))
-                            .padding(.top, 1)
+                            .foregroundColor(.white.opacity(0.45))
                     }
                 }
 
-                Spacer(minLength: 0)
+                Text(message)
+                    .font(.system(size: 12))
+                    .foregroundColor(.white.opacity(0.65))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                // Dismiss button
-                Button(action: onDismiss) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(.secondary)
-                        .padding(4)
-                        .background(Circle().fill(Color.secondary.opacity(0.15)))
+                if hasURL {
+                    Text("Open workflow ↗")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.red.opacity(0.8))
+                        .padding(.top, 3)
                 }
-                .buttonStyle(.plain)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+
+            Spacer(minLength: 0)
+
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(.white.opacity(0.35))
+                    .padding(6)
+            }
+            .buttonStyle(.plain)
         }
-        .scaleEffect(hovered && hasURL ? 1.01 : 1.0)
-        .animation(.easeInOut(duration: 0.1), value: hovered)
-        .onHover { hovered = $0 }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+        .background(Color(white: 0.12), in: RoundedRectangle(cornerRadius: 14))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(.white.opacity(0.08), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.4), radius: 16, y: 6)
         .contentShape(Rectangle())
         .onTapGesture { if hasURL { onOpen() } }
-        .cursor(hasURL ? .pointingHand : .arrow)
+        .cursor(.pointingHand)
     }
 }
-
-// MARK: - Cursor modifier helper
-
-extension View {
-    func cursor(_ cursor: NSCursor) -> some View {
-        self.onHover { inside in
-            if inside { cursor.push() } else { NSCursor.pop() }
-        }
-    }
-}
-
-// MARK: - Banner controller
 
 final class NotificationBanner: NSObject {
     static let shared = NotificationBanner()
@@ -116,7 +87,6 @@ final class NotificationBanner: NSObject {
     private var timer: Timer?
 
     func show(title: String, body: String, subtitle: String?, actionURL: URL?) {
-        // Already called from @MainActor — present directly without extra dispatch
         present(title: title, body: body, subtitle: subtitle, actionURL: actionURL)
     }
 
@@ -129,7 +99,6 @@ final class NotificationBanner: NSObject {
         let height: CGFloat = actionURL != nil ? 100 : 86
         let margin: CGFloat = 16
 
-        // Top-right corner, just below the menu bar
         let x = screen.visibleFrame.maxX - width - margin
         let y = screen.visibleFrame.maxY - height - margin
 
@@ -140,8 +109,6 @@ final class NotificationBanner: NSObject {
             defer: false
         )
         p.isFloatingPanel = true
-        // Use .screenSaver level so the banner appears above all windows
-        // even when the app has .accessory activation policy
         p.level = NSWindow.Level(rawValue: Int(CGWindowLevelKey.screenSaverWindow.rawValue) - 1)
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         p.backgroundColor = .clear
@@ -171,7 +138,6 @@ final class NotificationBanner: NSObject {
         p.orderFrontRegardless()
         self.panel = p
 
-        // Auto-dismiss after 8 seconds
         timer = Timer.scheduledTimer(withTimeInterval: 8, repeats: false) { [weak self] _ in
             self?.dismiss()
         }
@@ -185,7 +151,10 @@ final class NotificationBanner: NSObject {
     }
 }
 
-
-
-
-
+extension View {
+    func cursor(_ cursor: NSCursor) -> some View {
+        self.onHover { inside in
+            if inside { cursor.push() } else { NSCursor.pop() }
+        }
+    }
+}

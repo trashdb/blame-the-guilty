@@ -9,6 +9,7 @@ public class AppDbContext : DbContext
 
     public DbSet<GitHubUser> GitHubUsers => Set<GitHubUser>();
     public DbSet<PunishmentEvent> PunishmentEvents => Set<PunishmentEvent>();
+    public DbSet<CheckSuiteEvent> CheckSuiteEvents => Set<CheckSuiteEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -22,6 +23,13 @@ public class AppDbContext : DbContext
         {
             entity.HasIndex(e => e.OccurredAt);
             entity.HasIndex(e => e.CulpritLogin);
+        });
+
+        modelBuilder.Entity<CheckSuiteEvent>(entity =>
+        {
+            entity.HasIndex(e => e.OccurredAt);
+            entity.HasIndex(e => e.PrAuthorLogin);
+            entity.HasIndex(e => e.Conclusion);
         });
     }
 }

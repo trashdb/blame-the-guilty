@@ -1,0 +1,228 @@
+import SwiftUI
+
+struct ContentView: View {
+    @ObservedObject var signalR: SignalRService
+
+    @State private var isLoggedIn = false
+    @State private var keepSignedIn = true
+    @State private var username = ""
+    @State private var gitHubId: Int64 = 0
+    @State private var isLoading = false
+    @State private var loginError: String?
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 13)).padding(.bottom, 2)
+                    Text("Blame the Guilty")
+                        .font(.system(size: 16, weight: .semibold))
+                }
+
+                Text("CI/CD notifications when a merged PR breaks the build.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                Divider()
+
+                if isLoggedIn {
+                    LoggedInCardView(username: username, onSignOut: logout)
+                    KeepSignedInToggleView(isOn: $keepSignedIn)
+                } else {
+                    SignInCardView(isLoading: isLoading, loginError: loginError, onSignIn: login)
+                }
+
+                if isLoggedIn, !signalR.runningWorkflows.isEmpty {
+                    RunningWorkflowsIndicatorView(
+                        count: signalR.runningWorkflows.count,
+                        onTap: openWorkflowHistoryWindow
+                    )
+                    .padding(.bottom, 4)
+                }
+
+                if isLoggedIn, let event = signalR.lastEvent {
+                    LastNotificationCardView(event: event)
+                }
+
+                Divider()
+            }
+            .foregroundStyle(Color(white: 0.7))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 16)
+            .padding(.horizontal, 16)
+
+            Spacer()
+
+            HStack {
+                Button {
+                    openSettingsWindow()
+                } label: {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .padding(6)
+                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+                .help("Settings")
+                .cursor(.pointingHand)
+
+                Button {
+                    openWorkflowHistoryWindow()
+                } label: {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .padding(6)
+                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+                .help("Workflow History")
+                .cursor(.pointingHand)
+
+                Spacer()
+
+                Button {
+                    NSApplication.shared.terminate(nil)
+                } label: {
+                    Image(systemName: "trash.fill")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .padding(6)
+                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+                .help("Quit")
+                .cursor(.pointingHand)
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 10)
+        }
+        .frame(width: 300, height: 600, alignment: .top)
+        .background(.regularMaterial)
+        .onAppear { autoConnectIfNeeded() }
+    }
+
+    private func login() {
+        isLoading = true
+        loginError = nil
+        Task {
+            do {
+                let oauth = OAuthService()
+                let result = try await oauth.startLogin(backendUrl: backendUrl)
+                await MainActor.run {
+                    gitHubId = result.id
+                    username = result.username
+                    isLoggedIn = true
+                    signalR.connect(gitHubId: result.id)
+                    if keepSignedIn {
+                        KeychainService.save(gitHubId: result.id, username: result.username)
+                    }
+                }
+            } catch {
+                await MainActor.run { loginError = "Login failed. Please try again." }
+            }
+            await MainActor.run { isLoading = false }
+        }
+    }
+
+    private func logout() {
+        signalR.disconnect()
+        KeychainService.delete()
+        isLoggedIn = false
+        username = ""
+        gitHubId = 0
+        loginError = nil
+    }
+
+    private func autoConnectIfNeeded() {
+        guard !isLoggedIn, let session = KeychainService.load() else { return }
+        gitHubId = session.gitHubId
+        username = session.username
+        isLoggedIn = true
+        signalR.connect(gitHubId: session.gitHubId)
+    }
+
+    private func openSettingsWindow() {
+        SettingsPanelManager.shared.show()
+    }
+
+    private func openWorkflowHistoryWindow() {
+        WorkflowHistoryPanelManager.shared.show(signalR: signalR)
+    }
+}
+
+final class SettingsPanelManager {
+    static let shared = SettingsPanelManager()
+    private var panel: NSPanel?
+
+    func show() {
+        if panel == nil {
+            let hostingController = NSHostingController(rootView: SettingsView())
+
+            panel = NSPanel(
+                contentRect: NSRect(x: 0, y: 0, width: 480, height: 400),
+                styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
+                backing: .buffered,
+                defer: false
+            )
+
+            panel?.contentViewController = hostingController
+            panel?.title = "Settings"
+            panel?.center()
+            panel?.level = .floating
+            panel?.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+            panel?.isReleasedWhenClosed = false
+            panel?.backgroundColor = .clear
+            panel?.isOpaque = false
+            panel?.hasShadow = true
+        }
+
+        panel?.makeKeyAndOrderFront(nil)
+    }
+
+    func close() {
+        panel?.close()
+        panel = nil
+    }
+}
+
+final class WorkflowHistoryPanelManager {
+    static let shared = WorkflowHistoryPanelManager()
+    private var panel: NSPanel?
+
+    func show(signalR: SignalRService) {
+        if panel == nil {
+            let hostingController = NSHostingController(rootView: WorkflowHistoryView(signalR: signalR))
+
+            panel = NSPanel(
+                contentRect: NSRect(x: 0, y: 0, width: 520, height: 500),
+                styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
+                backing: .buffered,
+                defer: false
+            )
+
+            panel?.contentViewController = hostingController
+            panel?.title = "Workflow History"
+            panel?.center()
+            panel?.level = .floating
+            panel?.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+            panel?.isReleasedWhenClosed = false
+            panel?.backgroundColor = .clear
+            panel?.isOpaque = false
+            panel?.hasShadow = true
+        }
+
+        panel?.makeKeyAndOrderFront(nil)
+    }
+
+    func close() {
+        panel?.close()
+        panel = nil
+    }
+}
+
+#Preview {
+    ContentView(signalR: SignalRService(baseUrl: backendUrl))
+}

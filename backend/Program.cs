@@ -62,6 +62,22 @@ using (var scope = app.Services.CreateScope())
             "WasNotified" INTEGER NOT NULL DEFAULT 0
         );
         """);
+
+    db.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS "CheckSuiteEvents" (
+            "Id" INTEGER NOT NULL CONSTRAINT "PK_CheckSuiteEvents" PRIMARY KEY AUTOINCREMENT,
+            "CheckSuiteId" INTEGER NOT NULL,
+            "Conclusion" TEXT NOT NULL,
+            "HeadBranch" TEXT,
+            "HeadSha" TEXT,
+            "PrAuthorLogin" TEXT,
+            "PrAuthorGitHubId" INTEGER,
+            "PrNumber" INTEGER,
+            "RepoFullName" TEXT NOT NULL,
+            "OccurredAt" TEXT NOT NULL,
+            "WasNotified" INTEGER NOT NULL DEFAULT 0
+        );
+        """);
 }
 
 app.UseCors("SignalR");

@@ -27,11 +27,10 @@ git clone git@github.com:trashdb/blame-the-guilty.git
 cd blame-the-guilty/native
 
 # Build and install
-swift build -c release
 bash install.sh
 ```
 
-This installs `BlameTheGuilty.app` in `~/Applications/` and launches it automatically. A 🔥 icon will appear in your menu bar.
+This installs `btg.app` in `~/Applications/` and launches it automatically. A 🔥 icon will appear in your menu bar.
 
 ## Daily usage
 
@@ -84,12 +83,13 @@ blame-the-guilty/
 │   ├── Controllers/  # WebhookController, AuthController
 │   ├── Hubs/         # SignalR hub
 │   └── appsettings.*.json
-├── native/           # macOS client (SwiftUI, menu bar app)
-│   ├── Sources/BlameTheGuilty/
-│   │   ├── App.swift        # Menu bar UI
-│   │   ├── SignalRService.swift
-│   │   ├── OAuthService.swift
-│   │   └── CustomNotification.swift
+├── native/           # macOS client (Xcode project, SwiftUI menu bar app)
+│   ├── btg.xcodeproj # Xcode project
+│   ├── btg/          # Source files
+│   │   ├── App/      # App entry point
+│   │   ├── Views/    # SwiftUI views
+│   │   ├── Services/ # SignalR, OAuth, Keychain, Notifications
+│   │   └── Models/   # Data models
 │   └── install.sh
 └── deploy/           # Backend deployment scripts
 ```
