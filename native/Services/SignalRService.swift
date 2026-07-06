@@ -42,7 +42,7 @@ class SignalRService: ObservableObject {
         self.baseUrl = baseUrl
     }
 
-    func connect(gitHubId: Int64) {
+    func connect(gitHubId: Int64, username: String = "") {
         self.gitHubId = gitHubId
         task?.cancel()
         task = Task { [weak self] in
@@ -52,7 +52,7 @@ class SignalRService: ObservableObject {
 
             while !Task.isCancelled {
                 do {
-                    try await connectAndListen(gitHubId: gitHubId)
+                    try await connectAndListen(gitHubId: gitHubId, username: username)
                 } catch {
                     await MainActor.run { self.isConnected = false }
                     try? await Task.sleep(nanoseconds: 5_000_000_000)
@@ -68,7 +68,20 @@ class SignalRService: ObservableObject {
         }
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
-            if let runs = try? JSONDecoder().decode([ApiWorkflowRun].self, from: data) {
+            let decoder = JSONDecoder()
+            let withFrac = ISO8601DateFormatter()
+            withFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let withoutFrac = ISO8601DateFormatter()
+            withoutFrac.formatOptions = .withInternetDateTime
+            decoder.dateDecodingStrategy = .custom { d in
+                let container = try d.singleValueContainer()
+                let str = try container.decode(String.self)
+                guard let date = withFrac.date(from: str) ?? withoutFrac.date(from: str) else {
+                    throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid date: \(str)")
+                }
+                return date
+            }
+            if let runs = try? decoder.decode([ApiWorkflowRun].self, from: data) {
                 let mapped = runs.map { $0.toWorkflowRun() }
                 await MainActor.run {
                     runningWorkflows = mapped.filter { $0.status == "in_progress" }
@@ -109,7 +122,7 @@ class SignalRService: ObservableObject {
         return URL(string: "\(wsUrl)/hub/punishment")!
     }
 
-    private func connectAndListen(gitHubId: Int64) async throws {
+    private func connectAndListen(gitHubId: Int64, username: String) async throws {
         await syncFromApi(gitHubId: gitHubId)
         let url = hubWebSocketUrl
         let ws = URLSession.shared.webSocketTask(with: url)
@@ -119,7 +132,7 @@ class SignalRService: ObservableObject {
         try await ws.send(.string("{\"protocol\":\"json\",\"version\":1}\u{1e}"))
         guard case .string = try await ws.receive() else { throw SignalRError.handshakeFailed }
 
-        let register = "{\"type\":1,\"target\":\"RegisterConnection\",\"arguments\":[\(gitHubId)],\"invocationId\":\"1\"}\u{1e}"
+        let register = "{\"type\":1,\"target\":\"RegisterConnection\",\"arguments\":[\(gitHubId),\"\(username)\"],\"invocationId\":\"1\"}\u{1e}"
         try await ws.send(.string(register))
 
         await MainActor.run { self.isConnected = true }
@@ -183,9 +196,19 @@ class SignalRService: ObservableObject {
                 actor: actor, status: "in_progress",
                 htmlUrl: htmlUrl, startedAt: startedAt
             )
-            runningWorkflows.insert(run, at: 0)
-            recentWorkflows.insert(run, at: 0)
-            if recentWorkflows.count > 10 { recentWorkflows = Array(recentWorkflows.prefix(10)) }
+
+            if let idx = runningWorkflows.firstIndex(where: { $0.id == runId }) {
+                runningWorkflows[idx] = run
+            } else {
+                runningWorkflows.insert(run, at: 0)
+            }
+
+            if let idx = recentWorkflows.firstIndex(where: { $0.id == runId }) {
+                recentWorkflows[idx] = run
+            } else {
+                recentWorkflows.insert(run, at: 0)
+                if recentWorkflows.count > 10 { recentWorkflows = Array(recentWorkflows.prefix(10)) }
+            }
         }
     }
 
@@ -231,7 +254,7 @@ class SignalRService: ObservableObject {
                     workflowURL: workflowURL, date: Date()
                 )
                 showNotification(
-                    title: "❌ Workflow Failed",
+                    title: "Workflow Failed",
                     body: "\(wfName) failed for \(actor) in \(repo)",
                     subtitle: "Run #\(runId)",
                     actionURL: workflowURL

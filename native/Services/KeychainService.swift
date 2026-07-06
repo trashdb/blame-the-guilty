@@ -2,8 +2,9 @@ import Foundation
 import Security
 
 enum KeychainService {
-    private static let service = "com.blametheguilty.app"
+    static let service = "com.blametheguilty.app"
     private static let account = "github-session"
+    private static let oldService = "com.personal.btg"
 
     struct Session: Codable {
         let gitHubId: Int64
@@ -12,14 +13,28 @@ enum KeychainService {
 
     static func save(gitHubId: Int64, username: String) {
         guard let data = try? JSONEncoder().encode(Session(gitHubId: gitHubId, username: username)) else { return }
-        SecItemDelete(baseQuery() as CFDictionary)
-        var query = baseQuery()
+        SecItemDelete(baseQuery(service: service) as CFDictionary)
+        var query = baseQuery(service: service)
         query[kSecValueData] = data
         SecItemAdd(query as CFDictionary, nil)
     }
 
     static func load() -> Session? {
-        var query = baseQuery()
+        if let session = loadFrom(service: service) { return session }
+        if let session = loadFrom(service: oldService) {
+            save(gitHubId: session.gitHubId, username: session.username)
+            SecItemDelete(baseQuery(service: oldService) as CFDictionary)
+            return session
+        }
+        return nil
+    }
+
+    static func delete() {
+        SecItemDelete(baseQuery(service: service) as CFDictionary)
+    }
+
+    private static func loadFrom(service: String) -> Session? {
+        var query = baseQuery(service: service)
         query[kSecReturnData] = kCFBooleanTrue
         query[kSecMatchLimit] = kSecMatchLimitOne
         var item: AnyObject?
@@ -28,11 +43,7 @@ enum KeychainService {
         return try? JSONDecoder().decode(Session.self, from: data)
     }
 
-    static func delete() {
-        SecItemDelete(baseQuery() as CFDictionary)
-    }
-
-    private static func baseQuery() -> [CFString: Any] {
+    private static func baseQuery(service: String) -> [CFString: Any] {
         [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,

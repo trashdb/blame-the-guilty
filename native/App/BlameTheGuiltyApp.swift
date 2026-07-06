@@ -1,10 +1,3 @@
-//
-//  BlameTheGuiltyApp.swift
-//  BlameTheGuilty
-//
-//  Created by Álvaro López Sierra on 05/07/2026.
-//
-
 import SwiftUI
 
 @main

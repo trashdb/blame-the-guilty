@@ -13,7 +13,7 @@ public class PunishmentHub : Hub
         _db = db;
     }
 
-    public async Task RegisterConnection(long gitHubId)
+    public async Task RegisterConnection(long gitHubId, string? username = null)
     {
         var user = await _db.GitHubUsers
             .FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
@@ -22,10 +22,21 @@ public class PunishmentHub : Hub
         {
             user.SignalRConnectionId = Context.ConnectionId;
             user.LastLoginAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
+            if (!string.IsNullOrEmpty(username)) user.GitHubUsername = username;
+        }
+        else
+        {
+            _db.GitHubUsers.Add(new Models.GitHubUser
+            {
+                GitHubId = gitHubId,
+                GitHubUsername = username ?? $"user_{gitHubId}",
+                CreatedAt = DateTime.UtcNow,
+                LastLoginAt = DateTime.UtcNow,
+                SignalRConnectionId = Context.ConnectionId
+            });
         }
 
-        // Group by GitHubId for targeted messaging
+        await _db.SaveChangesAsync();
         await Groups.AddToGroupAsync(Context.ConnectionId, gitHubId.ToString());
     }
 

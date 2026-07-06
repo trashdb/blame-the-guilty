@@ -115,7 +115,7 @@ struct ContentView: View {
                     gitHubId = result.id
                     username = result.username
                     isLoggedIn = true
-                    signalR.connect(gitHubId: result.id)
+                    signalR.connect(gitHubId: result.id, username: result.username)
                     if keepSignedIn {
                         KeychainService.save(gitHubId: result.id, username: result.username)
                     }
@@ -141,7 +141,7 @@ struct ContentView: View {
         gitHubId = session.gitHubId
         username = session.username
         isLoggedIn = true
-        signalR.connect(gitHubId: session.gitHubId)
+        signalR.connect(gitHubId: session.gitHubId, username: session.username)
     }
 
     private func openSettingsWindow() {

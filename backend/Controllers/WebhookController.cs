@@ -59,9 +59,6 @@ public class WebhookController : ControllerBase
         var culprit = ResolveWorkflowCulprit(payload);
         if (culprit == null) return Ok("Could not resolve actor.");
 
-        var user = await FindConnectedUser(culprit.Login, culprit.Id);
-        if (user == null) return Ok($"User '{culprit.Login}' not connected.");
-
         var repo = payload.GetProperty("repository").GetProperty("full_name").GetString() ?? "unknown";
         var name = run.TryGetProperty("name", out var wn) ? wn.GetString() : "Workflow";
         var branch = run.TryGetProperty("head_branch", out var hb) ? hb.GetString() : null;
@@ -69,31 +66,33 @@ public class WebhookController : ControllerBase
         var runId = run.GetProperty("id").GetInt64();
         var startedAt = run.TryGetProperty("run_started_at", out var rsa) ? rsa.GetDateTime() : DateTime.UtcNow;
 
-        // Persist to DB
-        var existing = await _db.WorkflowRuns.FirstOrDefaultAsync(w => w.RunId == runId);
-        if (existing == null)
+        // Always insert a new row so each rerun has its own history entry
+        var gitHubId = culprit.Id ?? (await FindUserByLogin(culprit.Login))?.GitHubId;
+        _db.WorkflowRuns.Add(new WorkflowRun
         {
-            _db.WorkflowRuns.Add(new WorkflowRun
+            RunId = runId,
+            GitHubId = gitHubId ?? 0,
+            WorkflowName = name,
+            Repo = repo,
+            Actor = culprit.Login,
+            HtmlUrl = url,
+            Status = "in_progress",
+            StartedAt = startedAt
+        });
+        await _db.SaveChangesAsync();
+
+        // Notify via SignalR only if user is connected
+        var user = await FindConnectedUser(culprit.Login, culprit.Id);
+        if (user != null)
+        {
+            await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("WorkflowRunStarted", new
             {
-                RunId = runId,
-                GitHubId = user.GitHubId,
-                WorkflowName = name,
-                Repo = repo,
-                Actor = culprit.Login,
-                HtmlUrl = url,
-                Status = "in_progress",
-                StartedAt = startedAt
+                runId, workflowName = name, repo, branch, actor = culprit.Login, htmlUrl = url
             });
-            await _db.SaveChangesAsync();
+            _logger.LogInformation("Running workflow {RunId} notified to {Login}", runId, culprit.Login);
         }
 
-        await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("WorkflowRunStarted", new
-        {
-            runId, workflowName = name, repo, branch, actor = culprit.Login, htmlUrl = url
-        });
-
-        _logger.LogInformation("Running workflow {RunId} notified to {Login}", runId, culprit.Login);
-        return Ok(new { notified = culprit.Login, runId });
+        return Ok(new { runId });
     }
 
     private async Task<IActionResult> HandleWorkflowRunCompleted(JsonElement payload)
@@ -113,8 +112,11 @@ public class WebhookController : ControllerBase
         var workflowName = workflowRun.TryGetProperty("name", out var wn) ? wn.GetString() : null;
         var workflowUrl = workflowRun.TryGetProperty("html_url", out var wu) ? wu.GetString() : null;
 
-        // Update WorkflowRuns table
-        var dbRun = await _db.WorkflowRuns.FirstOrDefaultAsync(w => w.RunId == runId);
+        // Update the latest in_progress row for this runId
+        var dbRun = await _db.WorkflowRuns
+            .Where(w => w.RunId == runId && w.Status == "in_progress")
+            .OrderByDescending(w => w.Id)
+            .FirstOrDefaultAsync();
         if (dbRun != null)
         {
             dbRun.Status = conclusion switch
@@ -126,47 +128,42 @@ public class WebhookController : ControllerBase
         }
         else if (conclusion == "success" || conclusion == "failure")
         {
-            // Run wasn't tracked during in_progress (e.g., backend was down),
-            // try to find the user from the culprit
-            var userForDb = await FindConnectedUser(culprit.Login, culprit.Id);
-            if (userForDb != null)
+            var gitHubId = culprit.Id ?? (await FindUserByLogin(culprit.Login))?.GitHubId;
+            _db.WorkflowRuns.Add(new WorkflowRun
             {
-                _db.WorkflowRuns.Add(new WorkflowRun
-                {
-                    RunId = runId,
-                    GitHubId = userForDb.GitHubId,
-                    WorkflowName = workflowName,
-                    Repo = repoFullName,
-                    Actor = culprit.Login,
-                    HtmlUrl = workflowUrl,
-                    Status = conclusion switch { "success" => "success", _ => "failure" },
-                    StartedAt = DateTime.UtcNow
-                });
-            }
+                RunId = runId,
+                GitHubId = gitHubId ?? 0,
+                WorkflowName = workflowName,
+                Repo = repoFullName,
+                Actor = culprit.Login,
+                HtmlUrl = workflowUrl,
+                Status = conclusion switch { "success" => "success", _ => "failure" },
+                StartedAt = DateTime.UtcNow
+            });
         }
         await _db.SaveChangesAsync();
 
-        // If it was a success → notify completed, else → trigger punishment
+        // If it was a success → notify completed via SignalR if connected
         if (conclusion == "success")
         {
             var user = await FindConnectedUser(culprit.Login, culprit.Id);
-            if (user == null) return Ok($"User '{culprit.Login}' not connected.");
-
-            await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("WorkflowRunCompleted", new
+            if (user != null)
             {
-                runId, succeeded = true, conclusion = "success",
-                workflowName, repo = repoFullName, actor = culprit.Login,
-                htmlUrl = workflowUrl
-            });
-
-            _logger.LogInformation("Workflow success notified to {Login}", culprit.Login);
-            return Ok(new { notified = culprit.Login, conclusion });
+                await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("WorkflowRunCompleted", new
+                {
+                    runId, succeeded = true, conclusion = "success",
+                    workflowName, repo = repoFullName, actor = culprit.Login,
+                    htmlUrl = workflowUrl
+                });
+                _logger.LogInformation("Workflow success notified to {Login}", culprit.Login);
+            }
+            return Ok(new { runId, conclusion });
         }
 
         if (conclusion != "failure")
             return Ok("Ignored: conclusion is not 'failure'.");
 
-        // Save punishment
+        // Save punishment event (always)
         var historyEvent = new PunishmentEvent
         {
             RunId = runId, CulpritLogin = culprit.Login, CulpritGitHubId = culprit.Id,
@@ -179,21 +176,19 @@ public class WebhookController : ControllerBase
         _db.PunishmentEvents.Add(historyEvent);
         await _db.SaveChangesAsync();
 
-        if (user2 == null)
+        // Notify via SignalR if connected
+        if (user2 != null)
         {
-            _logger.LogInformation("User '{Login}' not connected.", culprit.Login);
-            return Ok($"User '{culprit.Login}' is not currently connected.");
+            await _hubContext.Clients.Group(user2.GitHubId.ToString()).SendAsync("WorkflowRunCompleted", new
+            {
+                runId, succeeded = false, conclusion = "failure",
+                workflowName, repo = repoFullName, actor = culprit.Login,
+                htmlUrl = workflowUrl
+            });
+            _logger.LogInformation("Punishment sent to {Login}", culprit.Login);
         }
 
-        await _hubContext.Clients.Group(user2.GitHubId.ToString()).SendAsync("WorkflowRunCompleted", new
-        {
-            runId, succeeded = false, conclusion = "failure",
-            workflowName, repo = repoFullName, actor = culprit.Login,
-            htmlUrl = workflowUrl
-        });
-
-        _logger.LogInformation("Punishment sent to {Login}", culprit.Login);
-        return Ok(new { punished = culprit.Login, gitHubId = user2.GitHubId });
+        return Ok(new { runId, conclusion });
     }
 
     private CulpritInfo? ResolveWorkflowCulprit(JsonElement payload)
@@ -395,6 +390,11 @@ public class WebhookController : ControllerBase
         return gitHubId.HasValue
             ? await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId.Value && u.SignalRConnectionId != null)
             : await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubUsername == login && u.SignalRConnectionId != null);
+    }
+
+    private async Task<Models.GitHubUser?> FindUserByLogin(string login)
+    {
+        return await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubUsername == login);
     }
 }
 

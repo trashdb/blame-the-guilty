@@ -23,7 +23,7 @@ public class WorkflowsController : ControllerBase
     {
         var runs = await _db.WorkflowRuns
             .Where(w => w.GitHubId == gitHubId)
-            .OrderByDescending(w => w.StartedAt)
+            .OrderByDescending(w => w.Id)
             .Take(limit)
             .Select(w => new
             {
