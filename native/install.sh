@@ -15,19 +15,24 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "🔍 Building btg…"
 
-xcodebuild -project "$SCRIPT_DIR/btg.xcodeproj" -scheme "$APP_NAME" -configuration Release build 2>/dev/null || {
+if xcodebuild -project "$SCRIPT_DIR/btg.xcodeproj" -scheme "$APP_NAME" -configuration Release build; then
+  echo "  ✅ Build succeeded"
+else
   echo "  ⚠️  Xcode CLI build failed, falling back to existing build…"
-}
+fi
 
-# Find the built .app in DerivedData
+# Find the built .app in DerivedData (prefer Release, fallback to Debug)
 XC_APP=$(
-  find "$HOME/Library/Developer/Xcode/DerivedData" \
-       -name "$APP_NAME.app" -path "*/Release/*" \
-       2>/dev/null | xargs ls -t 2>/dev/null | head -1
+  { find "$HOME/Library/Developer/Xcode/DerivedData" -name "$APP_NAME.app" -path "*/Release/*" 2>/dev/null;
+    find "$HOME/Library/Developer/Xcode/DerivedData" -name "$APP_NAME.app" -path "*/Debug/*" 2>/dev/null; } |
+    xargs ls -t 2>/dev/null | head -1
 )
 
 if [ -z "$XC_APP" ]; then
-  echo "❌  btg.app not found. Open the project in Xcode and run Product → Archive or build Release first."
+  echo "❌  btg.app not found."
+  echo ""
+  echo "Open the project in Xcode and build (⌘B), then run this script again:"
+  echo "  open \"$SCRIPT_DIR/btg.xcodeproj\""
   exit 1
 fi
 
