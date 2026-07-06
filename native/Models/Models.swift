@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 let backendUrl = "https://moonlike-silenced-sprung.ngrok-free.dev"
 
@@ -44,15 +45,28 @@ struct PullRequest: Identifiable {
 
     var prUrl: URL { htmlUrl ?? URL(string: "https://github.com/\(repo)/pull/\(prNumber)")! }
 
-    var isReadyToMerge: Bool {
-        status == "open" && conclusion == "success"
+    var isInProgress: Bool { status == "in_progress" }
+    var isReadyToMerge: Bool { status == "open" && conclusion == "success" }
+    var isFailed: Bool { conclusion == "failure" }
+    var isMerged: Bool { status == "merged" }
+}
+
+enum NotificationType {
+    case success, info, error
+
+    var color: Color {
+        switch self {
+        case .success: return .green
+        case .info:    return .white
+        case .error:   return .red
+        }
     }
 
-    var isFailed: Bool {
-        conclusion == "failure"
-    }
-
-    var isMerged: Bool {
-        status == "merged"
+    var icon: String {
+        switch self {
+        case .success: return "checkmark.circle.fill"
+        case .info:    return "info.circle.fill"
+        case .error:   return "flame.fill"
+        }
     }
 }

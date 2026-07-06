@@ -17,7 +17,7 @@ private func playPunishmentSound() {
     }
 }
 
-func showNotification(title: String, body: String, subtitle: String? = nil, actionURL: URL? = nil) {
-    playPunishmentSound()
-    NotificationBanner.shared.show(title: title, body: body, subtitle: subtitle, actionURL: actionURL)
+func showNotification(title: String, body: String, subtitle: String? = nil, actionURL: URL? = nil, type: NotificationType = .error) {
+    if type == .error { playPunishmentSound() }
+    NotificationBanner.shared.show(title: title, body: body, subtitle: subtitle, actionURL: actionURL, type: type)
 }

@@ -302,20 +302,65 @@ public class WebhookController : ControllerBase
             return Ok("Could not resolve author.");
         }
 
+        var checkSuiteId = checkSuite.GetProperty("id").GetInt64();
+        var repo = payload.GetProperty("repository").GetProperty("full_name").GetString() ?? "unknown";
+        var branch = checkSuite.TryGetProperty("head_branch", out var hb) ? hb.GetString() : null;
+        var headSha = checkSuite.TryGetProperty("head_sha", out var hs) ? hs.GetString() : null;
+
+        // Upsert CheckSuiteEvent as in_progress
+        var existing = await _db.CheckSuiteEvents.FirstOrDefaultAsync(e => e.CheckSuiteId == checkSuiteId);
+        if (existing == null)
+        {
+            _db.CheckSuiteEvents.Add(new CheckSuiteEvent
+            {
+                CheckSuiteId = checkSuiteId, Conclusion = "in_progress",
+                HeadBranch = branch, HeadSha = headSha,
+                PrAuthorLogin = authorLogin, PrAuthorGitHubId = authorId,
+                PrNumber = prNumber, RepoFullName = repo,
+                OccurredAt = DateTime.UtcNow
+            });
+        }
+        else
+        {
+            existing.Conclusion = "in_progress";
+        }
+
+        // Mark PR as in_progress
+        if (prNumber.HasValue)
+        {
+            var prEvent = await _db.PullRequestEvents
+                .Where(e => e.PrNumber == prNumber.Value && (e.Status == "open" || e.Status == "in_progress"))
+                .OrderByDescending(e => e.Id)
+                .FirstOrDefaultAsync();
+            if (prEvent != null)
+            {
+                prEvent.Status = "in_progress";
+                prEvent.Conclusion = null;
+            }
+        }
+
+        await _db.SaveChangesAsync();
+
         var user = await FindConnectedUser(authorLogin, authorId);
         if (user == null) return Ok($"User '{authorLogin}' not connected.");
 
-        var repo = payload.GetProperty("repository").GetProperty("full_name").GetString() ?? "unknown";
-        var branch = checkSuite.TryGetProperty("head_branch", out var hb) ? hb.GetString() : null;
         var appName = checkSuite.TryGetProperty("app", out var app) &&
                       app.TryGetProperty("name", out var an)
             ? an.GetString() : "Checks";
 
         await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("CheckSuiteStarted", new
         {
-            checkSuiteId = checkSuite.GetProperty("id").GetInt64(),
-            appName, repo, branch, prNumber, author = authorLogin
+            checkSuiteId, appName, repo, branch, prNumber, author = authorLogin
         });
+
+        // Notify PR status changed to in_progress
+        if (prNumber.HasValue)
+        {
+            await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("PullRequestChecksStatus", new
+            {
+                prNumber, status = "in_progress", conclusion = (string?)null, repo
+            });
+        }
 
         _logger.LogInformation("Check suite started notified to {Login}", authorLogin);
         return Ok(new { notified = authorLogin });
@@ -326,7 +371,7 @@ public class WebhookController : ControllerBase
         var checkSuite = payload.GetProperty("check_suite");
         var conclusion = checkSuite.GetProperty("conclusion").GetString();
 
-        if (conclusion != "success" && conclusion != "failure")
+        if (conclusion != "success" && conclusion != "failure" && conclusion != "cancelled" && conclusion != "neutral" && conclusion != "skipped" && conclusion != "timed_out")
             return Ok($"Ignored: conclusion is '{conclusion}'.");
 
         var repoFullName = payload.GetProperty("repository").GetProperty("full_name").GetString() ?? "unknown";
@@ -345,60 +390,96 @@ public class WebhookController : ControllerBase
         _logger.LogInformation(
             "Check suite completed: author={Login}, conclusion={Conclusion}", authorLogin, conclusion);
 
-        // Save event
-        var checkEvent = new CheckSuiteEvent
+        // Save or update CheckSuiteEvent
+        var existingEvent = await _db.CheckSuiteEvents.FirstOrDefaultAsync(e => e.CheckSuiteId == checkSuiteId);
+        if (existingEvent != null)
         {
-            CheckSuiteId = checkSuiteId, Conclusion = conclusion,
-            HeadBranch = headBranch, HeadSha = headSha,
-            PrAuthorLogin = authorLogin, PrAuthorGitHubId = authorId,
-            PrNumber = prNumber, RepoFullName = repoFullName,
-            OccurredAt = DateTime.UtcNow
-        };
+            existingEvent.Conclusion = conclusion;
+            existingEvent.WasNotified = true;
+        }
+        else
+        {
+            _db.CheckSuiteEvents.Add(new CheckSuiteEvent
+            {
+                CheckSuiteId = checkSuiteId, Conclusion = conclusion,
+                HeadBranch = headBranch, HeadSha = headSha,
+                PrAuthorLogin = authorLogin, PrAuthorGitHubId = authorId,
+                PrNumber = prNumber, RepoFullName = repoFullName,
+                OccurredAt = DateTime.UtcNow, WasNotified = true
+            });
+        }
+
+        // Recalculate overall PR conclusion from ALL check suites for this PR
+        string? overallConclusion = null;
+        string? overallStatus = null;
+
+        if (prNumber.HasValue)
+        {
+            var allConclusions = await _db.CheckSuiteEvents
+                .Where(e => e.PrNumber == prNumber.Value)
+                .Select(e => e.Conclusion)
+                .ToListAsync();
+
+            if (allConclusions.Any(c => c == "failure" || c == "timed_out"))
+            {
+                overallConclusion = "failure";
+                overallStatus = "open";
+            }
+            else if (allConclusions.Any(c => c == "in_progress"))
+            {
+                overallConclusion = null;
+                overallStatus = "in_progress";
+            }
+            else if (allConclusions.All(c => c == "success" || c == "skipped" || c == "neutral" || c == "cancelled"))
+            {
+                overallConclusion = "success";
+                overallStatus = "open";
+            }
+
+            var prEvent = await _db.PullRequestEvents
+                .Where(e => e.PrNumber == prNumber.Value && (e.Status == "open" || e.Status == "in_progress"))
+                .OrderByDescending(e => e.Id)
+                .FirstOrDefaultAsync();
+
+            if (prEvent != null)
+            {
+                prEvent.Status = overallStatus ?? prEvent.Status;
+                prEvent.Conclusion = overallConclusion;
+            }
+        }
+
+        await _db.SaveChangesAsync();
 
         var user = await FindConnectedUser(authorLogin, authorId);
-        checkEvent.WasNotified = user != null;
-    _db.CheckSuiteEvents.Add(checkEvent);
-
-    // Update the PullRequestEvent with the check conclusion
-    if (prNumber.HasValue)
-    {
-        var prEvent = await _db.PullRequestEvents
-            .Where(e => e.PrNumber == prNumber.Value && e.Status == "open")
-            .OrderByDescending(e => e.Id)
-            .FirstOrDefaultAsync();
-        if (prEvent != null)
+        if (user == null)
         {
-            prEvent.Conclusion = conclusion;
+            _logger.LogInformation("User '{Login}' not connected.", authorLogin);
+            return Ok($"User '{authorLogin}' is not currently connected.");
         }
-    }
 
-    await _db.SaveChangesAsync();
-
-    if (user == null)
-    {
-        _logger.LogInformation("User '{Login}' not connected.", authorLogin);
-        return Ok($"User '{authorLogin}' is not currently connected.");
-    }
-
-    var succeeded = conclusion == "success";
-    await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("CheckSuiteCompleted", new
-    {
-        checkSuiteId, conclusion, succeeded, prNumber,
-        repo = repoFullName, headBranch, prAuthor = authorLogin
-    });
-
-    // Also send PR-specific notification if this check suite is on a PR
-    if (prNumber.HasValue)
-    {
-        var prStatus = conclusion == "success" ? "ready" : "checks_failed";
-        await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("PullRequestChecksCompleted", new
+        var succeeded = conclusion == "success";
+        await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("CheckSuiteCompleted", new
         {
-            prNumber, succeeded, conclusion, status = prStatus, repo = repoFullName
+            checkSuiteId, conclusion, succeeded, prNumber,
+            repo = repoFullName, headBranch, prAuthor = authorLogin
         });
-    }
+
+        // Send consolidated PR status
+        if (prNumber.HasValue && overallStatus != null)
+        {
+            var prNotificationType = overallConclusion == "success" ? "ready" :
+                                     overallConclusion == "failure" ? "checks_failed" : "in_progress";
+            await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("PullRequestChecksCompleted", new
+            {
+                prNumber,
+                status = prNotificationType,
+                conclusion = overallConclusion,
+                repo = repoFullName
+            });
+        }
 
         _logger.LogInformation("Check suite notification sent to {Login} ({Conclusion})", authorLogin, conclusion);
-        return Ok(new { notified = authorLogin, conclusion });
+        return Ok(new { notified = authorLogin, conclusion, overallConclusion });
     }
 
     // ─── pull_request: dispatch by action ──────────────────────────────────

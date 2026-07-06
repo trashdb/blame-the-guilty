@@ -216,6 +216,7 @@ class SignalRService: ObservableObject {
         case "WorkflowRunStarted":       handleWorkflowStarted(data)
         case "WorkflowRunCompleted":     handleWorkflowCompleted(data)
         case "PullRequestOpened":        handlePROpened(data)
+        case "PullRequestChecksStatus":  handlePRChecksStatus(data)
         case "PullRequestChecksCompleted": handlePRChecksCompleted(data)
         case "PullRequestMerged":        handlePRMerged(data)
         case "PullRequestClosed":        handlePRClosed(data)
@@ -286,7 +287,15 @@ class SignalRService: ObservableObject {
             persistHistory()
 
             let wfName = name ?? "Workflow"
-            if !succeeded {
+            if succeeded {
+                showNotification(
+                    title: "Workflow Succeeded",
+                    body: "\(wfName) in \(repo)",
+                    subtitle: "Run #\(runId)",
+                    actionURL: workflowURL,
+                    type: .success
+                )
+            } else {
                 lastEvent = PunishmentEvent(
                     culprit: actor, repo: repo, runId: runId,
                     workflowName: wfName,
@@ -296,7 +305,8 @@ class SignalRService: ObservableObject {
                     title: "Workflow Failed",
                     body: "\(wfName) failed for \(actor) in \(repo)",
                     subtitle: "Run #\(runId)",
-                    actionURL: workflowURL
+                    actionURL: workflowURL,
+                    type: .error
                 )
             }
         }
@@ -329,21 +339,41 @@ class SignalRService: ObservableObject {
             showNotification(
                 title: "PR Opened",
                 body: "\(pr.title) — \(pr.repo)#\(pr.prNumber)",
-                subtitle: "Targeting \(pr.baseBranch)",
-                actionURL: pr.prUrl
+                subtitle: "\(pr.headBranch) → \(pr.baseBranch)",
+                actionURL: pr.prUrl,
+                type: .info
             )
+        }
+    }
+
+    private func handlePRChecksStatus(_ data: [String: Any]) {
+        let prNumber = data["prNumber"] as? Int64 ?? 0
+        let status = data["status"] as? String ?? "open"
+        let repo = data["repo"] as? String ?? "unknown"
+        Task { @MainActor in
+            if let idx = activePRs.firstIndex(where: { $0.prNumber == prNumber && $0.repo == repo }) {
+                let pr = activePRs[idx]
+                activePRs[idx] = PullRequest(
+                    prNumber: pr.prNumber, title: pr.title, repo: pr.repo,
+                    headBranch: pr.headBranch, baseBranch: pr.baseBranch,
+                    htmlUrl: pr.htmlUrl, status: status, conclusion: pr.conclusion
+                )
+            }
         }
     }
 
     private func handlePRChecksCompleted(_ data: [String: Any]) {
         let prNumber = data["prNumber"] as? Int64 ?? 0
-        let conclusion = data["conclusion"] as? String ?? "unknown"
+        let conclusion = data["conclusion"] as? String
         let repo = data["repo"] as? String ?? "unknown"
         let prStatus = data["status"] as? String ?? "open"
+        let isSuccess = conclusion == "success"
+        let isFailure = conclusion == "failure"
 
         let url = URL(string: "https://github.com/\(repo)/pull/\(prNumber)")
-        let titleText = "PR \(conclusion == "success" ? "Ready for Merge" : "Checks Failed")"
-        let body = "PR #\(prNumber) in \(repo) — \(conclusion)"
+        let titleText = isSuccess ? "PR Ready to Merge" : isFailure ? "PR Checks Failed" : "PR Checks Running"
+        let body = "PR #\(prNumber) in \(repo)"
+        let notifType: NotificationType = isSuccess ? .success : isFailure ? .error : .info
 
         Task { @MainActor in
             if let idx = activePRs.firstIndex(where: { $0.prNumber == prNumber && $0.repo == repo }) {
@@ -354,7 +384,9 @@ class SignalRService: ObservableObject {
                     htmlUrl: pr.htmlUrl, status: prStatus, conclusion: conclusion
                 )
             }
-            showNotification(title: titleText, body: body, actionURL: url)
+            if isSuccess || isFailure {
+                showNotification(title: titleText, body: body, actionURL: url, type: notifType)
+            }
         }
     }
 
@@ -363,9 +395,10 @@ class SignalRService: ObservableObject {
         Task { @MainActor in
             activePRs.removeAll { $0.prNumber == pr.prNumber && $0.repo == pr.repo }
             showNotification(
-                title: "PR Merged 🎉",
+                title: "PR Merged",
                 body: "\(pr.title) — \(pr.repo)#\(pr.prNumber)",
-                actionURL: pr.prUrl
+                actionURL: pr.prUrl,
+                type: .info
             )
         }
     }
@@ -377,7 +410,8 @@ class SignalRService: ObservableObject {
             showNotification(
                 title: "PR Closed Without Merge",
                 body: "\(pr.title) — \(pr.repo)#\(pr.prNumber)",
-                actionURL: pr.prUrl
+                actionURL: pr.prUrl,
+                type: .info
             )
         }
     }
@@ -394,7 +428,8 @@ class SignalRService: ObservableObject {
                 title: "Changes Requested",
                 body: "\(reviewer) requested changes on \"\(title)\"",
                 subtitle: "\(repo)#\(prNumber)",
-                actionURL: htmlUrl
+                actionURL: htmlUrl,
+                type: .info
             )
         }
     }
@@ -414,7 +449,8 @@ class SignalRService: ObservableObject {
                 title: "New Comment on PR #\(prNumber)",
                 body: "\(commenter): \(truncated)",
                 subtitle: repo,
-                actionURL: prUrl
+                actionURL: prUrl,
+                type: .info
             )
         }
     }

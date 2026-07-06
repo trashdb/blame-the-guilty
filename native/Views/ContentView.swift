@@ -271,11 +271,17 @@ struct ActivePRsView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 5) {
                 let mergedCount = prs.filter { $0.isMerged }.count
+                let inProgressCount = prs.filter { $0.isInProgress }.count
                 let readyCount = prs.filter { $0.isReadyToMerge }.count
                 let failedCount = prs.filter { $0.isFailed }.count
                 Text("Active PRs (\(prs.count))")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.blue)
+                if inProgressCount > 0 {
+                    Text("\(inProgressCount) running")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.orange)
+                }
                 if failedCount > 0 {
                     Text("\(failedCount) failing")
                         .font(.system(size: 9))
@@ -314,15 +320,18 @@ struct ActivePRsView: View {
                                         .foregroundStyle(Color(white: 0.85))
                                         .lineLimit(1)
                                     HStack(spacing: 4) {
-                                        Text("\(pr.repo)#\(pr.prNumber)")
-                                            .font(.system(size: 10))
-                                            .foregroundStyle(.tertiary)
+                                        Text(pr.headBranch)
+                                            .font(.system(size: 10, design: .monospaced))
+                                            .foregroundStyle(.blue)
                                         Text("→")
                                             .font(.system(size: 9))
                                             .foregroundStyle(.tertiary)
                                         Text(pr.baseBranch)
                                             .font(.system(size: 10, design: .monospaced))
-                                            .foregroundStyle(.blue)
+                                            .foregroundStyle(.blue.opacity(0.7))
+                                        Text("\(pr.repo)#\(pr.prNumber)")
+                                            .font(.system(size: 9))
+                                            .foregroundStyle(.tertiary)
                                     }
                                 }
                                 Spacer()
@@ -350,12 +359,12 @@ struct ActivePRsView: View {
                     .padding(.vertical, 6)
                     .background(
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(pr.isMerged ? .purple.opacity(0.12) : pr.isFailed ? .red.opacity(0.1) : pr.isReadyToMerge ? .green.opacity(0.08) : .white.opacity(0.04))
+                            .fill(pr.isMerged ? .purple.opacity(0.12) : pr.isFailed ? .red.opacity(0.1) : pr.isInProgress ? .orange.opacity(0.1) : pr.isReadyToMerge ? .green.opacity(0.08) : .white.opacity(0.04))
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 6)
                             .stroke(
-                                pr.isMerged ? .purple.opacity(0.35) : pr.isFailed ? .red.opacity(0.3) : pr.isReadyToMerge ? .green.opacity(0.25) : .white.opacity(0.06),
+                                pr.isMerged ? .purple.opacity(0.35) : pr.isFailed ? .red.opacity(0.3) : pr.isInProgress ? .orange.opacity(0.3) : pr.isReadyToMerge ? .green.opacity(0.25) : .white.opacity(0.06),
                                 lineWidth: 1
                             )
                     )
