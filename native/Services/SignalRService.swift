@@ -233,7 +233,11 @@ class SignalRService: ObservableObject {
                 startedAt: originalStartedAt
             )
 
-            recentWorkflows.insert(completedRun, at: 0)
+            if let idx = recentWorkflows.firstIndex(where: { $0.runId == runId && $0.status == "in_progress" }) {
+                recentWorkflows[idx] = completedRun
+            } else {
+                recentWorkflows.insert(completedRun, at: 0)
+            }
             if recentWorkflows.count > 10 { recentWorkflows = Array(recentWorkflows.prefix(10)) }
             persistHistory()
 
