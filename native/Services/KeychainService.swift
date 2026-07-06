@@ -2,7 +2,7 @@ import Foundation
 import Security
 
 enum KeychainService {
-    private static let service = "com.personal.btg"
+    private static let service = "com.blametheguilty.app"
     private static let account = "github-session"
 
     struct Session: Codable {

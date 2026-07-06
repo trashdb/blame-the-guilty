@@ -40,7 +40,17 @@ class SignalRService: ObservableObject {
     private func loadPersistedHistory() {
         let saved = PersistenceService.load()
         if !saved.isEmpty {
-            recentWorkflows = saved
+            recentWorkflows = saved.map { run in
+                if run.status == "in_progress" {
+                    return WorkflowRun(
+                        id: run.id, workflowName: run.workflowName,
+                        repo: run.repo, actor: run.actor,
+                        status: "failure",
+                        htmlUrl: run.htmlUrl, startedAt: run.startedAt
+                    )
+                }
+                return run
+            }
         }
     }
 
@@ -131,7 +141,6 @@ class SignalRService: ObservableObject {
             runningWorkflows.insert(run, at: 0)
             recentWorkflows.insert(run, at: 0)
             if recentWorkflows.count > 10 { recentWorkflows = Array(recentWorkflows.prefix(10)) }
-            persistHistory()
         }
     }
 
@@ -150,6 +159,7 @@ class SignalRService: ObservableObject {
 
             runningWorkflows.removeAll { $0.id == runId }
 
+            let originalStartedAt = recentWorkflows.first(where: { $0.id == runId })?.startedAt ?? Date()
             let completedRun = WorkflowRun(
                 id: runId,
                 workflowName: name ?? "Workflow",
@@ -157,7 +167,7 @@ class SignalRService: ObservableObject {
                 actor: actor,
                 status: succeeded ? "success" : "failure",
                 htmlUrl: htmlUrl ?? "https://github.com/\(repo)/actions/runs/\(runId)",
-                startedAt: Date()
+                startedAt: originalStartedAt
             )
 
             if let idx = recentWorkflows.firstIndex(where: { $0.id == runId }) {

@@ -30,7 +30,7 @@ cd blame-the-guilty/native
 bash install.sh
 ```
 
-This installs `btg.app` in `~/Applications/` and launches it automatically. A 🔥 icon will appear in your menu bar.
+This installs `BlameTheGuilty.app` in `~/Applications/` and launches it automatically. A 🔥 icon will appear in your menu bar.
 
 ## Daily usage
 
