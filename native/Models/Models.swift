@@ -21,3 +21,15 @@ struct WorkflowRun: Identifiable, Codable {
     let htmlUrl: String
     let startedAt: Date
 }
+
+struct PullRequest: Identifiable {
+    let id = UUID()
+    let prNumber: Int64
+    let title: String
+    let repo: String
+    let headBranch: String
+    let baseBranch: String
+    let htmlUrl: URL?
+
+    var prUrl: URL { htmlUrl ?? URL(string: "https://github.com/\(repo)/pull/\(prNumber)")! }
+}

@@ -11,6 +11,8 @@ public class AppDbContext : DbContext
     public DbSet<PunishmentEvent> PunishmentEvents => Set<PunishmentEvent>();
     public DbSet<CheckSuiteEvent> CheckSuiteEvents => Set<CheckSuiteEvent>();
     public DbSet<WorkflowRun> WorkflowRuns => Set<WorkflowRun>();
+    public DbSet<PullRequestEvent> PullRequestEvents => Set<PullRequestEvent>();
+    public DbSet<PrComment> PrComments => Set<PrComment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -38,6 +40,20 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.GitHubId);
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.RunId);
+        });
+
+        modelBuilder.Entity<PullRequestEvent>(entity =>
+        {
+            entity.HasIndex(e => e.AuthorLogin);
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.PrNumber);
+            entity.HasIndex(e => e.OccurredAt);
+        });
+
+        modelBuilder.Entity<PrComment>(entity =>
+        {
+            entity.HasIndex(e => e.PrNumber);
+            entity.HasIndex(e => e.OccurredAt);
         });
     }
 }

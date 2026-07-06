@@ -32,6 +32,8 @@ struct ContentView: View {
                 } else {
                     SignInCardView(isLoading: isLoading, loginError: loginError, onSignIn: login)
                 }
+                
+                Divider()
 
                 if isLoggedIn, !signalR.runningWorkflows.isEmpty {
                     RunningWorkflowsIndicatorView(
@@ -41,8 +43,16 @@ struct ContentView: View {
                     .padding(.bottom, 4)
                 }
 
-                if isLoggedIn, let event = signalR.lastEvent {
-                    LastNotificationCardView(event: event)
+                if isLoggedIn {
+                    ActivePRsView(prs: signalR.activePRs)
+                }
+
+                if isLoggedIn {
+                    if let event = signalR.lastEvent {
+                        LastNotificationCardView(event: event)
+                    } else {
+                        EmptyNotificationView()
+                    }
                 }
 
                 Divider()
@@ -220,6 +230,103 @@ final class WorkflowHistoryPanelManager {
     func close() {
         panel?.close()
         panel = nil
+    }
+}
+
+struct EmptyNotificationView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 5) {
+                Image(systemName: "bell.slash.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                Text("Last Notification")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+
+            Spacer(minLength: 60)
+
+            Text("There are no recent notifications")
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 6)
+                .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(.white.opacity(0.08), lineWidth: 1)
+        )
+    }
+}
+
+struct ActivePRsView: View {
+    let prs: [PullRequest]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 5) {
+                Image(systemName: "arrow.triangle.pull")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.blue)
+                Text("Active PRs (\(prs.count))")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.blue)
+                Spacer()
+            }
+
+            if prs.isEmpty {
+                Text("There are no active PRs")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 6)
+                    .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+            } else {
+                ForEach(prs.prefix(3)) { pr in
+                    Button {
+                        NSWorkspace.shared.open(pr.prUrl)
+                    } label: {
+                        HStack(spacing: 8) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(pr.title)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(Color(white: 0.85))
+                                    .lineLimit(1)
+                                HStack(spacing: 4) {
+                                    Text("\(pr.repo)#\(pr.prNumber)")
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(.tertiary)
+                                    Text("→")
+                                        .font(.system(size: 9))
+                                        .foregroundStyle(.tertiary)
+                                    Text(pr.baseBranch)
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundStyle(.blue)
+                                }
+                            }
+                            Spacer()
+                            Image(systemName: "arrow.up.right")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                    }
+                    .buttonStyle(.plain)
+                    .cursor(.pointingHand)
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 2)
+        .padding(.bottom, 6)
     }
 }
 

@@ -35,6 +35,9 @@ public class WebhookController : ControllerBase
         {
             "workflow_run" => await HandleWorkflowRun(payload),
             "check_suite" => await HandleCheckSuite(payload),
+            "pull_request" => await HandlePullRequest(payload),
+            "pull_request_review" => await HandlePullRequestReview(payload),
+            "issue_comment" => await HandleIssueComment(payload),
             _ => Ok($"Ignored: unsupported event '{eventType}'.")
         };
     }
@@ -357,8 +360,195 @@ public class WebhookController : ControllerBase
             repo = repoFullName, headBranch, prAuthor = authorLogin
         });
 
+        // Also send PR-specific notification if this check suite is on a PR
+        if (prNumber.HasValue)
+        {
+            await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("PullRequestChecksCompleted", new
+            {
+                prNumber, succeeded, conclusion, repo = repoFullName
+            });
+        }
+
         _logger.LogInformation("Check suite notification sent to {Login} ({Conclusion})", authorLogin, conclusion);
         return Ok(new { notified = authorLogin, conclusion });
+    }
+
+    // ─── pull_request: dispatch by action ──────────────────────────────────
+
+    private async Task<IActionResult> HandlePullRequest(JsonElement payload)
+    {
+        var action = payload.GetProperty("action").GetString();
+        var pr = payload.GetProperty("pull_request");
+        var prNumber = pr.GetProperty("number").GetInt32();
+        var title = pr.GetProperty("title").GetString() ?? "";
+        var htmlUrl = pr.GetProperty("html_url").GetString() ?? "";
+        var repo = payload.GetProperty("repository").GetProperty("full_name").GetString() ?? "unknown";
+        var baseBranch = pr.GetProperty("base").GetProperty("ref").GetString() ?? "";
+        var headBranch = pr.GetProperty("head").GetProperty("ref").GetString() ?? "";
+        var authorLogin = pr.GetProperty("user").GetProperty("login").GetString() ?? "";
+        var authorId = pr.GetProperty("user").TryGetProperty("id", out var aid) ? aid.GetInt64() : (long?)null;
+
+        return action switch
+        {
+            "opened" => await HandlePullRequestOpened(prNumber, title, htmlUrl, repo, baseBranch, headBranch, authorLogin, authorId, payload),
+            "closed" => await HandlePullRequestClosed(prNumber, title, htmlUrl, repo, baseBranch, headBranch, authorLogin, authorId, payload, pr),
+            _ => Ok($"Ignored: pull_request action '{action}'.")
+        };
+    }
+
+    private async Task<IActionResult> HandlePullRequestOpened(
+        int prNumber, string title, string htmlUrl, string repo,
+        string baseBranch, string headBranch, string authorLogin, long? authorId,
+        JsonElement payload)
+    {
+        _logger.LogInformation("PR #{PrNumber} opened by {Author} targeting {Base}", prNumber, authorLogin, baseBranch);
+
+        var pullRequestEvent = new PullRequestEvent
+        {
+            PrNumber = prNumber, Title = title, AuthorLogin = authorLogin,
+            AuthorGitHubId = authorId, RepoFullName = repo,
+            HeadBranch = headBranch, BaseBranch = baseBranch, PrUrl = htmlUrl,
+            Status = "open", OccurredAt = DateTime.UtcNow
+        };
+        _db.PullRequestEvents.Add(pullRequestEvent);
+        await _db.SaveChangesAsync();
+
+        var user = await FindConnectedUser(authorLogin, authorId);
+        pullRequestEvent.WasNotified = user != null;
+        await _db.SaveChangesAsync();
+
+        if (user != null)
+        {
+            await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("PullRequestOpened", new
+            {
+                prNumber, title, repo, baseBranch, headBranch,
+                author = authorLogin, htmlUrl
+            });
+            _logger.LogInformation("PR #{PrNumber} opened notified to {Author}", prNumber, authorLogin);
+        }
+
+        return Ok(new { prNumber, status = "tracking" });
+    }
+
+    private async Task<IActionResult> HandlePullRequestClosed(
+        int prNumber, string title, string htmlUrl, string repo,
+        string baseBranch, string headBranch, string authorLogin, long? authorId,
+        JsonElement payload, JsonElement pr)
+    {
+        var merged = pr.TryGetProperty("merged", out var m) && m.GetBoolean();
+        var status = merged ? "merged" : "closed";
+
+        _logger.LogInformation("PR #{PrNumber} {Status} by {Author}", prNumber, status, authorLogin);
+
+        // Update existing PR event status
+        var existing = await _db.PullRequestEvents
+            .Where(e => e.PrNumber == prNumber && e.Status == "open")
+            .OrderByDescending(e => e.Id)
+            .FirstOrDefaultAsync();
+
+        if (existing != null)
+        {
+            existing.Status = status;
+            await _db.SaveChangesAsync();
+        }
+
+        var user = await FindConnectedUser(authorLogin, authorId);
+
+        if (user != null)
+        {
+            var signalEvent = merged ? "PullRequestMerged" : "PullRequestClosed";
+            await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync(signalEvent, new
+            {
+                prNumber, title, repo, baseBranch, headBranch,
+                author = authorLogin, htmlUrl
+            });
+            _logger.LogInformation("PR #{PrNumber} {Status} notified to {Author}", prNumber, status, authorLogin);
+        }
+
+        return Ok(new { prNumber, status });
+    }
+
+    // ─── pull_request_review ───────────────────────────────────────────────
+
+    private async Task<IActionResult> HandlePullRequestReview(JsonElement payload)
+    {
+        var action = payload.GetProperty("action").GetString();
+        if (action != "submitted") return Ok($"Ignored: pull_request_review action '{action}'.");
+
+        var review = payload.GetProperty("review");
+        var state = review.GetProperty("state").GetString();
+        if (state != "changes_requested") return Ok($"Ignored: review state '{state}'.");
+
+        var pr = payload.GetProperty("pull_request");
+        var prNumber = pr.GetProperty("number").GetInt32();
+        var title = pr.GetProperty("title").GetString() ?? "";
+        var htmlUrl = pr.GetProperty("html_url").GetString() ?? "";
+        var repo = payload.GetProperty("repository").GetProperty("full_name").GetString() ?? "unknown";
+        var reviewerLogin = review.GetProperty("user").GetProperty("login").GetString() ?? "";
+        var authorLogin = pr.GetProperty("user").GetProperty("login").GetString() ?? "";
+        var authorId = pr.GetProperty("user").TryGetProperty("id", out var aid) ? aid.GetInt64() : (long?)null;
+
+        _logger.LogInformation("PR #{PrNumber}: changes requested by {Reviewer}", prNumber, reviewerLogin);
+
+        var user = await FindConnectedUser(authorLogin, authorId);
+        if (user == null) return Ok($"User '{authorLogin}' not connected.");
+
+        await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("PullRequestReviewRequested", new
+        {
+            prNumber, title, repo, reviewer = reviewerLogin, author = authorLogin, htmlUrl
+        });
+
+        _logger.LogInformation("PR #{PrNumber} review requested notified to {Author}", prNumber, authorLogin);
+        return Ok(new { prNumber, notified = authorLogin });
+    }
+
+    // ─── issue_comment (on PRs) ────────────────────────────────────────────
+
+    private async Task<IActionResult> HandleIssueComment(JsonElement payload)
+    {
+        var action = payload.GetProperty("action").GetString();
+        if (action != "created") return Ok($"Ignored: issue_comment action '{action}'.");
+
+        var issue = payload.GetProperty("issue");
+        // Only handle comments on PRs (PRs have a pull_request field)
+        if (!issue.TryGetProperty("pull_request", out _))
+            return Ok("Ignored: comment is on an issue, not a PR.");
+
+        var prNumber = issue.GetProperty("number").GetInt32();
+        var comment = payload.GetProperty("comment");
+        var commentBody = comment.GetProperty("body").GetString() ?? "";
+        var commenterLogin = comment.GetProperty("user").GetProperty("login").GetString() ?? "";
+        var prUrl = issue.GetProperty("html_url").GetString() ?? "";
+        var repo = payload.GetProperty("repository").GetProperty("full_name").GetString() ?? "unknown";
+        var commenterId = comment.GetProperty("user").TryGetProperty("id", out var cid) ? cid.GetInt64() : (long?)null;
+
+        // Find PR author
+        var prAuthorLogin = issue.GetProperty("user").GetProperty("login").GetString() ?? "";
+        var prAuthorId = issue.GetProperty("user").TryGetProperty("id", out var paid) ? paid.GetInt64() : (long?)null;
+
+        _logger.LogInformation("PR #{PrNumber}: new comment by {Commenter}", prNumber, commenterLogin);
+
+        // Save comment
+        _db.PrComments.Add(new PrComment
+        {
+            PrNumber = prNumber, AuthorLogin = commenterLogin,
+            AuthorGitHubId = commenterId, RepoFullName = repo,
+            PrUrl = prUrl, CommentBody = commentBody,
+            OccurredAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync();
+
+        var user = await FindConnectedUser(prAuthorLogin, prAuthorId);
+        if (user == null) return Ok($"User '{prAuthorLogin}' not connected.");
+
+        await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("PullRequestComment", new
+        {
+            prNumber, repo, commenter = commenterLogin,
+            commentBody = commentBody, prUrl
+        });
+
+        _logger.LogInformation("PR #{PrNumber} comment notified to {Author}", prNumber, prAuthorLogin);
+        return Ok(new { prNumber, notified = prAuthorLogin });
     }
 
     // ─── shared helpers ────────────────────────────────────────────────────

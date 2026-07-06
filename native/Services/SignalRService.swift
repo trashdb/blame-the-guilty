@@ -34,6 +34,7 @@ class SignalRService: ObservableObject {
     @Published var lastEvent: PunishmentEvent?
     @Published var runningWorkflows: [WorkflowRun] = []
     @Published var recentWorkflows: [WorkflowRun] = []
+    @Published var activePRs: [PullRequest] = []
 
     private let baseUrl: String
     private var task: Task<Void, Never>?
@@ -50,6 +51,7 @@ class SignalRService: ObservableObject {
             guard let self else { return }
 
             await syncFromApi(gitHubId: gitHubId)
+            await syncPRsFromApi(gitHubId: gitHubId)
 
             while !Task.isCancelled {
                 do {
@@ -60,6 +62,34 @@ class SignalRService: ObservableObject {
                 }
             }
         }
+    }
+
+    private func syncPRsFromApi(gitHubId: Int64) async {
+        guard let url = URL(string: "\(baseUrl)/api/pullrequests/active?gitHubId=\(gitHubId)") else { return }
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            struct ApiPR: Decodable {
+                let prNumber: Int64
+                let title: String
+                let repoFullName: String
+                let headBranch: String?
+                let baseBranch: String?
+                let prUrl: String?
+            }
+            if let prs = try? JSONDecoder().decode([ApiPR].self, from: data) {
+                await MainActor.run {
+                    activePRs = prs.map { pr in
+                        PullRequest(
+                            prNumber: pr.prNumber, title: pr.title,
+                            repo: pr.repoFullName,
+                            headBranch: pr.headBranch ?? "",
+                            baseBranch: pr.baseBranch ?? "",
+                            htmlUrl: URL(string: pr.prUrl ?? "")
+                        )
+                    }
+                }
+            }
+        } catch {}
     }
 
     private func syncFromApi(gitHubId: Int64) async {
@@ -176,8 +206,14 @@ class SignalRService: ObservableObject {
               let data = args.first else { return }
 
         switch target {
-        case "WorkflowRunStarted":   handleWorkflowStarted(data)
-        case "WorkflowRunCompleted": handleWorkflowCompleted(data)
+        case "WorkflowRunStarted":       handleWorkflowStarted(data)
+        case "WorkflowRunCompleted":     handleWorkflowCompleted(data)
+        case "PullRequestOpened":        handlePROpened(data)
+        case "PullRequestChecksCompleted": handlePRChecksCompleted(data)
+        case "PullRequestMerged":        handlePRMerged(data)
+        case "PullRequestClosed":        handlePRClosed(data)
+        case "PullRequestReviewRequested": handlePRReviewRequested(data)
+        case "PullRequestComment":       handlePRComment(data)
         default: break
         }
     }
@@ -258,6 +294,108 @@ class SignalRService: ObservableObject {
         }
     }
 
+    // MARK: - PR handlers
+
+    private func makePR(from data: [String: Any]) -> PullRequest? {
+        guard let prNumber = data["prNumber"] as? Int64,
+              let title = data["title"] as? String,
+              let repo = data["repo"] as? String else { return nil }
+        let headBranch = data["headBranch"] as? String ?? ""
+        let baseBranch = data["baseBranch"] as? String ?? ""
+        let htmlUrl = (data["htmlUrl"] as? String).flatMap { URL(string: $0) }
+        return PullRequest(prNumber: prNumber, title: title, repo: repo, headBranch: headBranch, baseBranch: baseBranch, htmlUrl: htmlUrl)
+    }
+
+    private func handlePROpened(_ data: [String: Any]) {
+        guard let pr = makePR(from: data) else { return }
+        Task { @MainActor in
+            if !activePRs.contains(where: { $0.prNumber == pr.prNumber && $0.repo == pr.repo }) {
+                activePRs.insert(pr, at: 0)
+            }
+            showNotification(
+                title: "PR Opened",
+                body: "\(pr.title) — \(pr.repo)#\(pr.prNumber)",
+                subtitle: "Targeting \(pr.baseBranch)",
+                actionURL: pr.prUrl
+            )
+        }
+    }
+
+    private func handlePRChecksCompleted(_ data: [String: Any]) {
+        let prNumber = data["prNumber"] as? Int64 ?? 0
+        let conclusion = data["conclusion"] as? String ?? "unknown"
+        let repo = data["repo"] as? String ?? "unknown"
+
+        let url = URL(string: "https://github.com/\(repo)/pull/\(prNumber)")
+        let titleText = "PR \(conclusion == "success" ? "Ready for Merge" : "Checks Failed")"
+        let body = "PR #\(prNumber) in \(repo) — \(conclusion)"
+
+        Task { @MainActor in
+            showNotification(title: titleText, body: body, actionURL: url)
+        }
+    }
+
+    private func handlePRMerged(_ data: [String: Any]) {
+        guard let pr = makePR(from: data) else { return }
+        Task { @MainActor in
+            activePRs.removeAll { $0.prNumber == pr.prNumber && $0.repo == pr.repo }
+            showNotification(
+                title: "PR Merged 🎉",
+                body: "\(pr.title) — \(pr.repo)#\(pr.prNumber)",
+                actionURL: pr.prUrl
+            )
+        }
+    }
+
+    private func handlePRClosed(_ data: [String: Any]) {
+        guard let pr = makePR(from: data) else { return }
+        Task { @MainActor in
+            activePRs.removeAll { $0.prNumber == pr.prNumber && $0.repo == pr.repo }
+            showNotification(
+                title: "PR Closed Without Merge",
+                body: "\(pr.title) — \(pr.repo)#\(pr.prNumber)",
+                actionURL: pr.prUrl
+            )
+        }
+    }
+
+    private func handlePRReviewRequested(_ data: [String: Any]) {
+        let prNumber = data["prNumber"] as? Int64 ?? 0
+        let title = data["title"] as? String ?? ""
+        let repo = data["repo"] as? String ?? "unknown"
+        let reviewer = data["reviewer"] as? String ?? "someone"
+        let htmlUrl = (data["htmlUrl"] as? String).flatMap { URL(string: $0) }
+
+        Task { @MainActor in
+            showNotification(
+                title: "Changes Requested",
+                body: "\(reviewer) requested changes on \"\(title)\"",
+                subtitle: "\(repo)#\(prNumber)",
+                actionURL: htmlUrl
+            )
+        }
+    }
+
+    private func handlePRComment(_ data: [String: Any]) {
+        let prNumber = data["prNumber"] as? Int64 ?? 0
+        let repo = data["repo"] as? String ?? "unknown"
+        let commenter = data["commenter"] as? String ?? "someone"
+        let body = data["commentBody"] as? String ?? ""
+        let prUrl = (data["prUrl"] as? String).flatMap { URL(string: $0) }
+
+        let preview = body.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespaces)
+        let truncated = preview.count > 80 ? String(preview.prefix(80)) + "…" : preview
+
+        Task { @MainActor in
+            showNotification(
+                title: "New Comment on PR #\(prNumber)",
+                body: "\(commenter): \(truncated)",
+                subtitle: repo,
+                actionURL: prUrl
+            )
+        }
+    }
+
     private var resetTask: Task<Void, Never>?
     private func scheduleStatusReset() {
         resetTask?.cancel()
@@ -276,6 +414,7 @@ class SignalRService: ObservableObject {
             runStatus = .idle
             lastEvent = nil
             runningWorkflows = []
+            activePRs = []
         }
     }
 
