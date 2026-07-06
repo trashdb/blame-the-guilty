@@ -22,11 +22,10 @@ else
 fi
 
 # Find the built .app in DerivedData (prefer Release, fallback to Debug)
-XC_APP=$(
-  { find "$HOME/Library/Developer/Xcode/DerivedData" -name "$APP_NAME.app" -path "*/Release/*" 2>/dev/null;
-    find "$HOME/Library/Developer/Xcode/DerivedData" -name "$APP_NAME.app" -path "*/Debug/*" 2>/dev/null; } |
-    xargs ls -t 2>/dev/null | head -1
-)
+XC_APP=$(find "$HOME/Library/Developer/Xcode/DerivedData" -name "$APP_NAME.app" -path "*/Release/*" 2>/dev/null | head -1)
+if [ -z "$XC_APP" ]; then
+  XC_APP=$(find "$HOME/Library/Developer/Xcode/DerivedData" -name "$APP_NAME.app" -path "*/Debug/*" 2>/dev/null | head -1)
+fi
 
 if [ -z "$XC_APP" ]; then
   echo "❌  btg.app not found."
