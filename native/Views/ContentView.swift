@@ -44,7 +44,7 @@ struct ContentView: View {
                 if isLoggedIn, !signalR.runningWorkflows.isEmpty {
                     RunningWorkflowsIndicatorView(
                         count: signalR.runningWorkflows.count,
-                        onTap: { WorkflowHistoryPanelManager.shared.show(signalR: signalR) }
+                        onTap: { WorkflowHistoryPanelManager.shared.show(signalR: signalR, gitHubId: gitHubId) }
                     )
                 }
 
@@ -81,7 +81,7 @@ struct ContentView: View {
                 .cursor(.pointingHand)
 
                 Button {
-                    WorkflowHistoryPanelManager.shared.show(signalR: signalR)
+                    WorkflowHistoryPanelManager.shared.show(signalR: signalR, gitHubId: gitHubId)
                 } label: {
                     Image(systemName: "clock.arrow.circlepath")
                         .font(.system(size: 13))
@@ -200,9 +200,9 @@ final class WorkflowHistoryPanelManager {
     static let shared = WorkflowHistoryPanelManager()
     private var panel: NSPanel?
 
-    func show(signalR: SignalRService) {
+    func show(signalR: SignalRService, gitHubId: Int64) {
         if panel == nil {
-            let hostingController = NSHostingController(rootView: WorkflowHistoryView(signalR: signalR).frame(width: 560, height: 480))
+            let hostingController = NSHostingController(rootView: WorkflowHistoryView(signalR: signalR, gitHubId: gitHubId).frame(width: 560, height: 480))
 
             panel = NSPanel(
                 contentRect: NSRect(x: 0, y: 0, width: 560, height: 480),
