@@ -12,7 +12,8 @@ private struct ApiWorkflowRun: Decodable {
 
     func toWorkflowRun() -> WorkflowRun {
         WorkflowRun(
-            id: runId,
+            id: UUID(),
+            runId: runId,
             workflowName: workflowName ?? "Workflow",
             repo: repo,
             actor: actor,
@@ -100,7 +101,8 @@ class SignalRService: ObservableObject {
             recentWorkflows = saved.map { run in
                 if run.status == "in_progress" {
                     return WorkflowRun(
-                        id: run.id, workflowName: run.workflowName,
+                        id: run.id, runId: run.runId,
+                        workflowName: run.workflowName,
                         repo: run.repo, actor: run.actor,
                         status: "failure",
                         htmlUrl: run.htmlUrl, startedAt: run.startedAt
@@ -192,23 +194,14 @@ class SignalRService: ObservableObject {
             runStatus = .running
 
             let run = WorkflowRun(
-                id: runId, workflowName: name, repo: repo,
+                id: UUID(), runId: runId, workflowName: name, repo: repo,
                 actor: actor, status: "in_progress",
                 htmlUrl: htmlUrl, startedAt: startedAt
             )
 
-            if let idx = runningWorkflows.firstIndex(where: { $0.id == runId }) {
-                runningWorkflows[idx] = run
-            } else {
-                runningWorkflows.insert(run, at: 0)
-            }
-
-            if let idx = recentWorkflows.firstIndex(where: { $0.id == runId }) {
-                recentWorkflows[idx] = run
-            } else {
-                recentWorkflows.insert(run, at: 0)
-                if recentWorkflows.count > 10 { recentWorkflows = Array(recentWorkflows.prefix(10)) }
-            }
+            runningWorkflows.insert(run, at: 0)
+            recentWorkflows.insert(run, at: 0)
+            if recentWorkflows.count > 10 { recentWorkflows = Array(recentWorkflows.prefix(10)) }
         }
     }
 
@@ -225,11 +218,13 @@ class SignalRService: ObservableObject {
             runStatus = succeeded ? .success : .failure
             scheduleStatusReset()
 
-            runningWorkflows.removeAll { $0.id == runId }
+            if let idx = runningWorkflows.firstIndex(where: { $0.runId == runId }) {
+                runningWorkflows.remove(at: idx)
+            }
 
-            let originalStartedAt = recentWorkflows.first(where: { $0.id == runId })?.startedAt ?? Date()
+            let originalStartedAt = recentWorkflows.first(where: { $0.runId == runId })?.startedAt ?? Date()
             let completedRun = WorkflowRun(
-                id: runId,
+                id: UUID(), runId: runId,
                 workflowName: name ?? "Workflow",
                 repo: repo,
                 actor: actor,
@@ -238,12 +233,8 @@ class SignalRService: ObservableObject {
                 startedAt: originalStartedAt
             )
 
-            if let idx = recentWorkflows.firstIndex(where: { $0.id == runId }) {
-                recentWorkflows[idx] = completedRun
-            } else {
-                recentWorkflows.insert(completedRun, at: 0)
-                if recentWorkflows.count > 10 { recentWorkflows = Array(recentWorkflows.prefix(10)) }
-            }
+            recentWorkflows.insert(completedRun, at: 0)
+            if recentWorkflows.count > 10 { recentWorkflows = Array(recentWorkflows.prefix(10)) }
             persistHistory()
 
             let wfName = name ?? "Workflow"
