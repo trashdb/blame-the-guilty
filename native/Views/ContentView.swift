@@ -134,7 +134,7 @@ struct ContentView: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 10)
         }
-        .frame(width: 400, height: 600, alignment: .top)
+        .frame(width: 400, height: 620, alignment: .top)
         .background(.regularMaterial)
         .onAppear { autoConnectIfNeeded() }
     }
@@ -281,7 +281,15 @@ struct ActivePRsView: View {
         }
     }
 
-
+    private func statusLabel(for pr: PullRequest) -> String {
+        if pr.isMerged { return "MERGED" }
+        if pr.draft { return "DRAFT" }
+        switch pr.mergeableState {
+        case "clean": return "READY"
+        case "blocked", "dirty", "behind", "unstable": return "FAIL"
+        default: return ""
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -311,6 +319,15 @@ struct ActivePRsView: View {
                                 .lineLimit(1)
                             }
                             Spacer()
+                            let label = statusLabel(for: pr)
+                            if !label.isEmpty {
+                                Text(label)
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundStyle(statusColor(for: pr))
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 2)
+                                    .background(statusColor(for: pr).opacity(0.2), in: RoundedRectangle(cornerRadius: 4))
+                            }
                         }
                     }
                     .buttonStyle(.plain)
@@ -325,7 +342,7 @@ struct ActivePRsView: View {
                 }
             }
             .scrollDisabled(prs.count < 5)
-            .frame(height: 200, alignment: .top)
+            .frame(height: 210, alignment: .top)
         }
         .padding(.top, 2)
         .padding(.bottom, 4)

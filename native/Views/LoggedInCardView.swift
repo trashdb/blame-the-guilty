@@ -13,7 +13,7 @@ struct LoggedInCardView: View {
                     case .success(let image):
                         image
                             .resizable()
-                            .frame(width: 24, height: 24)
+                            .frame(width: 36, height: 36)
                             .clipShape(Circle())
                     default:
                         Image(systemName: "person.circle.fill")
