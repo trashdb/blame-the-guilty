@@ -38,7 +38,7 @@ struct ContentView: View {
                         count: signalR.runningWorkflows.count,
                         onTap: { WorkflowHistoryPanelManager.shared.show(signalR: signalR, gitHubId: gitHubId) }
                     )
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.bottom, 4)
                 }
 
