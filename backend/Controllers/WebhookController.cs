@@ -12,6 +12,14 @@ namespace BlameTheGuilty.Api.Controllers;
 [Route("api/webhook")]
 public class WebhookController : ControllerBase
 {
+    private static readonly HashSet<string> IgnoredWorkflows = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CodeQL High Severity",
+        "Dependency Review",
+        "Label PR by Team Member",
+        "Verify ForgeRock Secrets"
+    };
+
     private readonly IHubContext<PunishmentHub> _hubContext;
     private readonly AppDbContext _db;
     private readonly ILogger<WebhookController> _logger;
@@ -61,6 +69,7 @@ public class WebhookController : ControllerBase
 
         var repo = payload.GetProperty("repository").GetProperty("full_name").GetString() ?? "unknown";
         var name = run.TryGetProperty("name", out var wn) ? wn.GetString() : "Workflow";
+        if (IgnoredWorkflows.Contains(name)) return Ok($"Ignored workflow '{name}'.");
         var branch = run.TryGetProperty("head_branch", out var hb) ? hb.GetString() : null;
         var url = run.TryGetProperty("html_url", out var hu) ? hu.GetString() : null;
         var runId = run.GetProperty("id").GetInt64();
@@ -128,6 +137,8 @@ public class WebhookController : ControllerBase
         var repoFullName = payload.GetProperty("repository").GetProperty("full_name").GetString() ?? "unknown";
         var runId = workflowRun.GetProperty("id").GetInt64();
         var workflowName = workflowRun.TryGetProperty("name", out var wn) ? wn.GetString() : null;
+        if (workflowName != null && IgnoredWorkflows.Contains(workflowName))
+            return Ok($"Ignored workflow '{workflowName}'.");
         var workflowUrl = workflowRun.TryGetProperty("html_url", out var wu) ? wu.GetString() : null;
 
         // Update the latest in_progress row for this runId

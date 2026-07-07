@@ -9,6 +9,14 @@ namespace BlameTheGuilty.Api.Controllers;
 [Route("api/workflows")]
 public class WorkflowsController : ControllerBase
 {
+    private static readonly HashSet<string> IgnoredWorkflows = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CodeQL High Severity",
+        "Dependency Review",
+        "Label PR by Team Member",
+        "Verify ForgeRock Secrets"
+    };
+
     private readonly AppDbContext _db;
 
     public WorkflowsController(AppDbContext db)
@@ -22,7 +30,7 @@ public class WorkflowsController : ControllerBase
         [FromQuery] int limit = 20)
     {
         var runs = await _db.WorkflowRuns
-            .Where(w => w.GitHubId == gitHubId)
+            .Where(w => w.GitHubId == gitHubId && !IgnoredWorkflows.Contains(w.WorkflowName))
             .OrderByDescending(w => w.Id)
             .Take(limit)
             .Select(w => new
