@@ -251,6 +251,33 @@ struct EmptyNotificationView: View {
 struct ActivePRsView: View {
     let prs: [PullRequest]
 
+    private func statusColor(for pr: PullRequest) -> Color {
+        if pr.isMerged { return .purple }
+        if pr.draft { return .gray }
+        switch pr.mergeableState {
+        case "clean": return .green
+        case "blocked", "dirty", "behind", "unstable": return .red
+        default: return Color(white: 0.85)
+        }
+    }
+
+    @ViewBuilder
+    private func statusIndicator(for pr: PullRequest) -> some View {
+        if pr.isMerged {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 10))
+                .foregroundStyle(.purple)
+        } else if pr.draft {
+            Image(systemName: "pencil.circle.fill")
+                .font(.system(size: 10))
+                .foregroundStyle(.gray)
+        } else {
+            Circle()
+                .fill(statusColor(for: pr))
+                .frame(width: 8, height: 8)
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 5) {
@@ -266,11 +293,11 @@ struct ActivePRsView: View {
                         NSWorkspace.shared.open(pr.prUrl)
                     } label: {
                         HStack(spacing: 8) {
+                            statusIndicator(for: pr)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(pr.title)
                                     .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(Color(white: 0.85))
-                                    .lineLimit(1)
+                                    .foregroundStyle(statusColor(for: pr))
                                 HStack(spacing: 0) {
                                     Text(pr.repo).font(.system(size: 10)).foregroundStyle(.secondary)
                                     Text(" → ").font(.system(size: 10)).foregroundStyle(.secondary)

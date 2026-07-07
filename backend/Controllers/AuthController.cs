@@ -50,6 +50,7 @@ public class AuthController : ControllerBase
             {
                 GitHubId = userInfo.Id,
                 GitHubUsername = userInfo.Login,
+                AccessToken = userInfo.AccessToken,
                 CreatedAt = DateTime.UtcNow,
                 LastLoginAt = DateTime.UtcNow
             });
@@ -57,6 +58,7 @@ public class AuthController : ControllerBase
         else
         {
             existing.GitHubUsername = userInfo.Login;
+            existing.AccessToken = userInfo.AccessToken;
             existing.LastLoginAt = DateTime.UtcNow;
         }
 

@@ -106,24 +106,28 @@ class SignalRService: ObservableObject {
             struct ApiPR: Decodable {
                 let prNumber: Int64
                 let title: String
-                let repoFullName: String
+                let repo: String
                 let headBranch: String?
                 let baseBranch: String?
-                let prUrl: String?
+                let htmlUrl: String?
                 let status: String?
                 let conclusion: String?
+                let draft: Bool?
+                let mergeableState: String?
             }
             if let prs = try? JSONDecoder().decode([ApiPR].self, from: data) {
                 await MainActor.run {
                     activePRs = prs.map { pr in
                         PullRequest(
                             prNumber: pr.prNumber, title: pr.title,
-                            repo: pr.repoFullName,
+                            repo: pr.repo,
                             headBranch: pr.headBranch ?? "",
                             baseBranch: pr.baseBranch ?? "",
-                            htmlUrl: URL(string: pr.prUrl ?? ""),
+                            htmlUrl: URL(string: pr.htmlUrl ?? ""),
                             status: pr.status ?? "open",
-                            conclusion: pr.conclusion
+                            conclusion: pr.conclusion,
+                            draft: pr.draft ?? false,
+                            mergeableState: pr.mergeableState
                         )
                     }
                 }

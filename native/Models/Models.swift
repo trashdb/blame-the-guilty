@@ -35,6 +35,8 @@ struct PullRequest: Identifiable {
     let htmlUrl: URL?
     let status: String
     let conclusion: String?
+    let draft: Bool
+    let mergeableState: String?
 
     var prUrl: URL { htmlUrl ?? URL(string: "https://github.com/\(repo)/pull/\(prNumber)")! }
 

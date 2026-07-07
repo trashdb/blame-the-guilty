@@ -7,12 +7,13 @@ public class GitHubUser
     [Key]
     public int Id { get; set; }
 
-    /// <summary>Numeric immutable ID from GitHub API (unique per user).</summary>
     public long GitHubId { get; set; }
 
     [Required]
     [MaxLength(100)]
     public string GitHubUsername { get; set; } = string.Empty;
+
+    public string? AccessToken { get; set; }
 
     public string? SignalRConnectionId { get; set; }
 

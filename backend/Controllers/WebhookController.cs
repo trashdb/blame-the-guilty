@@ -402,10 +402,12 @@ public class WebhookController : ControllerBase
         var headBranch = pr.GetProperty("head").GetProperty("ref").GetString() ?? "";
         var authorLogin = pr.GetProperty("user").GetProperty("login").GetString() ?? "";
         var authorId = pr.GetProperty("user").TryGetProperty("id", out var aid) ? aid.GetInt64() : (long?)null;
+        var draft = pr.TryGetProperty("draft", out var d) && d.GetBoolean();
 
         return action switch
         {
-            "opened" => await HandlePullRequestOpened(prNumber, title, htmlUrl, repo, baseBranch, headBranch, authorLogin, authorId),
+            "opened" => await HandlePullRequestOpened(prNumber, title, htmlUrl, repo, baseBranch, headBranch, authorLogin, authorId, draft),
+            "ready_for_review" => await HandlePullRequestReadyForReview(prNumber, repo),
             "closed" => await HandlePullRequestClosed(prNumber, title, htmlUrl, repo, baseBranch, headBranch, authorLogin, authorId, pr),
             _ => Ok($"Ignored: pull_request action '{action}'.")
         };
@@ -413,19 +415,37 @@ public class WebhookController : ControllerBase
 
     private async Task<IActionResult> HandlePullRequestOpened(
         int prNumber, string title, string htmlUrl, string repo,
-        string baseBranch, string headBranch, string authorLogin, long? authorId)
+        string baseBranch, string headBranch, string authorLogin, long? authorId,
+        bool draft)
     {
         _db.PullRequestEvents.Add(new PullRequestEvent
         {
             PrNumber = prNumber, Title = title, AuthorLogin = authorLogin,
             AuthorGitHubId = authorId, RepoFullName = repo,
             HeadBranch = headBranch, BaseBranch = baseBranch, PrUrl = htmlUrl,
-            Status = "open", OccurredAt = DateTime.UtcNow
+            Status = "open", Draft = draft, OccurredAt = DateTime.UtcNow
         });
         await _db.SaveChangesAsync();
 
-        _logger.LogInformation("PR #{PrNumber} opened by {Author}", prNumber, authorLogin);
+        _logger.LogInformation("PR #{PrNumber} opened by {Author} (draft={Draft})", prNumber, authorLogin, draft);
         return Ok(new { prNumber, status = "tracking" });
+    }
+
+    private async Task<IActionResult> HandlePullRequestReadyForReview(int prNumber, string repo)
+    {
+        var existing = await _db.PullRequestEvents
+            .Where(e => e.PrNumber == prNumber && e.RepoFullName == repo && e.Status == "open")
+            .OrderByDescending(e => e.Id)
+            .FirstOrDefaultAsync();
+
+        if (existing != null)
+        {
+            existing.Draft = false;
+            await _db.SaveChangesAsync();
+        }
+
+        _logger.LogInformation("PR #{PrNumber} marked as ready for review", prNumber);
+        return Ok(new { prNumber, status = "ready_for_review" });
     }
 
     private async Task<IActionResult> HandlePullRequestClosed(
@@ -437,7 +457,7 @@ public class WebhookController : ControllerBase
         var status = merged ? "merged" : "closed";
 
         var existing = await _db.PullRequestEvents
-            .Where(e => e.PrNumber == prNumber && e.Status == "open")
+            .Where(e => e.PrNumber == prNumber && e.RepoFullName == repo && e.Status == "open")
             .OrderByDescending(e => e.Id)
             .FirstOrDefaultAsync();
 

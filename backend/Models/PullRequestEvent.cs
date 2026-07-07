@@ -36,6 +36,11 @@ public class PullRequestEvent
     [MaxLength(50)]
     public string? Conclusion { get; set; }
 
+    public bool Draft { get; set; }
+
+    [MaxLength(50)]
+    public string? MergeableState { get; set; }
+
     [MaxLength(500)]
     public string? ExtraInfo { get; set; }
 
