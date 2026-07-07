@@ -134,7 +134,7 @@ struct ContentView: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 10)
         }
-        .frame(width: 400, height: 620, alignment: .top)
+        .frame(width: 400, height: 630, alignment: .top)
         .background(.regularMaterial)
         .onAppear { autoConnectIfNeeded() }
     }
@@ -257,6 +257,7 @@ struct EmptyNotificationView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 6)
+            .padding(.bottom, 12)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -339,6 +340,7 @@ struct ActivePRsView: View {
                         RoundedRectangle(cornerRadius: 6)
                             .stroke(statusColor(for: pr).opacity(0.3), lineWidth: 1)
                     )
+                    
                 }
             }
             .scrollDisabled(prs.count < 5)
