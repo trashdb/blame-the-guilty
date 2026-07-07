@@ -41,6 +41,13 @@ struct ContentView: View {
 
                 Divider()
 
+                if isLoggedIn, !signalR.runningWorkflows.isEmpty {
+                    RunningWorkflowsIndicatorView(
+                        count: signalR.runningWorkflows.count,
+                        onTap: { WorkflowHistoryPanelManager.shared.show(signalR: signalR, gitHubId: gitHubId) }
+                    )
+                }
+
                 if isLoggedIn {
                     if let event = signalR.lastEvent {
                         LastNotificationCardView(event: event)
@@ -265,7 +272,7 @@ struct ActivePRsView: View {
             HStack(spacing: 5) {
                 let mergedCount = prs.filter { $0.isMerged }.count
                 let inProgressCount = prs.filter { $0.isInProgress }.count
-                let passedCount = prs.filter { $0.isChecksPassed }.count
+                let readyCount = prs.filter { $0.isReadyToMerge }.count
                 let failedCount = prs.filter { $0.isFailed }.count
                 Text("Active PRs (\(prs.count))")
                     .font(.system(size: 11, weight: .semibold))
@@ -285,8 +292,8 @@ struct ActivePRsView: View {
                         .font(.system(size: 9))
                         .foregroundStyle(.purple)
                 }
-                if passedCount > 0 {
-                    Text("\(passedCount) passed")
+                if readyCount > 0 {
+                    Text("\(readyCount) ready")
                         .font(.system(size: 9))
                         .foregroundStyle(.green)
                 }
@@ -329,12 +336,12 @@ struct ActivePRsView: View {
                     .padding(.vertical, 6)
                     .background(
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(pr.isMerged ? .purple.opacity(0.12) : pr.isFailed ? .red.opacity(0.1) : pr.isInProgress ? .orange.opacity(0.1) : pr.isChecksPassed ? .green.opacity(0.08) : .white.opacity(0.04))
+                            .fill(pr.isMerged ? .purple.opacity(0.12) : pr.isFailed ? .red.opacity(0.1) : pr.isInProgress ? .orange.opacity(0.1) : pr.isReadyToMerge ? .green.opacity(0.08) : .white.opacity(0.04))
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 6)
                             .stroke(
-                                pr.isMerged ? .purple.opacity(0.35) : pr.isFailed ? .red.opacity(0.3) : pr.isInProgress ? .orange.opacity(0.3) : pr.isChecksPassed ? .green.opacity(0.25) : .white.opacity(0.06),
+                                pr.isMerged ? .purple.opacity(0.35) : pr.isFailed ? .red.opacity(0.3) : pr.isInProgress ? .orange.opacity(0.3) : pr.isReadyToMerge ? .green.opacity(0.25) : .white.opacity(0.06),
                                 lineWidth: 1
                             )
                     )

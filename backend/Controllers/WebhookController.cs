@@ -102,6 +102,17 @@ public class WebhookController : ControllerBase
         });
         await _db.SaveChangesAsync();
 
+        // Notify via SignalR only if user is connected
+        var user = await FindConnectedUser(culprit.Login, culprit.Id);
+        if (user != null)
+        {
+            await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("WorkflowRunStarted", new
+            {
+                runId, workflowName = name, repo, branch, actor = culprit.Login, htmlUrl = url
+            });
+            _logger.LogInformation("Running workflow {RunId} notified to {Login}", runId, culprit.Login);
+        }
+
         return Ok(new { runId });
     }
 
@@ -153,10 +164,37 @@ public class WebhookController : ControllerBase
         }
         await _db.SaveChangesAsync();
 
-        if (conclusion != "failure")
+        // Notify both the culprit and the target user (if set) via SignalR
+        async Task NotifyCompleted(long gitHubId, bool succeeded)
         {
+            await _hubContext.Clients.Group(gitHubId.ToString()).SendAsync("WorkflowRunCompleted", new
+            {
+                runId, succeeded, conclusion,
+                workflowName, repo = repoFullName, actor = culprit.Login,
+                htmlUrl = workflowUrl
+            });
+        }
+
+        if (conclusion == "success")
+        {
+            var user = await FindConnectedUser(culprit.Login, culprit.Id);
+            if (user != null)
+            {
+                await NotifyCompleted(user.GitHubId, true);
+                _logger.LogInformation("Workflow success notified to {Login}", culprit.Login);
+            }
+
+            if (dbRun?.TargetGitHubId != null && dbRun.TargetGitHubId != user?.GitHubId)
+            {
+                await NotifyCompleted(dbRun.TargetGitHubId.Value, true);
+                _logger.LogInformation("Workflow success also notified to target user {TargetId}", dbRun.TargetGitHubId);
+            }
+
             return Ok(new { runId, conclusion });
         }
+
+        if (conclusion != "failure")
+            return Ok("Ignored: conclusion is not 'failure'.");
 
         // Save punishment event (always)
         var historyEvent = new PunishmentEvent
@@ -166,12 +204,23 @@ public class WebhookController : ControllerBase
             OccurredAt = DateTime.UtcNow
         };
 
-        var user = await FindConnectedUser(culprit.Login, culprit.Id);
-        historyEvent.WasNotified = user != null;
+        var user2 = await FindConnectedUser(culprit.Login, culprit.Id);
+        historyEvent.WasNotified = user2 != null;
         _db.PunishmentEvents.Add(historyEvent);
         await _db.SaveChangesAsync();
 
-        _logger.LogInformation("Punishment saved for {RunId} culprit {Login}", runId, culprit.Login);
+        // Notify via SignalR if connected
+        if (user2 != null)
+        {
+            await NotifyCompleted(user2.GitHubId, false);
+            _logger.LogInformation("Punishment sent to {Login}", culprit.Login);
+        }
+
+        if (dbRun?.TargetGitHubId != null && dbRun.TargetGitHubId != user2?.GitHubId)
+        {
+            await NotifyCompleted(dbRun.TargetGitHubId.Value, false);
+            _logger.LogInformation("Punishment also notified to target user {TargetId}", dbRun.TargetGitHubId);
+        }
 
         return Ok(new { runId, conclusion });
     }
@@ -299,23 +348,21 @@ public class WebhookController : ControllerBase
                       app.TryGetProperty("name", out var an)
             ? an.GetString() : "Checks";
 
-        // Notify PR status changed to in_progress (only if it wasn't already)
+        await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("CheckSuiteStarted", new
+        {
+            checkSuiteId, appName, repo, branch, prNumber, author = authorLogin
+        });
+
+        // Notify PR status changed to in_progress
         if (prNumber.HasValue)
         {
-            var currentPr = await _db.PullRequestEvents
-                .Where(e => e.PrNumber == prNumber.Value && (e.Status == "open" || e.Status == "in_progress"))
-                .OrderByDescending(e => e.Id)
-                .FirstOrDefaultAsync();
-            if (currentPr == null || currentPr.Status != "in_progress")
+            await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("PullRequestChecksStatus", new
             {
-                await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("PullRequestChecksStatus", new
-                {
-                    prNumber, status = "in_progress", conclusion = (string?)null, repo
-                });
-            }
+                prNumber, status = "in_progress", conclusion = (string?)null, repo
+            });
         }
 
-        _logger.LogInformation("Check suite requested handled for {Login}", authorLogin);
+        _logger.LogInformation("Check suite started notified to {Login}", authorLogin);
         return Ok(new { notified = authorLogin });
     }
 
@@ -411,30 +458,27 @@ public class WebhookController : ControllerBase
         }
 
         var succeeded = conclusion == "success";
-        // Send consolidated PR status only if overall status actually changed
+        await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("CheckSuiteCompleted", new
+        {
+            checkSuiteId, conclusion, succeeded, prNumber,
+            repo = repoFullName, headBranch, prAuthor = authorLogin
+        });
+
+        // Send consolidated PR status
         if (prNumber.HasValue && overallStatus != null)
         {
-            var prEvent = await _db.PullRequestEvents
-                .Where(e => e.PrNumber == prNumber.Value && (e.Status == "open" || e.Status == "in_progress"))
-                .OrderByDescending(e => e.Id)
-                .FirstOrDefaultAsync();
-
-            var prevConclusion = prEvent?.Conclusion;
-            var prevStatus = prEvent?.Status;
-
-            if (prevConclusion != overallConclusion || prevStatus != overallStatus)
+            var prNotificationType = overallConclusion == "success" ? "ready" :
+                                     overallConclusion == "failure" ? "checks_failed" : "in_progress";
+            await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("PullRequestChecksCompleted", new
             {
-                await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("PullRequestChecksCompleted", new
-                {
-                    prNumber,
-                    status = overallStatus ?? "open",
-                    conclusion = overallConclusion,
-                    repo = repoFullName
-                });
-            }
+                prNumber,
+                status = prNotificationType,
+                conclusion = overallConclusion,
+                repo = repoFullName
+            });
         }
 
-        _logger.LogInformation("Check suite completed handled for {Login} ({Conclusion})", authorLogin, conclusion);
+        _logger.LogInformation("Check suite notification sent to {Login} ({Conclusion})", authorLogin, conclusion);
         return Ok(new { notified = authorLogin, conclusion, overallConclusion });
     }
 
