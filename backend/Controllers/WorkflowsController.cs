@@ -71,10 +71,13 @@ public class WorkflowsController : ControllerBase
         return Ok(new { runId = run.RunId, targetGitHubIds = DeserializeIds(run.TargetGitHubIds) });
     }
 
-    [HttpPost("runs/{id}/rerun")]
-    public async Task<IActionResult> RerunRun(int id, [FromQuery] long gitHubId)
+    [HttpPost("runs/{runId}/rerun")]
+    public async Task<IActionResult> RerunRun(long runId, [FromQuery] long gitHubId)
     {
-        var run = await _db.WorkflowRuns.FindAsync(id);
+        var run = await _db.WorkflowRuns
+            .Where(w => w.RunId == runId)
+            .OrderByDescending(w => w.Id)
+            .FirstOrDefaultAsync();
         if (run == null)
             return NotFound("Workflow run not found.");
 

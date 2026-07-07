@@ -273,14 +273,23 @@ struct WorkflowRunRow: View {
     }
 
     private func rerunWorkflow() {
-        guard let dbId = run.dbId else { return }
-        guard let url = URL(string: "\(backendUrl)/api/workflows/runs/\(dbId)/rerun?gitHubId=\(gitHubId)") else { return }
+        guard let url = URL(string: "\(backendUrl)/api/workflows/runs/\(run.runId)/rerun?gitHubId=\(gitHubId)") else {
+            print("Rerun: invalid URL")
+            return
+        }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
 
-        URLSession.shared.dataTask(with: request) { _, _, error in
+        URLSession.shared.dataTask(with: request) { data, response, error in
             if let error = error {
                 print("Rerun failed: \(error.localizedDescription)")
+                return
+            }
+            if let httpResponse = response as? HTTPURLResponse {
+                print("Rerun status: \(httpResponse.statusCode)")
+                if let data = data, let body = String(data: data, encoding: .utf8) {
+                    print("Rerun body: \(body)")
+                }
             }
         }.resume()
     }
