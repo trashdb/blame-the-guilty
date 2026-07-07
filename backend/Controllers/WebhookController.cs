@@ -43,6 +43,7 @@ public class WebhookController : ControllerBase
         {
             "workflow_run" => await HandleWorkflowRun(payload),
             "check_suite" => await HandleCheckSuite(payload),
+            "pull_request" => await HandlePullRequest(payload),
             _ => Ok($"Ignored: unsupported event '{eventType}'.")
         };
     }
@@ -386,6 +387,69 @@ public class WebhookController : ControllerBase
     }
 
     // ─── shared helpers ────────────────────────────────────────────────────
+
+    // ─── pull_request: dispatch by action ──────────────────────────────────
+
+    private async Task<IActionResult> HandlePullRequest(JsonElement payload)
+    {
+        var action = payload.GetProperty("action").GetString();
+        var pr = payload.GetProperty("pull_request");
+        var prNumber = pr.GetProperty("number").GetInt32();
+        var title = pr.GetProperty("title").GetString() ?? "";
+        var htmlUrl = pr.GetProperty("html_url").GetString() ?? "";
+        var repo = payload.GetProperty("repository").GetProperty("full_name").GetString() ?? "unknown";
+        var baseBranch = pr.GetProperty("base").GetProperty("ref").GetString() ?? "";
+        var headBranch = pr.GetProperty("head").GetProperty("ref").GetString() ?? "";
+        var authorLogin = pr.GetProperty("user").GetProperty("login").GetString() ?? "";
+        var authorId = pr.GetProperty("user").TryGetProperty("id", out var aid) ? aid.GetInt64() : (long?)null;
+
+        return action switch
+        {
+            "opened" => await HandlePullRequestOpened(prNumber, title, htmlUrl, repo, baseBranch, headBranch, authorLogin, authorId),
+            "closed" => await HandlePullRequestClosed(prNumber, title, htmlUrl, repo, baseBranch, headBranch, authorLogin, authorId, pr),
+            _ => Ok($"Ignored: pull_request action '{action}'.")
+        };
+    }
+
+    private async Task<IActionResult> HandlePullRequestOpened(
+        int prNumber, string title, string htmlUrl, string repo,
+        string baseBranch, string headBranch, string authorLogin, long? authorId)
+    {
+        _db.PullRequestEvents.Add(new PullRequestEvent
+        {
+            PrNumber = prNumber, Title = title, AuthorLogin = authorLogin,
+            AuthorGitHubId = authorId, RepoFullName = repo,
+            HeadBranch = headBranch, BaseBranch = baseBranch, PrUrl = htmlUrl,
+            Status = "open", OccurredAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync();
+
+        _logger.LogInformation("PR #{PrNumber} opened by {Author}", prNumber, authorLogin);
+        return Ok(new { prNumber, status = "tracking" });
+    }
+
+    private async Task<IActionResult> HandlePullRequestClosed(
+        int prNumber, string title, string htmlUrl, string repo,
+        string baseBranch, string headBranch, string authorLogin, long? authorId,
+        JsonElement pr)
+    {
+        var merged = pr.TryGetProperty("merged", out var m) && m.GetBoolean();
+        var status = merged ? "merged" : "closed";
+
+        var existing = await _db.PullRequestEvents
+            .Where(e => e.PrNumber == prNumber && e.Status == "open")
+            .OrderByDescending(e => e.Id)
+            .FirstOrDefaultAsync();
+
+        if (existing != null)
+        {
+            existing.Status = status;
+            await _db.SaveChangesAsync();
+        }
+
+        _logger.LogInformation("PR #{PrNumber} {Status} by {Author}", prNumber, status, authorLogin);
+        return Ok(new { prNumber, status });
+    }
 
     private (string? login, long? id, int? prNumber) ResolveCheckSuiteAuthor(JsonElement payload)
     {

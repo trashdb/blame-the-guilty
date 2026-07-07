@@ -10,6 +10,7 @@ public class AppDbContext : DbContext
     public DbSet<GitHubUser> GitHubUsers => Set<GitHubUser>();
     public DbSet<PunishmentEvent> PunishmentEvents => Set<PunishmentEvent>();
     public DbSet<CheckSuiteEvent> CheckSuiteEvents => Set<CheckSuiteEvent>();
+    public DbSet<PullRequestEvent> PullRequestEvents => Set<PullRequestEvent>();
     public DbSet<WorkflowRun> WorkflowRuns => Set<WorkflowRun>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

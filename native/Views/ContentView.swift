@@ -42,6 +42,11 @@ struct ContentView: View {
                     .padding(.bottom, 4)
                 }
 
+                if isLoggedIn, !signalR.activePRs.isEmpty {
+                    ActivePRsView(prs: signalR.activePRs)
+                    Divider()
+                }
+
                 if isLoggedIn {
                     if let event = signalR.lastEvent {
                         LastNotificationCardView(event: event)
@@ -251,6 +256,54 @@ struct EmptyNotificationView: View {
             RoundedRectangle(cornerRadius: 10)
                 .stroke(.white.opacity(0.08), lineWidth: 1)
         )
+    }
+}
+
+struct ActivePRsView: View {
+    let prs: [PullRequest]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 5) {
+                Text("Active PRs (\(prs.count))")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.blue)
+                Spacer()
+            }
+
+            ForEach(prs.prefix(5)) { pr in
+                Button {
+                    NSWorkspace.shared.open(pr.prUrl)
+                } label: {
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(pr.title)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(Color(white: 0.85))
+                                .lineLimit(1)
+                            HStack(spacing: 0) {
+                                Text(pr.repo).font(.system(size: 10)).foregroundStyle(.secondary)
+                                Text(" → ").font(.system(size: 10)).foregroundStyle(.secondary)
+                                Text(pr.baseBranch).font(.system(size: 10, design: .monospaced)).foregroundStyle(.blue)
+                            }
+                            .lineLimit(1)
+                        }
+                        Spacer()
+                    }
+                }
+                .buttonStyle(.plain)
+                .cursor(.pointingHand)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(.white.opacity(0.06), lineWidth: 1)
+                )
+            }
+        }
+        .padding(.top, 2)
+        .padding(.bottom, 4)
     }
 }
 

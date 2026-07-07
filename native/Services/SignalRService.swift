@@ -36,6 +36,7 @@ class SignalRService: ObservableObject {
     @Published var lastEvent: PunishmentEvent?
     @Published var runningWorkflows: [WorkflowRun] = []
     @Published var recentWorkflows: [WorkflowRun] = []
+    @Published var activePRs: [PullRequest] = []
 
     private let baseUrl: String
     private var task: Task<Void, Never>?
@@ -52,6 +53,7 @@ class SignalRService: ObservableObject {
             guard let self else { return }
 
             await syncFromApi(gitHubId: gitHubId)
+            await syncPRsFromApi(gitHubId: gitHubId)
 
             while !Task.isCancelled {
                 do {
@@ -95,6 +97,38 @@ class SignalRService: ObservableObject {
             }
         } catch {}
         await MainActor.run { loadPersistedHistory() }
+    }
+
+    private func syncPRsFromApi(gitHubId: Int64) async {
+        guard let url = URL(string: "\(baseUrl)/api/pullrequests/active?gitHubId=\(gitHubId)") else { return }
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            struct ApiPR: Decodable {
+                let prNumber: Int64
+                let title: String
+                let repoFullName: String
+                let headBranch: String?
+                let baseBranch: String?
+                let prUrl: String?
+                let status: String?
+                let conclusion: String?
+            }
+            if let prs = try? JSONDecoder().decode([ApiPR].self, from: data) {
+                await MainActor.run {
+                    activePRs = prs.map { pr in
+                        PullRequest(
+                            prNumber: pr.prNumber, title: pr.title,
+                            repo: pr.repoFullName,
+                            headBranch: pr.headBranch ?? "",
+                            baseBranch: pr.baseBranch ?? "",
+                            htmlUrl: URL(string: pr.prUrl ?? ""),
+                            status: pr.status ?? "open",
+                            conclusion: pr.conclusion
+                        )
+                    }
+                }
+            }
+        } catch {}
     }
 
     private func loadPersistedHistory() {
@@ -305,6 +339,7 @@ class SignalRService: ObservableObject {
             runStatus = .idle
             lastEvent = nil
             runningWorkflows = []
+            activePRs = []
         }
     }
 
