@@ -96,7 +96,7 @@ public class WebhookController : ControllerBase
         }
 
         var gitHubId = culprit.Id ?? (await FindUserByLogin(culprit.Login))?.GitHubId;
-        _db.WorkflowRuns.Add(new WorkflowRun
+        var newRun = new WorkflowRun
         {
             RunId = runId,
             GitHubId = gitHubId ?? 0,
@@ -106,7 +106,8 @@ public class WebhookController : ControllerBase
             HtmlUrl = url,
             Status = "in_progress",
             StartedAt = startedAt
-        });
+        };
+        _db.WorkflowRuns.Add(newRun);
         await _db.SaveChangesAsync();
 
         // Notify via SignalR only if user is connected
@@ -115,7 +116,7 @@ public class WebhookController : ControllerBase
         {
             await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("WorkflowRunStarted", new
             {
-                runId, workflowName = name, repo, branch, actor = culprit.Login, htmlUrl = url
+                id = newRun.Id, runId, workflowName = name, repo, branch, actor = culprit.Login, htmlUrl = url
             });
             _logger.LogInformation("Running workflow {RunId} notified to {Login}", runId, culprit.Login);
         }

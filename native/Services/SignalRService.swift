@@ -231,6 +231,7 @@ class SignalRService: ObservableObject {
 
     private func handleWorkflowStarted(_ data: [String: Any]) {
         let runId      = data["runId"] as? Int64 ?? 0
+        let dbId       = data["id"] as? Int
         let name       = data["workflowName"] as? String ?? "Unknown"
         let repo       = data["repo"] as? String ?? "unknown"
         let actor      = data["actor"] as? String ?? "someone"
@@ -241,7 +242,7 @@ class SignalRService: ObservableObject {
             runStatus = .running
 
             let run = WorkflowRun(
-                id: UUID(), dbId: nil,
+                id: UUID(), dbId: dbId,
                 runId: runId, workflowName: name, repo: repo,
                 actor: actor, status: "in_progress",
                 htmlUrl: htmlUrl, startedAt: startedAt, targetGitHubIds: []
@@ -270,9 +271,10 @@ class SignalRService: ObservableObject {
                 runningWorkflows.remove(at: idx)
             }
 
-            let originalStartedAt = recentWorkflows.first(where: { $0.runId == runId })?.startedAt ?? Date()
+            let existing = recentWorkflows.first(where: { $0.runId == runId && $0.status == "in_progress" })
+            let originalStartedAt = existing?.startedAt ?? Date()
             let completedRun = WorkflowRun(
-                id: UUID(), dbId: nil,
+                id: UUID(), dbId: existing?.dbId,
                 runId: runId,
                 workflowName: name ?? "Workflow",
                 repo: repo,
@@ -280,7 +282,7 @@ class SignalRService: ObservableObject {
                 status: succeeded ? "success" : "failure",
                 htmlUrl: htmlUrl ?? "https://github.com/\(repo)/actions/runs/\(runId)",
                 startedAt: originalStartedAt,
-                targetGitHubIds: []
+                targetGitHubIds: existing?.targetGitHubIds ?? []
             )
 
             if let idx = recentWorkflows.firstIndex(where: { $0.runId == runId && $0.status == "in_progress" }) {
