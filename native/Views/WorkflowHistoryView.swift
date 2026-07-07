@@ -151,55 +151,60 @@ struct WorkflowRunRow: View {
 
     @ViewBuilder
     private var targetPickerPopover: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 0) {
             Text("Notify on completion")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .padding(.bottom, 4)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
 
             if loadingUsers {
                 ProgressView()
-                    .scaleEffect(0.7)
+                    .scaleEffect(0.8)
                     .frame(maxWidth: .infinity)
-                    .padding(8)
+                    .padding(.vertical, 16)
             } else {
-                ForEach(users) { user in
-                    Button {
-                        assignTarget(user.gitHubId)
-                        showTargetPicker = false
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text(user.login)
-                                .font(.system(size: 12))
-                            if user.gitHubId == run.targetGitHubId {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(.purple)
-                            }
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            user.gitHubId == run.targetGitHubId
-                                ? .purple.opacity(0.1)
-                                : .clear,
-                            in: RoundedRectangle(cornerRadius: 4)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .cursor(.pointingHand)
-                }
-
                 if users.isEmpty {
                     Text("No other users registered")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundStyle(.tertiary)
-                        .padding(8)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                } else {
+                    ForEach(users) { user in
+                        Button {
+                            assignTarget(user.gitHubId)
+                            showTargetPicker = false
+                        } label: {
+                            HStack(spacing: 8) {
+                                Text(user.login)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(user.gitHubId == run.targetGitHubId ? .primary : Color(white: 0.85))
+                                Spacer()
+                                if user.gitHubId == run.targetGitHubId {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(.purple)
+                                }
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(
+                                user.gitHubId == run.targetGitHubId
+                                    ? .purple.opacity(0.1)
+                                    : .white.opacity(0.03),
+                                in: RoundedRectangle(cornerRadius: 4)
+                            )
+                            .padding(.horizontal, 8)
+                        }
+                        .buttonStyle(.plain)
+                        .cursor(.pointingHand)
+                    }
                 }
             }
 
             Divider()
+                .padding(.horizontal, 8)
 
             Button("Clear target") {
                 assignTarget(nil)
@@ -209,11 +214,11 @@ struct WorkflowRunRow: View {
             .foregroundStyle(.secondary)
             .buttonStyle(.plain)
             .cursor(.pointingHand)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(10)
-        .frame(width: 180)
+        .frame(width: 200)
     }
 
     private func loadUsers() {

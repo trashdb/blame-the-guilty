@@ -38,6 +38,7 @@ struct ContentView: View {
                         count: signalR.runningWorkflows.count,
                         onTap: { WorkflowHistoryPanelManager.shared.show(signalR: signalR, gitHubId: gitHubId) }
                     )
+                    .frame(maxWidth: .infinity)
                     .padding(.bottom, 4)
                 }
 
@@ -48,15 +49,15 @@ struct ContentView: View {
                         EmptyNotificationView()
                     }
                 }
-
-                Divider()
             }
             .foregroundStyle(Color(white: 0.7))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 16)
             .padding(.horizontal, 16)
 
-            Spacer()
+            Spacer(minLength: 0)
+
+            Divider()
 
             HStack {
                 Button {
