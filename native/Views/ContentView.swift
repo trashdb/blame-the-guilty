@@ -287,7 +287,7 @@ struct ActivePRsView: View {
         switch pr.mergeableState {
         case "clean": return "READY"
         case "blocked", "dirty", "behind", "unstable": return "FAIL"
-        default: return ""
+        default: return "WAITING"
         }
     }
 
