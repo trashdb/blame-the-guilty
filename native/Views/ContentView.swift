@@ -41,8 +41,12 @@ struct ContentView: View {
                     .padding(.bottom, 4)
                 }
 
-                if isLoggedIn, let event = signalR.lastEvent {
-                    LastNotificationCardView(event: event)
+                if isLoggedIn {
+                    if let event = signalR.lastEvent {
+                        LastNotificationCardView(event: event)
+                    } else {
+                        EmptyNotificationView()
+                    }
                 }
 
                 Divider()
@@ -217,6 +221,35 @@ final class WorkflowHistoryPanelManager {
     func close() {
         panel?.close()
         panel = nil
+    }
+}
+
+struct EmptyNotificationView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 5) {
+                Image(systemName: "bell.slash.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                Text("Last Notification")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            Text("There are no recent notifications")
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 6)
+                .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(.white.opacity(0.08), lineWidth: 1)
+        )
     }
 }
 
