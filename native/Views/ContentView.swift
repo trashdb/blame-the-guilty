@@ -12,7 +12,7 @@ struct ContentView: View {
 
     var body: some View {
         VStack(alignment: .leading) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
                     Image(systemName: "flame.fill")
                         .font(.system(size: 13)).padding(.bottom, 2)
@@ -44,6 +44,7 @@ struct ContentView: View {
 
                 if isLoggedIn, !signalR.activePRs.isEmpty {
                     ActivePRsView(prs: signalR.activePRs)
+                    //Spacer()
                     Divider()
                 }
 
@@ -57,7 +58,7 @@ struct ContentView: View {
             }
             .foregroundStyle(Color(white: 0.7))
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 16)
+            .padding(.vertical, 10)
             .padding(.horizontal, 16)
 
             Spacer(minLength: 0)
@@ -242,12 +243,32 @@ struct EmptyNotificationView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
             }
-            Text("There are no recent notifications")
-                .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.vertical, 6)
-                .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+
+                    Text("No recent notifications")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.tertiary)
+
+                    HStack(spacing: 4) {
+                        Text("")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+
+                Spacer()
+            }
+
+            HStack {
+                Spacer()
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -271,36 +292,40 @@ struct ActivePRsView: View {
                 Spacer()
             }
 
-            ForEach(prs.prefix(5)) { pr in
-                Button {
-                    NSWorkspace.shared.open(pr.prUrl)
-                } label: {
-                    HStack(spacing: 8) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(pr.title)
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(Color(white: 0.85))
+            ScrollView {
+                ForEach(prs) { pr in
+                    Button {
+                        NSWorkspace.shared.open(pr.prUrl)
+                    } label: {
+                        HStack(spacing: 8) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(pr.title)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(Color(white: 0.85))
+                                    .lineLimit(1)
+                                HStack(spacing: 0) {
+                                    Text(pr.repo).font(.system(size: 10)).foregroundStyle(.secondary)
+                                    Text(" → ").font(.system(size: 10)).foregroundStyle(.secondary)
+                                    Text(pr.baseBranch).font(.system(size: 10, design: .monospaced)).foregroundStyle(.blue)
+                                }
                                 .lineLimit(1)
-                            HStack(spacing: 0) {
-                                Text(pr.repo).font(.system(size: 10)).foregroundStyle(.secondary)
-                                Text(" → ").font(.system(size: 10)).foregroundStyle(.secondary)
-                                Text(pr.baseBranch).font(.system(size: 10, design: .monospaced)).foregroundStyle(.blue)
                             }
-                            .lineLimit(1)
+                            Spacer()
                         }
-                        Spacer()
                     }
+                    .buttonStyle(.plain)
+                    .cursor(.pointingHand)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(.white.opacity(0.06), lineWidth: 1)
+                    )
                 }
-                .buttonStyle(.plain)
-                .cursor(.pointingHand)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(.white.opacity(0.06), lineWidth: 1)
-                )
             }
+            .scrollDisabled(prs.count < 5)
+            .frame(height: 200, alignment: .top)
         }
         .padding(.top, 2)
         .padding(.bottom, 4)

@@ -44,6 +44,6 @@ struct LoggedInCardView: View {
             RoundedRectangle(cornerRadius: 10)
                 .stroke(Color(red: 0.28, green: 0.45, blue: 0.28).opacity(0.5), lineWidth: 1)
         )
-        .padding(.vertical, 6)
+        //.padding(.vertical, 6)
     }
 }
