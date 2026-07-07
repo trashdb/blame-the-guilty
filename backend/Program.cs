@@ -104,61 +104,6 @@ using (var scope = app.Services.CreateScope())
             "WasNotified" INTEGER NOT NULL DEFAULT 0
         );
         """);
-
-    db.Database.ExecuteSqlRaw("""
-        CREATE TABLE IF NOT EXISTS "PullRequestEvents" (
-            "Id" INTEGER NOT NULL CONSTRAINT "PK_PullRequestEvents" PRIMARY KEY AUTOINCREMENT,
-            "PrNumber" INTEGER NOT NULL,
-            "Title" TEXT NOT NULL,
-            "AuthorLogin" TEXT NOT NULL,
-            "AuthorGitHubId" INTEGER,
-            "RepoFullName" TEXT NOT NULL,
-            "HeadBranch" TEXT,
-            "BaseBranch" TEXT,
-            "PrUrl" TEXT,
-            "Status" TEXT NOT NULL,
-            "Conclusion" TEXT,
-            "ExtraInfo" TEXT,
-            "OccurredAt" TEXT NOT NULL,
-            "WasNotified" INTEGER NOT NULL DEFAULT 0
-        );
-        """);
-
-    db.Database.ExecuteSqlRaw("""
-        CREATE INDEX IF NOT EXISTS "IX_PullRequestEvents_AuthorLogin" ON "PullRequestEvents" ("AuthorLogin");
-        """);
-
-    db.Database.ExecuteSqlRaw("""
-        CREATE INDEX IF NOT EXISTS "IX_PullRequestEvents_Status" ON "PullRequestEvents" ("Status");
-        """);
-
-    db.Database.ExecuteSqlRaw("""
-        CREATE INDEX IF NOT EXISTS "IX_PullRequestEvents_PrNumber" ON "PullRequestEvents" ("PrNumber");
-        """);
-
-    db.Database.ExecuteSqlRaw("""
-        CREATE TABLE IF NOT EXISTS "PrComments" (
-            "Id" INTEGER NOT NULL CONSTRAINT "PK_PrComments" PRIMARY KEY AUTOINCREMENT,
-            "PrNumber" INTEGER NOT NULL,
-            "AuthorLogin" TEXT NOT NULL,
-            "AuthorGitHubId" INTEGER,
-            "RepoFullName" TEXT NOT NULL,
-            "PrUrl" TEXT,
-            "CommentBody" TEXT,
-            "OccurredAt" TEXT NOT NULL,
-            "WasNotified" INTEGER NOT NULL DEFAULT 0
-        );
-        """);
-
-    db.Database.ExecuteSqlRaw("""
-        CREATE INDEX IF NOT EXISTS "IX_PrComments_PrNumber" ON "PrComments" ("PrNumber");
-        """);
-
-    // Add AccessToken column to existing GitHubUsers table if missing
-    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "GitHubUsers" ADD COLUMN "AccessToken" TEXT;"""); } catch { }
-
-    // Add TargetGitHubId column to existing WorkflowRuns table if missing
-    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "WorkflowRuns" ADD COLUMN "TargetGitHubId" INTEGER;"""); } catch { }
 }
 
 app.UseCors("SignalR");
