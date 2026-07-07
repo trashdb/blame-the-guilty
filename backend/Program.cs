@@ -141,6 +141,12 @@ using (var scope = app.Services.CreateScope())
 
     // Add TargetGitHubId column to existing WorkflowRuns table if missing
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "WorkflowRuns" ADD COLUMN "TargetGitHubId" INTEGER;"""); } catch { }
+
+    // Add Draft column to existing PullRequestEvents table if missing
+    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "Draft" INTEGER NOT NULL DEFAULT 0;"""); } catch { }
+
+    // Add MergeableState column to existing PullRequestEvents table if missing
+    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "MergeableState" TEXT;"""); } catch { }
 }
 
 app.UseCors("SignalR");
