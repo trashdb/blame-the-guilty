@@ -13,7 +13,7 @@ struct SettingsView: View {
 
                 Button {
                     showNotification(
-                        title: "⚠️ Blame the Guilty",
+                        title: "Blame the Guilty",
                         body: "Test — alvaro merged a failing workflow in myorg/backend",
                         subtitle: "Run #999",
                         actionURL: URL(string: "https://github.com")

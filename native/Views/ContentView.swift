@@ -67,30 +67,37 @@ struct ContentView: View {
 
             HStack {
                 Button {
-                    openSettingsWindow()
+                    showNotification(
+                        title: "Blame the Guilty",
+                        body: "Test notification from popover",
+                        subtitle: "Works!",
+                        actionURL: URL(string: "https://github.com")
+                    )
                 } label: {
-                    Image(systemName: "gearshape.fill")
+                    Image(systemName: "bell.fill")
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                         .padding(6)
                         .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
                 }
                 .buttonStyle(.plain)
-                .help("Settings")
+                .help("Send Test Notification")
                 .cursor(.pointingHand)
 
-                Button {
-                    WorkflowHistoryPanelManager.shared.show(signalR: signalR, gitHubId: gitHubId)
-                } label: {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                        .padding(6)
-                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                if isLoggedIn {
+                    Button {
+                        WorkflowHistoryPanelManager.shared.show(signalR: signalR, gitHubId: gitHubId)
+                    } label: {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                            .padding(6)
+                            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Workflow History")
+                    .cursor(.pointingHand)
                 }
-                .buttonStyle(.plain)
-                .help("Workflow History")
-                .cursor(.pointingHand)
 
                 Spacer()
 
@@ -155,45 +162,6 @@ struct ContentView: View {
         signalR.connect(gitHubId: session.gitHubId, username: session.username)
     }
 
-    private func openSettingsWindow() {
-        SettingsPanelManager.shared.show()
-    }
-
-}
-
-final class SettingsPanelManager {
-    static let shared = SettingsPanelManager()
-    private var panel: NSPanel?
-
-    func show() {
-        if panel == nil {
-            let hostingController = NSHostingController(rootView: SettingsView())
-
-            panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 480, height: 400),
-                styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
-                backing: .buffered,
-                defer: false
-            )
-
-            panel?.contentViewController = hostingController
-            panel?.title = "Settings"
-            panel?.center()
-            panel?.level = .floating
-            panel?.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            panel?.isReleasedWhenClosed = false
-            panel?.backgroundColor = .clear
-            panel?.isOpaque = false
-            panel?.hasShadow = true
-        }
-
-        panel?.makeKeyAndOrderFront(nil)
-    }
-
-    func close() {
-        panel?.close()
-        panel = nil
-    }
 }
 
 final class WorkflowHistoryPanelManager {
