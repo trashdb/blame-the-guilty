@@ -7,13 +7,14 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		2CF370BE2FFA808D002F6748 /* btg.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = btg.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		2C0847E92FFD0CBC007539F9 /* btg.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = btg.xcodeproj; sourceTree = "<group>"; };
+		2CF370BE2FFA808D002F6748 /* btg.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = btg.app; path = BlameTheGuilty.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		2CF370C02FFA808D002F6748 /* Sources */ = {
+		2CF370C02FFA808D002F6748 /* . */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = ".";
+			path = .;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -29,10 +30,15 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		2C0847EB2FFD0CBC007539F9 /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
 		2CF370B52FFA808D002F6748 = {
 			isa = PBXGroup;
 			children = (
-				2CF370C02FFA808D002F6748 /* Sources */,
+				2CF370C02FFA808D002F6748 /* . */,
 				2CF370BF2FFA808D002F6748 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -61,13 +67,13 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				2CF370C02FFA808D002F6748 /* Sources */,
+				2CF370C02FFA808D002F6748 /* . */,
 			);
 			name = BlameTheGuilty;
 			packageProductDependencies = (
 			);
 			productName = BlameTheGuilty;
-			productReference = 2CF370BE2FFA808D002F6748 /* BlameTheGuilty.app */;
+			productReference = 2CF370BE2FFA808D002F6748 /* btg.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -97,6 +103,12 @@
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 2CF370BF2FFA808D002F6748 /* Products */;
 			projectDirPath = "";
+			projectReferences = (
+				{
+					ProductGroup = 2C0847EB2FFD0CBC007539F9 /* Products */;
+					ProjectRef = 2C0847E92FFD0CBC007539F9 /* btg.xcodeproj */;
+				},
+			);
 			projectRoot = "";
 			targets = (
 				2CF370BD2FFA808D002F6748 /* BlameTheGuilty */,
@@ -263,7 +275,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.blametheguilty.app;
-				PRODUCT_NAME = "BlameTheGuilty";
+				PRODUCT_NAME = BlameTheGuilty;
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -294,7 +306,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.blametheguilty.app;
-				PRODUCT_NAME = "BlameTheGuilty";
+				PRODUCT_NAME = BlameTheGuilty;
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -317,7 +329,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		2CF370C92FFA808E002F6748 /* Build configuration list for PBXNativeTarget "btg" */ = {
+		2CF370C92FFA808E002F6748 /* Build configuration list for PBXNativeTarget "BlameTheGuilty" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				2CF370CA2FFA808E002F6748 /* Debug */,

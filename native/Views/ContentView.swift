@@ -33,15 +33,6 @@ struct ContentView: View {
                     SignInCardView(isLoading: isLoading, loginError: loginError, onSignIn: login)
                 }
 
-                if isLoggedIn, !signalR.runningWorkflows.isEmpty {
-                    RunningWorkflowsIndicatorView(
-                        count: signalR.runningWorkflows.count,
-                        onTap: { WorkflowHistoryPanelManager.shared.show(signalR: signalR, gitHubId: gitHubId) }
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.bottom, 4)
-                }
-
                 if isLoggedIn, !signalR.activePRs.isEmpty {
                     ActivePRsView(prs: signalR.activePRs)
                     //Spacer()
@@ -88,7 +79,7 @@ struct ContentView: View {
                     Button {
                         WorkflowHistoryPanelManager.shared.show(signalR: signalR, gitHubId: gitHubId)
                     } label: {
-                        Image(systemName: "clock.arrow.circlepath")
+                        Image(systemName: "list.bullet.rectangle")
                             .font(.system(size: 13))
                             .foregroundStyle(.secondary)
                             .padding(6)
@@ -97,6 +88,19 @@ struct ContentView: View {
                     .buttonStyle(.plain)
                     .help("Workflow History")
                     .cursor(.pointingHand)
+                }
+
+                if isLoggedIn, signalR.runningWorkflows.count > 0 {
+                    Text("\(signalR.runningWorkflows.count)")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(minWidth: 16, minHeight: 16)
+                        .background(.orange, in: Capsule())
+                        .overlay(
+                            Capsule()
+                                .stroke(.white.opacity(0.3), lineWidth: 1)
+                        )
+                        .padding(4)
                 }
 
                 Spacer()
