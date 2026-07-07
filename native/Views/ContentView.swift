@@ -261,23 +261,6 @@ struct ActivePRsView: View {
         }
     }
 
-    @ViewBuilder
-    private func statusIndicator(for pr: PullRequest) -> some View {
-        if pr.isMerged {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 10))
-                .foregroundStyle(.purple)
-        } else if pr.draft {
-            Image(systemName: "pencil.circle.fill")
-                .font(.system(size: 10))
-                .foregroundStyle(.gray)
-        } else {
-            Circle()
-                .fill(statusColor(for: pr))
-                .frame(width: 8, height: 8)
-        }
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 5) {
@@ -293,11 +276,11 @@ struct ActivePRsView: View {
                         NSWorkspace.shared.open(pr.prUrl)
                     } label: {
                         HStack(spacing: 8) {
-                            statusIndicator(for: pr)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(pr.title)
                                     .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(statusColor(for: pr))
+                                    .foregroundStyle(Color(white: 0.85))
+                                    .lineLimit(1)
                                 HStack(spacing: 0) {
                                     Text(pr.repo).font(.system(size: 10)).foregroundStyle(.secondary)
                                     Text(" → ").font(.system(size: 10)).foregroundStyle(.secondary)
@@ -312,10 +295,10 @@ struct ActivePRsView: View {
                     .cursor(.pointingHand)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
-                    .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
+                    .background(statusColor(for: pr).opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
                     .overlay(
                         RoundedRectangle(cornerRadius: 6)
-                            .stroke(.white.opacity(0.06), lineWidth: 1)
+                            .stroke(statusColor(for: pr).opacity(0.3), lineWidth: 1)
                     )
                 }
             }
