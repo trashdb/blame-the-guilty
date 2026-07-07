@@ -30,5 +30,6 @@ public class WorkflowRun
 
     public DateTime StartedAt { get; set; }
 
-    public long? TargetGitHubId { get; set; }
+    /// <summary>JSON array of GitHub user IDs, e.g. "[99991,99992]"</summary>
+    public string? TargetGitHubIds { get; set; }
 }

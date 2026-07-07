@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using BlameTheGuilty.Api.Data;
@@ -33,20 +34,19 @@ public class WorkflowsController : ControllerBase
             .Where(w => w.GitHubId == gitHubId && !IgnoredWorkflows.Contains(w.WorkflowName))
             .OrderByDescending(w => w.Id)
             .Take(limit)
-            .Select(w => new
-            {
-                w.RunId,
-                w.WorkflowName,
-                w.Repo,
-                w.Actor,
-                w.Status,
-                w.HtmlUrl,
-                w.StartedAt,
-                TargetGitHubId = w.TargetGitHubId
-            })
             .ToListAsync();
 
-        return Ok(runs);
+        return Ok(runs.Select(w => new
+        {
+            w.RunId,
+            w.WorkflowName,
+            w.Repo,
+            w.Actor,
+            w.Status,
+            w.HtmlUrl,
+            w.StartedAt,
+            TargetGitHubIds = DeserializeIds(w.TargetGitHubIds)
+        }));
     }
 
     [HttpPut("runs/{runId}/target")]
@@ -59,15 +59,21 @@ public class WorkflowsController : ControllerBase
         if (run == null)
             return NotFound("No in-progress workflow run found with that runId.");
 
-        run.TargetGitHubId = request.TargetGitHubId;
+        run.TargetGitHubIds = SerializeIds(request.TargetGitHubIds);
         await _db.SaveChangesAsync();
 
-        return Ok(new { runId, targetGitHubId = run.TargetGitHubId });
+        return Ok(new { runId, targetGitHubIds = DeserializeIds(run.TargetGitHubIds) });
     }
+
+    private static string? SerializeIds(long[]? ids) =>
+        ids is { Length: > 0 } ? JsonSerializer.Serialize(ids) : null;
+
+    private static long[] DeserializeIds(string? raw) =>
+        raw is { Length: > 0 } && JsonSerializer.Deserialize<long[]>(raw) is { } arr ? arr : [];
 
     public class SetTargetRequest
     {
-        public long? TargetGitHubId { get; set; }
+        public long[]? TargetGitHubIds { get; set; }
     }
 }
 

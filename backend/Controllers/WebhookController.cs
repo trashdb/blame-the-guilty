@@ -193,10 +193,14 @@ public class WebhookController : ControllerBase
                 _logger.LogInformation("Workflow success notified to {Login}", culprit.Login);
             }
 
-            if (dbRun?.TargetGitHubId != null && dbRun.TargetGitHubId != user?.GitHubId)
+            var targetIds = DeserializeTargetIds(dbRun?.TargetGitHubIds);
+            foreach (var tid in targetIds)
             {
-                await NotifyCompleted(dbRun.TargetGitHubId.Value, true);
-                _logger.LogInformation("Workflow success also notified to target user {TargetId}", dbRun.TargetGitHubId);
+                if (tid != user?.GitHubId)
+                {
+                    await NotifyCompleted(tid, true);
+                    _logger.LogInformation("Workflow success also notified to target {TargetId}", tid);
+                }
             }
 
             return Ok(new { runId, conclusion });
@@ -225,10 +229,14 @@ public class WebhookController : ControllerBase
             _logger.LogInformation("Punishment sent to {Login}", culprit.Login);
         }
 
-        if (dbRun?.TargetGitHubId != null && dbRun.TargetGitHubId != user2?.GitHubId)
+        var failTargetIds = DeserializeTargetIds(dbRun?.TargetGitHubIds);
+        foreach (var tid in failTargetIds)
         {
-            await NotifyCompleted(dbRun.TargetGitHubId.Value, false);
-            _logger.LogInformation("Punishment also notified to target user {TargetId}", dbRun.TargetGitHubId);
+            if (tid != user2?.GitHubId)
+            {
+                await NotifyCompleted(tid, false);
+                _logger.LogInformation("Punishment also notified to target {TargetId}", tid);
+            }
         }
 
         return Ok(new { runId, conclusion });
@@ -532,6 +540,9 @@ public class WebhookController : ControllerBase
 
         return (authorLogin, authorId, prNumber);
     }
+
+    private static long[] DeserializeTargetIds(string? raw) =>
+        raw is { Length: > 0 } && System.Text.Json.JsonSerializer.Deserialize<long[]>(raw) is { } arr ? arr : [];
 
     private async Task<Models.GitHubUser?> FindConnectedUser(string login, long? gitHubId)
     {

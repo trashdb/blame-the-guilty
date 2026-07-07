@@ -49,6 +49,11 @@ struct WorkflowRunRow: View {
     @State private var showTargetPicker = false
     @State private var users: [GitHubUserInfo] = []
     @State private var loadingUsers = false
+    @State private var selectedIds: Set<Int64> = []
+
+    private var userIdToLogin: [Int64: String] {
+        Dictionary(uniqueKeysWithValues: users.map { ($0.gitHubId, $0.login) })
+    }
 
     var statusColor: Color {
         switch run.status {
@@ -92,8 +97,9 @@ struct WorkflowRunRow: View {
                         .foregroundStyle(.tertiary)
                     Text("·")
                         .foregroundStyle(.tertiary)
-                    if let target = run.targetGitHubId, target != 0 {
-                        Text("→ target #\(String(target))")
+                    if !run.targetGitHubIds.isEmpty {
+                        let names = run.targetGitHubIds.compactMap { userIdToLogin[$0] }
+                        Text("→ \(names.joined(separator: ", "))")
                             .font(.system(size: 10))
                             .foregroundStyle(.purple)
                     }
@@ -109,9 +115,10 @@ struct WorkflowRunRow: View {
                 if run.isRunning {
                     Button {
                         loadUsers()
+                        selectedIds = Set(run.targetGitHubIds)
                         showTargetPicker.toggle()
                     } label: {
-                        Image(systemName: run.targetGitHubId != nil ? "person.fill.badge.plus" : "person.badge.plus")
+                        Image(systemName: run.targetGitHubIds.isEmpty ? "person.badge.plus" : "person.fill.badge.plus")
                             .font(.system(size: 10))
                             .foregroundStyle(.purple)
                             .padding(6)
@@ -119,7 +126,7 @@ struct WorkflowRunRow: View {
                     }
                     .buttonStyle(.plain)
                     .cursor(.pointingHand)
-                    .help("Assign notification target")
+                    .help("Assign notification targets")
                     .popover(isPresented: $showTargetPicker) {
                         targetPickerPopover
                     }
@@ -173,24 +180,25 @@ struct WorkflowRunRow: View {
                 } else {
                     ForEach(users) { user in
                         Button {
-                            assignTarget(user.gitHubId)
-                            showTargetPicker = false
+                            if selectedIds.contains(user.gitHubId) {
+                                selectedIds.remove(user.gitHubId)
+                            } else {
+                                selectedIds.insert(user.gitHubId)
+                            }
                         } label: {
                             HStack(spacing: 8) {
+                                Image(systemName: selectedIds.contains(user.gitHubId) ? "checkmark.square.fill" : "square")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(selectedIds.contains(user.gitHubId) ? Color.purple : Color.secondary)
                                 Text(user.login)
                                     .font(.system(size: 12))
-                                    .foregroundStyle(user.gitHubId == run.targetGitHubId ? .primary : Color(white: 0.85))
+                                    .foregroundStyle(selectedIds.contains(user.gitHubId) ? .primary : Color(white: 0.85))
                                 Spacer()
-                                if user.gitHubId == run.targetGitHubId {
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 11, weight: .semibold))
-                                        .foregroundStyle(.purple)
-                                }
                             }
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
                             .background(
-                                user.gitHubId == run.targetGitHubId
+                                selectedIds.contains(user.gitHubId)
                                     ? .purple.opacity(0.1)
                                     : .white.opacity(0.03),
                                 in: RoundedRectangle(cornerRadius: 4)
@@ -206,19 +214,34 @@ struct WorkflowRunRow: View {
             Divider()
                 .padding(.horizontal, 8)
 
-            Button("Clear target") {
-                assignTarget(nil)
-                showTargetPicker = false
+            HStack(spacing: 0) {
+                Button("Clear") {
+                    selectedIds = []
+                    saveTargets()
+                    showTargetPicker = false
+                }
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .buttonStyle(.plain)
+                .cursor(.pointingHand)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+
+                Spacer()
+
+                Button("Done") {
+                    saveTargets()
+                    showTargetPicker = false
+                }
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.purple)
+                .buttonStyle(.plain)
+                .cursor(.pointingHand)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
             }
-            .font(.system(size: 11))
-            .foregroundStyle(.secondary)
-            .buttonStyle(.plain)
-            .cursor(.pointingHand)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(width: 200)
+        .frame(width: 220)
     }
 
     private func loadUsers() {
@@ -234,18 +257,19 @@ struct WorkflowRunRow: View {
         }.resume()
     }
 
-    private func assignTarget(_ targetId: Int64?) {
+    private func saveTargets() {
+        let ids = Array(selectedIds)
         guard let url = URL(string: "\(backendUrl)/api/workflows/runs/\(run.runId)/target") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body: [String: Any?] = ["targetGitHubId": targetId]
+        let body: [String: Any] = ["targetGitHubIds": ids]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
         URLSession.shared.dataTask(with: request) { data, _, error in
             guard error == nil, data != nil else { return }
             DispatchQueue.main.async {
-                signalR.setTargetGitHubId(for: run.runId, targetId: targetId)
+                signalR.setTargetGitHubIds(for: run.runId, targetIds: ids)
             }
         }.resume()
     }

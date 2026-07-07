@@ -20,7 +20,7 @@ struct WorkflowRun: Identifiable, Codable {
     let status: String
     let htmlUrl: String
     let startedAt: Date
-    let targetGitHubId: Int64?
+    let targetGitHubIds: [Int64]
 
     var isRunning: Bool { status == "in_progress" }
 }

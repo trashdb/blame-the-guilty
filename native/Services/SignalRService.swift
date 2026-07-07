@@ -9,7 +9,7 @@ private struct ApiWorkflowRun: Decodable {
     let status: String
     let htmlUrl: String?
     let startedAt: Date
-    let targetGitHubId: Int64?
+    let targetGitHubIds: [Int64]?
 
     func toWorkflowRun() -> WorkflowRun {
         WorkflowRun(
@@ -21,7 +21,7 @@ private struct ApiWorkflowRun: Decodable {
             status: status,
             htmlUrl: htmlUrl ?? "",
             startedAt: startedAt,
-            targetGitHubId: targetGitHubId
+            targetGitHubIds: targetGitHubIds ?? []
         )
     }
 }
@@ -146,7 +146,7 @@ class SignalRService: ObservableObject {
                         repo: run.repo, actor: run.actor,
                         status: "failure",
                         htmlUrl: run.htmlUrl, startedAt: run.startedAt,
-                        targetGitHubId: run.targetGitHubId
+                        targetGitHubIds: run.targetGitHubIds
                     )
                 }
                 return run
@@ -240,7 +240,7 @@ class SignalRService: ObservableObject {
             let run = WorkflowRun(
                 id: UUID(), runId: runId, workflowName: name, repo: repo,
                 actor: actor, status: "in_progress",
-                htmlUrl: htmlUrl, startedAt: startedAt, targetGitHubId: nil
+                htmlUrl: htmlUrl, startedAt: startedAt, targetGitHubIds: []
             )
 
             runningWorkflows.insert(run, at: 0)
@@ -275,7 +275,7 @@ class SignalRService: ObservableObject {
                 status: succeeded ? "success" : "failure",
                 htmlUrl: htmlUrl ?? "https://github.com/\(repo)/actions/runs/\(runId)",
                 startedAt: originalStartedAt,
-                targetGitHubId: nil
+                targetGitHubIds: []
             )
 
             if let idx = recentWorkflows.firstIndex(where: { $0.runId == runId && $0.status == "in_progress" }) {
@@ -313,7 +313,7 @@ class SignalRService: ObservableObject {
         }
     }
 
-    func setTargetGitHubId(for runId: Int64, targetId: Int64?) {
+    func setTargetGitHubIds(for runId: Int64, targetIds: [Int64]) {
         Task { @MainActor in
             for i in recentWorkflows.indices where recentWorkflows[i].runId == runId {
                 let old = recentWorkflows[i]
@@ -322,7 +322,7 @@ class SignalRService: ObservableObject {
                     workflowName: old.workflowName, repo: old.repo,
                     actor: old.actor, status: old.status,
                     htmlUrl: old.htmlUrl, startedAt: old.startedAt,
-                    targetGitHubId: targetId
+                    targetGitHubIds: targetIds
                 )
             }
             for i in runningWorkflows.indices where runningWorkflows[i].runId == runId {
@@ -332,7 +332,7 @@ class SignalRService: ObservableObject {
                     workflowName: old.workflowName, repo: old.repo,
                     actor: old.actor, status: old.status,
                     htmlUrl: old.htmlUrl, startedAt: old.startedAt,
-                    targetGitHubId: targetId
+                    targetGitHubIds: targetIds
                 )
             }
         }

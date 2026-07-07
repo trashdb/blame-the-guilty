@@ -139,8 +139,8 @@ using (var scope = app.Services.CreateScope())
     // Add AccessToken column to existing GitHubUsers table if missing
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "GitHubUsers" ADD COLUMN "AccessToken" TEXT;"""); } catch { }
 
-    // Add TargetGitHubId column to existing WorkflowRuns table if missing
-    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "WorkflowRuns" ADD COLUMN "TargetGitHubId" INTEGER;"""); } catch { }
+    // Add TargetGitHubIds column to existing WorkflowRuns table if missing
+    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "WorkflowRuns" ADD COLUMN "TargetGitHubIds" TEXT;"""); } catch { }
 
     // Add Draft column to existing PullRequestEvents table if missing
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "Draft" INTEGER NOT NULL DEFAULT 0;"""); } catch { }
