@@ -35,36 +35,36 @@ struct ContentView: View {
 
                 Divider()
 
+                if isLoggedIn {
+                    ActivePRsView(prs: signalR.activePRs, gitHubId: gitHubId)
+                }
+
+                Divider()
+
                 if isLoggedIn, !signalR.runningWorkflows.isEmpty {
                     RunningWorkflowsIndicatorView(
                         count: signalR.runningWorkflows.count,
                         onTap: { WorkflowHistoryPanelManager.shared.show(signalR: signalR, gitHubId: gitHubId) }
                     )
                 }
-            }
-            .foregroundStyle(Color(white: 0.7))
-            .frame(maxWidth: .infinity, alignment: .top)
-            .padding(.top, 16)
-            .padding(.horizontal, 16)
 
-            if isLoggedIn {
-                ActivePRsView(prs: signalR.activePRs, gitHubId: gitHubId)
-                    .frame(maxHeight: .infinity)
-
-                Group {
+                if isLoggedIn {
                     if let event = signalR.lastEvent {
                         LastNotificationCardView(event: event)
                     } else {
                         EmptyNotificationView()
                     }
                 }
-                .frame(height: 75)
-                .padding(.horizontal, 16)
-            }
 
-            Divider()
-                .padding(.bottom, 6)
-                .padding(.horizontal, 16)
+                Divider()
+                    .padding(.bottom, 6)
+            }
+            .foregroundStyle(Color(white: 0.7))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 16)
+            .padding(.horizontal, 16)
+
+            Spacer(minLength: 0)
 
             HStack {
                 Button {
