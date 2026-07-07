@@ -132,6 +132,21 @@ struct WorkflowRunRow: View {
                     }
                 }
 
+                if !run.isRunning {
+                    Button {
+                        rerunWorkflow()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.blue)
+                            .padding(6)
+                            .background(.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                    }
+                    .buttonStyle(.plain)
+                    .cursor(.pointingHand)
+                    .help("Rerun workflow")
+                }
+
                 if let url = URL(string: run.htmlUrl) {
                     Button {
                         NSWorkspace.shared.open(url)
@@ -253,6 +268,19 @@ struct WorkflowRunRow: View {
                   let decoded = try? JSONDecoder().decode([GitHubUserInfo].self, from: data) else { return }
             DispatchQueue.main.async {
                 users = decoded.filter { $0.gitHubId != gitHubId }
+            }
+        }.resume()
+    }
+
+    private func rerunWorkflow() {
+        guard let dbId = run.dbId else { return }
+        guard let url = URL(string: "\(backendUrl)/api/workflows/runs/\(dbId)/rerun?gitHubId=\(gitHubId)") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+
+        URLSession.shared.dataTask(with: request) { _, _, error in
+            if let error = error {
+                print("Rerun failed: \(error.localizedDescription)")
             }
         }.resume()
     }

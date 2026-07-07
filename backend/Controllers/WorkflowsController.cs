@@ -1,3 +1,4 @@
+using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -18,11 +19,15 @@ public class WorkflowsController : ControllerBase
         "Verify ForgeRock Secrets"
     };
 
-    private readonly AppDbContext _db;
+    private static readonly HttpClient _githubClient = new();
 
-    public WorkflowsController(AppDbContext db)
+    private readonly AppDbContext _db;
+    private readonly ILogger<WorkflowsController> _logger;
+
+    public WorkflowsController(AppDbContext db, ILogger<WorkflowsController> logger)
     {
         _db = db;
+        _logger = logger;
     }
 
     [HttpGet("runs")]
@@ -64,6 +69,32 @@ public class WorkflowsController : ControllerBase
         await _db.SaveChangesAsync();
 
         return Ok(new { runId = run.RunId, targetGitHubIds = DeserializeIds(run.TargetGitHubIds) });
+    }
+
+    [HttpPost("runs/{id}/rerun")]
+    public async Task<IActionResult> RerunRun(int id, [FromQuery] long gitHubId)
+    {
+        var run = await _db.WorkflowRuns.FindAsync(id);
+        if (run == null)
+            return NotFound("Workflow run not found.");
+
+        var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
+        if (string.IsNullOrEmpty(user?.AccessToken))
+            return Unauthorized("No access token for this user.");
+
+        var request = new HttpRequestMessage(HttpMethod.Post,
+            $"https://api.github.com/repos/{run.Repo}/actions/runs/{run.RunId}/rerun");
+        request.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", user.AccessToken);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github.v3+json"));
+
+        var response = await _githubClient.SendAsync(request);
+        if (response.IsSuccessStatusCode)
+            return Ok(new { rerun = true });
+
+        var body = await response.Content.ReadAsStringAsync();
+        _logger.LogWarning("GitHub rerun failed: {Status} {Body}", response.StatusCode, body);
+        return StatusCode((int)response.StatusCode, body);
     }
 
     private static string? SerializeIds(long[]? ids) =>
