@@ -23,7 +23,7 @@ struct ContentView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
-                
+
                 Divider()
 
                 if isLoggedIn {
@@ -32,39 +32,41 @@ struct ContentView: View {
                 } else {
                     SignInCardView(isLoading: isLoading, loginError: loginError, onSignIn: login)
                 }
-                
+
                 Divider()
 
                 if isLoggedIn {
                     ActivePRsView(prs: signalR.activePRs, gitHubId: gitHubId)
+                        .frame(maxHeight: .infinity, alignment: .top)
                 }
-                
-                Divider()
-                
+
                 if isLoggedIn, !signalR.runningWorkflows.isEmpty {
                     RunningWorkflowsIndicatorView(
                         count: signalR.runningWorkflows.count,
                         onTap: { WorkflowHistoryPanelManager.shared.show(signalR: signalR, gitHubId: gitHubId) }
                     )
                 }
+            }
+            .foregroundStyle(Color(white: 0.7))
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .padding(.top, 16)
+            .padding(.horizontal, 16)
 
-                if isLoggedIn {
+            if isLoggedIn {
+                Group {
                     if let event = signalR.lastEvent {
                         LastNotificationCardView(event: event)
                     } else {
                         EmptyNotificationView()
                     }
                 }
-                
-                Divider()
-                    .padding(.bottom, 6)
+                .frame(height: 75)
+                .padding(.horizontal, 16)
             }
-            .foregroundStyle(Color(white: 0.7))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 16)
-            .padding(.horizontal, 16)
 
-            Spacer(minLength: 0)
+            Divider()
+                .padding(.bottom, 6)
+                .padding(.horizontal, 16)
 
             HStack {
                 Button {
@@ -320,8 +322,8 @@ struct ActivePRsView: View {
                                         .foregroundStyle(Color(white: 0.85))
                                         .lineLimit(1)
                                     HStack(spacing: 0) {
-                                        Text(pr.repo).font(.system(size: 10)).foregroundStyle(.tertiary)
-                                        Text(" → ").font(.system(size: 10)).foregroundStyle(.tertiary)
+                                        Text(pr.repo).font(.system(size: 10)).foregroundStyle(.secondary)
+                                        Text(" → ").font(.system(size: 10)).foregroundStyle(.secondary)
                                         Text(pr.baseBranch).font(.system(size: 10, design: .monospaced)).foregroundStyle(.blue)
                                     }
                                     .lineLimit(1)
