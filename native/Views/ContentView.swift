@@ -48,26 +48,27 @@ struct ContentView: View {
                     )
                 }
 
-                if isLoggedIn {
-                    Group {
-                        if let event = signalR.lastEvent {
-                            LastNotificationCardView(event: event)
-                        } else {
-                            EmptyNotificationView()
-                        }
-                    }
-                    .frame(height: 74)
-                }
-
-                Divider()
-                    .padding(.bottom, 6)
             }
             .foregroundStyle(Color(white: 0.7))
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .padding(.top, 16)
             .padding(.horizontal, 16)
 
-            Spacer(minLength: 0)
+            if isLoggedIn {
+                Group {
+                    if let event = signalR.lastEvent {
+                        LastNotificationCardView(event: event)
+                    } else {
+                        EmptyNotificationView()
+                    }
+                }
+                .frame(height: 74)
+                .padding(.horizontal, 16)
+            }
+
+            Divider()
+                .padding(.bottom, 6)
+                .padding(.horizontal, 16)
 
             HStack {
                 Button {
