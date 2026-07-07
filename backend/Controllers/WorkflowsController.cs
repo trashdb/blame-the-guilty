@@ -83,19 +83,17 @@ public class WorkflowsController : ControllerBase
         if (run == null)
             return NotFound("Workflow run not found.");
 
-        var pat = _configuration["GitHub:PatToken"];
-        if (string.IsNullOrEmpty(pat))
-        {
-            var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
-            if (string.IsNullOrEmpty(user?.AccessToken))
-                return Unauthorized("No access token configured and no user token available.");
-            pat = user.AccessToken;
-        }
+        var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
+        var token = user?.AccessToken;
+        if (string.IsNullOrEmpty(token))
+            token = _configuration["GitHub:PatToken"];
+        if (string.IsNullOrEmpty(token))
+            return Unauthorized("No access token available.");
 
         var request = new HttpRequestMessage(HttpMethod.Post,
             $"https://api.github.com/repos/{run.Repo}/actions/runs/{run.RunId}/rerun");
         request.Headers.UserAgent.ParseAdd("BlameTheGuilty");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", pat);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github.v3+json"));
 
         var response = await _githubClient.SendAsync(request);
