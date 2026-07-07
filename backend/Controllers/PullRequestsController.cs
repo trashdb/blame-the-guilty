@@ -44,7 +44,7 @@ public class PullRequestsController : ControllerBase
         var results = new List<object>();
         foreach (var pr in prs)
         {
-            var mergeableState = await FetchMergeableState(pr.RepoFullName, pr.PrNumber, token);
+            var (draft, mergeableState) = await FetchPullRequestData(pr.PrNumber, pr.RepoFullName, token);
             results.Add(new
             {
                 pr.PrNumber,
@@ -55,7 +55,7 @@ public class PullRequestsController : ControllerBase
                 HtmlUrl = pr.PrUrl,
                 pr.Status,
                 pr.Conclusion,
-                pr.Draft,
+                Draft = draft ?? pr.Draft,
                 MergeableState = mergeableState
             });
         }
@@ -63,7 +63,7 @@ public class PullRequestsController : ControllerBase
         return Ok(results);
     }
 
-    private async Task<string?> FetchMergeableState(string repoFullName, long prNumber, string? token)
+    private async Task<(bool? draft, string? mergeableState)> FetchPullRequestData(long prNumber, string repoFullName, string? token)
     {
         try
         {
@@ -73,22 +73,24 @@ public class PullRequestsController : ControllerBase
                 request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
             var response = await _githubClient.SendAsync(request);
-            if (!response.IsSuccessStatusCode) return null;
+            if (!response.IsSuccessStatusCode) return (null, null);
 
             var content = await response.Content.ReadAsStringAsync();
             var data = JsonSerializer.Deserialize<JsonElement>(content);
 
-            if (data.TryGetProperty("draft", out var draftProp) && draftProp.GetBoolean())
-                return "draft";
+            bool? draft = null;
+            if (data.TryGetProperty("draft", out var draftProp))
+                draft = draftProp.GetBoolean();
 
+            string? mergeableState = null;
             if (data.TryGetProperty("mergeable_state", out var state))
-                return state.GetString();
+                mergeableState = state.GetString();
 
-            return null;
+            return (draft, mergeableState);
         }
         catch
         {
-            return null;
+            return (null, null);
         }
     }
 }

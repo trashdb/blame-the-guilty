@@ -257,9 +257,11 @@ struct ActivePRsView: View {
         switch pr.mergeableState {
         case "clean": return .green
         case "blocked", "dirty", "behind", "unstable": return .red
-        default: return Color(white: 0.85)
+        default: return Color.accentColor
         }
     }
+
+
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
