@@ -213,8 +213,6 @@ class SignalRService: ObservableObject {
               let data = args.first else { return }
 
         switch target {
-        case "WorkflowRunStarted":       handleWorkflowStarted(data)
-        case "WorkflowRunCompleted":     handleWorkflowCompleted(data)
         case "PullRequestOpened":        handlePROpened(data)
         case "PullRequestChecksStatus":  handlePRChecksStatus(data)
         case "PullRequestChecksCompleted": handlePRChecksCompleted(data)
@@ -226,91 +224,7 @@ class SignalRService: ObservableObject {
         }
     }
 
-    private func handleWorkflowStarted(_ data: [String: Any]) {
-        let runId      = data["runId"] as? Int64 ?? 0
-        let name       = data["workflowName"] as? String ?? "Unknown"
-        let repo       = data["repo"] as? String ?? "unknown"
-        let actor      = data["actor"] as? String ?? "someone"
-        let htmlUrl    = data["htmlUrl"] as? String ?? ""
-        let startedAt  = (data["startedAt"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) } ?? Date()
 
-        Task { @MainActor in
-            runStatus = .running
-
-            let run = WorkflowRun(
-                id: UUID(), runId: runId, workflowName: name, repo: repo,
-                actor: actor, status: "in_progress",
-                htmlUrl: htmlUrl, startedAt: startedAt, targetGitHubId: nil
-            )
-
-            runningWorkflows.insert(run, at: 0)
-            recentWorkflows.insert(run, at: 0)
-            if recentWorkflows.count > 10 { recentWorkflows = Array(recentWorkflows.prefix(10)) }
-        }
-    }
-
-    private func handleWorkflowCompleted(_ data: [String: Any]) {
-        let runId      = data["runId"] as? Int64 ?? 0
-        let succeeded  = data["succeeded"] as? Bool ?? false
-        let name       = data["workflowName"] as? String
-        let repo       = data["repo"] as? String ?? "unknown"
-        let actor      = data["actor"] as? String ?? "someone"
-        let htmlUrl    = data["htmlUrl"] as? String
-        let workflowURL: URL? = URL(string: htmlUrl ?? "https://github.com/\(repo)/actions/runs/\(runId)")
-
-        Task { @MainActor in
-            runStatus = succeeded ? .success : .failure
-            scheduleStatusReset()
-
-            if let idx = runningWorkflows.firstIndex(where: { $0.runId == runId }) {
-                runningWorkflows.remove(at: idx)
-            }
-
-            let originalStartedAt = recentWorkflows.first(where: { $0.runId == runId })?.startedAt ?? Date()
-            let completedRun = WorkflowRun(
-                id: UUID(), runId: runId,
-                workflowName: name ?? "Workflow",
-                repo: repo,
-                actor: actor,
-                status: succeeded ? "success" : "failure",
-                htmlUrl: htmlUrl ?? "https://github.com/\(repo)/actions/runs/\(runId)",
-                startedAt: originalStartedAt,
-                targetGitHubId: nil
-            )
-
-            if let idx = recentWorkflows.firstIndex(where: { $0.runId == runId && $0.status == "in_progress" }) {
-                recentWorkflows[idx] = completedRun
-            } else {
-                recentWorkflows.insert(completedRun, at: 0)
-            }
-            if recentWorkflows.count > 10 { recentWorkflows = Array(recentWorkflows.prefix(10)) }
-            persistHistory()
-
-            let wfName = name ?? "Workflow"
-            if succeeded {
-                showNotification(
-                    title: "Workflow Succeeded",
-                    body: "\(wfName) in \(repo)",
-                    subtitle: "Run #\(runId)",
-                    actionURL: workflowURL,
-                    type: .success
-                )
-            } else {
-                lastEvent = PunishmentEvent(
-                    culprit: actor, repo: repo, runId: runId,
-                    workflowName: wfName,
-                    workflowURL: workflowURL, date: Date()
-                )
-                showNotification(
-                    title: "Workflow Failed",
-                    body: "\(wfName) failed for \(actor) in \(repo)",
-                    subtitle: "Run #\(runId)",
-                    actionURL: workflowURL,
-                    type: .error
-                )
-            }
-        }
-    }
 
     // MARK: - PR handlers
 
@@ -371,7 +285,7 @@ class SignalRService: ObservableObject {
         let isFailure = conclusion == "failure"
 
         let url = URL(string: "https://github.com/\(repo)/pull/\(prNumber)")
-        let titleText = isSuccess ? "PR Ready to Merge" : isFailure ? "PR Checks Failed" : "PR Checks Running"
+        let titleText = isSuccess ? "PR Checks Passed" : isFailure ? "PR Checks Failed" : "PR Checks Running"
         let body = "PR #\(prNumber) in \(repo)"
         let notifType: NotificationType = isSuccess ? .success : isFailure ? .error : .info
 
@@ -383,6 +297,13 @@ class SignalRService: ObservableObject {
                     headBranch: pr.headBranch, baseBranch: pr.baseBranch,
                     htmlUrl: pr.htmlUrl, status: prStatus, conclusion: conclusion
                 )
+                if isFailure {
+                    lastEvent = PunishmentEvent(
+                        culprit: pr.title, repo: repo, runId: prNumber,
+                        workflowName: nil,
+                        workflowURL: url, date: Date()
+                    )
+                }
             }
             if isSuccess || isFailure {
                 showNotification(title: titleText, body: body, actionURL: url, type: notifType)

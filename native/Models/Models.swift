@@ -46,7 +46,7 @@ struct PullRequest: Identifiable {
     var prUrl: URL { htmlUrl ?? URL(string: "https://github.com/\(repo)/pull/\(prNumber)")! }
 
     var isInProgress: Bool { status == "in_progress" }
-    var isReadyToMerge: Bool { status == "open" && conclusion == "success" }
+    var isChecksPassed: Bool { conclusion == "success" }
     var isFailed: Bool { conclusion == "failure" }
     var isMerged: Bool { status == "merged" }
 }
