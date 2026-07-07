@@ -35,11 +35,6 @@ struct ContentView: View {
 
                 Divider()
 
-                if isLoggedIn {
-                    ActivePRsView(prs: signalR.activePRs, gitHubId: gitHubId)
-                        .frame(maxHeight: .infinity, alignment: .top)
-                }
-
                 if isLoggedIn, !signalR.runningWorkflows.isEmpty {
                     RunningWorkflowsIndicatorView(
                         count: signalR.runningWorkflows.count,
@@ -48,11 +43,14 @@ struct ContentView: View {
                 }
             }
             .foregroundStyle(Color(white: 0.7))
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .frame(maxWidth: .infinity, alignment: .top)
             .padding(.top, 16)
             .padding(.horizontal, 16)
 
             if isLoggedIn {
+                ActivePRsView(prs: signalR.activePRs, gitHubId: gitHubId)
+                    .frame(maxHeight: .infinity)
+
                 Group {
                     if let event = signalR.lastEvent {
                         LastNotificationCardView(event: event)
