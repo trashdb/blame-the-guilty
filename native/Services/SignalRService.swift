@@ -68,7 +68,7 @@ class SignalRService: ObservableObject {
         }
     }
 
-    private func syncFromApi(gitHubId: Int64) async {
+    func syncFromApi(gitHubId: Int64) async {
         guard let url = URL(string: "\(baseUrl)/api/workflows/runs?gitHubId=\(gitHubId)&limit=20") else {
             await MainActor.run { loadPersistedHistory() }
             return

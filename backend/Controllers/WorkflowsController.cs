@@ -23,11 +23,13 @@ public class WorkflowsController : ControllerBase
 
     private readonly AppDbContext _db;
     private readonly ILogger<WorkflowsController> _logger;
+    private readonly IConfiguration _configuration;
 
-    public WorkflowsController(AppDbContext db, ILogger<WorkflowsController> logger)
+    public WorkflowsController(AppDbContext db, ILogger<WorkflowsController> logger, IConfiguration configuration)
     {
         _db = db;
         _logger = logger;
+        _configuration = configuration;
     }
 
     [HttpGet("runs")]
@@ -81,14 +83,19 @@ public class WorkflowsController : ControllerBase
         if (run == null)
             return NotFound("Workflow run not found.");
 
-        var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
-        if (string.IsNullOrEmpty(user?.AccessToken))
-            return Unauthorized("No access token for this user.");
+        var pat = _configuration["GitHub:PatToken"];
+        if (string.IsNullOrEmpty(pat))
+        {
+            var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
+            if (string.IsNullOrEmpty(user?.AccessToken))
+                return Unauthorized("No access token configured and no user token available.");
+            pat = user.AccessToken;
+        }
 
         var request = new HttpRequestMessage(HttpMethod.Post,
             $"https://api.github.com/repos/{run.Repo}/actions/runs/{run.RunId}/rerun");
         request.Headers.UserAgent.ParseAdd("BlameTheGuilty");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", user.AccessToken);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", pat);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github.v3+json"));
 
         var response = await _githubClient.SendAsync(request);

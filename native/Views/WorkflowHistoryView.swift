@@ -50,6 +50,8 @@ struct WorkflowRunRow: View {
     @State private var users: [GitHubUserInfo] = []
     @State private var loadingUsers = false
     @State private var selectedIds: Set<Int64> = []
+    @State private var isRerunning = false
+    @State private var rerunError: String?
 
     private var userIdToLogin: [Int64: String] {
         Dictionary(uniqueKeysWithValues: users.map { ($0.gitHubId, $0.login) })
@@ -136,15 +138,24 @@ struct WorkflowRunRow: View {
                     Button {
                         rerunWorkflow()
                     } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.blue)
-                            .padding(6)
-                            .background(.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                        Group {
+                            if isRerunning {
+                                ProgressView()
+                                    .scaleEffect(0.6)
+                                    .frame(width: 10, height: 10)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: 10))
+                            }
+                        }
+                        .foregroundStyle(.blue)
+                        .padding(6)
+                        .background(.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
                     }
                     .buttonStyle(.plain)
                     .cursor(.pointingHand)
                     .help("Rerun workflow")
+                    .disabled(isRerunning)
                 }
 
                 if let url = URL(string: run.htmlUrl) {
@@ -273,22 +284,26 @@ struct WorkflowRunRow: View {
     }
 
     private func rerunWorkflow() {
-        guard let url = URL(string: "\(backendUrl)/api/workflows/runs/\(run.runId)/rerun?gitHubId=\(gitHubId)") else {
-            print("Rerun: invalid URL")
-            return
-        }
+        guard let url = URL(string: "\(backendUrl)/api/workflows/runs/\(run.runId)/rerun?gitHubId=\(gitHubId)") else { return }
+        isRerunning = true
+        rerunError = nil
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
 
         URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error = error {
-                print("Rerun failed: \(error.localizedDescription)")
-                return
-            }
-            if let httpResponse = response as? HTTPURLResponse {
-                print("Rerun status: \(httpResponse.statusCode)")
-                if let data = data, let body = String(data: data, encoding: .utf8) {
-                    print("Rerun body: \(body)")
+            DispatchQueue.main.async {
+                self.isRerunning = false
+                if let error = error {
+                    self.rerunError = error.localizedDescription
+                    return
+                }
+                if let httpResponse = response as? HTTPURLResponse {
+                    if httpResponse.statusCode == 200 {
+                        Task { await signalR.syncFromApi(gitHubId: gitHubId) }
+                    } else {
+                        let body = data.flatMap { String(data: $0, encoding: .utf8) } ?? "Unknown error"
+                        self.rerunError = "HTTP \(httpResponse.statusCode): \(body)"
+                    }
                 }
             }
         }.resume()
