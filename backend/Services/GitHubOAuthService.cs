@@ -64,12 +64,15 @@ public class GitHubOAuthService
         var userContent = await userResponse.Content.ReadAsStringAsync();
         var userData = JsonSerializer.Deserialize<JsonElement>(userContent);
 
+        var avatarUrl = userData.TryGetProperty("avatar_url", out var av) ? av.GetString() : null;
+
         return new GitHubUserInfo(
             Id: userData.GetProperty("id").GetInt64(),
             Login: userData.GetProperty("login").GetString()!,
-            AccessToken: accessToken
+            AccessToken: accessToken,
+            AvatarUrl: avatarUrl
         );
     }
 }
 
-public record GitHubUserInfo(long Id, string Login, string? AccessToken = null);
+public record GitHubUserInfo(long Id, string Login, string? AccessToken = null, string? AvatarUrl = null);

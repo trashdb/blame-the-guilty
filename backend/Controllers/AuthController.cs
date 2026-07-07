@@ -67,10 +67,11 @@ public class AuthController : ControllerBase
         // If a redirect_uri was passed via state, redirect there with user info
         if (!string.IsNullOrEmpty(state))
         {
-            var redirectUri = $"{state}?id={userInfo.Id}&username={HttpUtility.UrlEncode(userInfo.Login)}";
+            var avatar = userInfo.AvatarUrl is not null ? $"&avatar={HttpUtility.UrlEncode(userInfo.AvatarUrl)}" : "";
+            var redirectUri = $"{state}?id={userInfo.Id}&username={HttpUtility.UrlEncode(userInfo.Login)}{avatar}";
             return Redirect(redirectUri);
         }
 
-        return Ok(new { id = userInfo.Id, username = userInfo.Login });
+        return Ok(new { id = userInfo.Id, username = userInfo.Login, avatarUrl = userInfo.AvatarUrl });
     }
 }

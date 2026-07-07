@@ -2,13 +2,30 @@ import SwiftUI
 
 struct LoggedInCardView: View {
     let username: String
+    let avatarUrl: String?
     let onSignOut: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "person.circle.fill")
-                .font(.system(size: 24))
-                .foregroundStyle(.secondary)
+            if let avatarUrl, let url = URL(string: avatarUrl) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .frame(width: 24, height: 24)
+                            .clipShape(Circle())
+                    default:
+                        Image(systemName: "person.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else {
+                Image(systemName: "person.circle.fill")
+                    .font(.system(size: 24))
+                    .foregroundStyle(.secondary)
+            }
 
             VStack(alignment: .leading, spacing: 1) {
                 Text("You are logged in as")

@@ -6,6 +6,7 @@ struct ContentView: View {
     @State private var isLoggedIn = false
     @State private var keepSignedIn = true
     @State private var username = ""
+    @State private var avatarUrl: String?
     @State private var gitHubId: Int64 = 0
     @State private var isLoading = false
     @State private var loginError: String?
@@ -27,7 +28,7 @@ struct ContentView: View {
                 Divider()
 
                 if isLoggedIn {
-                    LoggedInCardView(username: username, onSignOut: logout)
+                    LoggedInCardView(username: username, avatarUrl: avatarUrl, onSignOut: logout)
                     KeepSignedInToggleView(isOn: $keepSignedIn)
                 } else {
                     SignInCardView(isLoading: isLoading, loginError: loginError, onSignIn: login)
@@ -35,7 +36,6 @@ struct ContentView: View {
 
                 if isLoggedIn, !signalR.activePRs.isEmpty {
                     ActivePRsView(prs: signalR.activePRs)
-                    //Spacer()
                     Divider()
                 }
 
@@ -89,18 +89,31 @@ struct ContentView: View {
                     .help("Workflow History")
                     .cursor(.pointingHand)
                 }
-
+                
+                
+                
                 if isLoggedIn, signalR.runningWorkflows.count > 0 {
-                    Text("\(signalR.runningWorkflows.count)")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(minWidth: 16, minHeight: 16)
-                        .background(.orange, in: Capsule())
+                    Button {
+                        WorkflowHistoryPanelManager.shared.show(signalR: signalR, gitHubId: gitHubId)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(.orange)
+                                .frame(width: 7, height: 7)
+                            Text("\(signalR.runningWorkflows.count) \(signalR.runningWorkflows.count == 1 ? "workflow" : "workflows") running")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.orange)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
                         .overlay(
-                            Capsule()
-                                .stroke(.white.opacity(0.3), lineWidth: 1)
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(.orange.opacity(0.2), lineWidth: 1)
                         )
-                        .padding(4)
+                    }
+                    .buttonStyle(.plain)
+                    .cursor(.pointingHand)
                 }
 
                 Spacer()
@@ -121,7 +134,7 @@ struct ContentView: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 10)
         }
-        .frame(width: 300, height: 600, alignment: .top)
+        .frame(width: 400, height: 600, alignment: .top)
         .background(.regularMaterial)
         .onAppear { autoConnectIfNeeded() }
     }
@@ -136,10 +149,11 @@ struct ContentView: View {
                 await MainActor.run {
                     gitHubId = result.id
                     username = result.username
+                    avatarUrl = result.avatarUrl
                     isLoggedIn = true
                     signalR.connect(gitHubId: result.id, username: result.username)
                     if keepSignedIn {
-                        KeychainService.save(gitHubId: result.id, username: result.username)
+                        KeychainService.save(gitHubId: result.id, username: result.username, avatarUrl: result.avatarUrl)
                     }
                 }
             } catch {
@@ -154,6 +168,7 @@ struct ContentView: View {
         KeychainService.delete()
         isLoggedIn = false
         username = ""
+        avatarUrl = nil
         gitHubId = 0
         loginError = nil
     }
@@ -162,6 +177,7 @@ struct ContentView: View {
         guard !isLoggedIn, let session = KeychainService.load() else { return }
         gitHubId = session.gitHubId
         username = session.username
+        avatarUrl = session.avatarUrl
         isLoggedIn = true
         signalR.connect(gitHubId: session.gitHubId, username: session.username)
     }

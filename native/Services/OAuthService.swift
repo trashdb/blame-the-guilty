@@ -3,7 +3,7 @@ import Foundation
 import Network
 
 class OAuthService {
-    func startLogin(backendUrl: String) async throws -> (id: Int64, username: String) {
+    func startLogin(backendUrl: String) async throws -> (id: Int64, username: String, avatarUrl: String?) {
         try await withCheckedThrowingContinuation { continuation in
             let port = UInt16.random(in: 49152...65535)
             let redirectUri = "http://localhost:\(port)/callback"
@@ -51,6 +51,8 @@ class OAuthService {
                             continuation.resume(throwing: OAuthError.failed)
                             return
                         }
+
+                        let avatarUrl = components.queryItems?.first(where: { $0.name == "avatar" })?.value
 
                         let body = """
                         <!DOCTYPE html>
@@ -130,7 +132,7 @@ class OAuthService {
                         connection.send(content: response.data(using: .utf8), completion: .contentProcessed { _ in
                             connection.cancel()
                             listener.cancel()
-                            continuation.resume(returning: (id, username))
+                            continuation.resume(returning: (id, username, avatarUrl))
                         })
                     }
                 }

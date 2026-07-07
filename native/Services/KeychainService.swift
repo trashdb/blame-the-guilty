@@ -9,10 +9,11 @@ enum KeychainService {
     struct Session: Codable {
         let gitHubId: Int64
         let username: String
+        let avatarUrl: String?
     }
 
-    static func save(gitHubId: Int64, username: String) {
-        guard let data = try? JSONEncoder().encode(Session(gitHubId: gitHubId, username: username)) else { return }
+    static func save(gitHubId: Int64, username: String, avatarUrl: String? = nil) {
+        guard let data = try? JSONEncoder().encode(Session(gitHubId: gitHubId, username: username, avatarUrl: avatarUrl)) else { return }
         SecItemDelete(baseQuery(service: service) as CFDictionary)
         var query = baseQuery(service: service)
         query[kSecValueData] = data
