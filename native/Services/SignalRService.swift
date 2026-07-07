@@ -40,7 +40,6 @@ class SignalRService: ObservableObject {
 
     private let baseUrl: String
     private var task: Task<Void, Never>?
-    private var prRefreshTask: Task<Void, Never>?
     private var gitHubId: Int64 = 0
 
     init(baseUrl: String) {
@@ -56,13 +55,6 @@ class SignalRService: ObservableObject {
             await syncFromApi(gitHubId: gitHubId)
             await syncPRsFromApi(gitHubId: gitHubId)
 
-            prRefreshTask = Task { [weak self] in
-                while !Task.isCancelled {
-                    try? await Task.sleep(nanoseconds: 30_000_000_000)
-                    await self?.syncPRsFromApi(gitHubId: gitHubId)
-                }
-            }
-
             while !Task.isCancelled {
                 do {
                     try await connectAndListen(gitHubId: gitHubId, username: username)
@@ -71,7 +63,6 @@ class SignalRService: ObservableObject {
                     try? await Task.sleep(nanoseconds: 5_000_000_000)
                 }
             }
-            prRefreshTask?.cancel()
         }
     }
 
@@ -228,6 +219,8 @@ class SignalRService: ObservableObject {
         switch target {
         case "WorkflowRunStarted":   handleWorkflowStarted(data)
         case "WorkflowRunCompleted": handleWorkflowCompleted(data)
+        case "PullRequestsUpdated":
+            Task { await self.syncPRsFromApi(gitHubId: self.gitHubId) }
         default: break
         }
     }
@@ -347,8 +340,6 @@ class SignalRService: ObservableObject {
     func disconnect() {
         task?.cancel()
         task = nil
-        prRefreshTask?.cancel()
-        prRefreshTask = nil
         Task { @MainActor in
             isConnected = false
             runStatus = .idle

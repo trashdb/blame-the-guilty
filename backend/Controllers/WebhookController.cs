@@ -428,6 +428,7 @@ public class WebhookController : ControllerBase
         await _db.SaveChangesAsync();
 
         _logger.LogInformation("PR #{PrNumber} opened by {Author} (draft={Draft})", prNumber, authorLogin, draft);
+        await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
         return Ok(new { prNumber, status = "tracking" });
     }
 
@@ -445,6 +446,7 @@ public class WebhookController : ControllerBase
         }
 
         _logger.LogInformation("PR #{PrNumber} marked as ready for review", prNumber);
+        await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
         return Ok(new { prNumber, status = "ready_for_review" });
     }
 
@@ -468,6 +470,7 @@ public class WebhookController : ControllerBase
         }
 
         _logger.LogInformation("PR #{PrNumber} {Status} by {Author}", prNumber, status, authorLogin);
+        await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
         return Ok(new { prNumber, status });
     }
 
