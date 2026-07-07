@@ -408,6 +408,7 @@ public class WebhookController : ControllerBase
         {
             "opened" => await HandlePullRequestOpened(prNumber, title, htmlUrl, repo, baseBranch, headBranch, authorLogin, authorId, draft),
             "ready_for_review" => await HandlePullRequestReadyForReview(prNumber, repo),
+            "converted_to_draft" => await HandlePullRequestConvertedToDraft(prNumber, repo),
             "closed" => await HandlePullRequestClosed(prNumber, title, htmlUrl, repo, baseBranch, headBranch, authorLogin, authorId, pr),
             _ => Ok($"Ignored: pull_request action '{action}'.")
         };
@@ -448,6 +449,24 @@ public class WebhookController : ControllerBase
         _logger.LogInformation("PR #{PrNumber} marked as ready for review", prNumber);
         await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
         return Ok(new { prNumber, status = "ready_for_review" });
+    }
+
+    private async Task<IActionResult> HandlePullRequestConvertedToDraft(int prNumber, string repo)
+    {
+        var existing = await _db.PullRequestEvents
+            .Where(e => e.PrNumber == prNumber && e.RepoFullName == repo && e.Status == "open")
+            .OrderByDescending(e => e.Id)
+            .FirstOrDefaultAsync();
+
+        if (existing != null)
+        {
+            existing.Draft = true;
+            await _db.SaveChangesAsync();
+        }
+
+        _logger.LogInformation("PR #{PrNumber} converted to draft", prNumber);
+        await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
+        return Ok(new { prNumber, status = "converted_to_draft" });
     }
 
     private async Task<IActionResult> HandlePullRequestClosed(

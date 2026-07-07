@@ -212,13 +212,14 @@ class SignalRService: ObservableObject {
     }
 
     private func handleInvocation(_ json: [String: Any]) {
-        guard let target = json["target"] as? String,
-              let args = json["arguments"] as? [[String: Any]],
-              let data = args.first else { return }
+        guard let target = json["target"] as? String else { return }
 
         switch target {
-        case "WorkflowRunStarted":   handleWorkflowStarted(data)
-        case "WorkflowRunCompleted": handleWorkflowCompleted(data)
+        case "WorkflowRunStarted", "WorkflowRunCompleted":
+            guard let args = json["arguments"] as? [[String: Any]],
+                  let data = args.first else { return }
+            if target == "WorkflowRunStarted" { handleWorkflowStarted(data) }
+            else { handleWorkflowCompleted(data) }
         case "PullRequestsUpdated":
             Task { await self.syncPRsFromApi(gitHubId: self.gitHubId) }
         default: break
