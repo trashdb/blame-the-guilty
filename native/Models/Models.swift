@@ -13,6 +13,7 @@ struct PunishmentEvent {
 
 struct WorkflowRun: Identifiable, Codable {
     let id: UUID
+    let dbId: Int?
     let runId: Int64
     let workflowName: String
     let repo: String

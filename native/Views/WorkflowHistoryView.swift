@@ -259,7 +259,8 @@ struct WorkflowRunRow: View {
 
     private func saveTargets() {
         let ids = Array(selectedIds)
-        guard let url = URL(string: "\(backendUrl)/api/workflows/runs/\(run.runId)/target") else { return }
+        guard let dbId = run.dbId else { return }
+        guard let url = URL(string: "\(backendUrl)/api/workflows/runs/\(dbId)/target") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -269,7 +270,7 @@ struct WorkflowRunRow: View {
         URLSession.shared.dataTask(with: request) { data, _, error in
             guard error == nil, data != nil else { return }
             DispatchQueue.main.async {
-                signalR.setTargetGitHubIds(for: run.runId, targetIds: ids)
+                signalR.setTargetGitHubIds(for: dbId, targetIds: ids)
             }
         }.resume()
     }

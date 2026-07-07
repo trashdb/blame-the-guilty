@@ -38,6 +38,7 @@ public class WorkflowsController : ControllerBase
 
         return Ok(runs.Select(w => new
         {
+            w.Id,
             w.RunId,
             w.WorkflowName,
             w.Repo,
@@ -49,20 +50,20 @@ public class WorkflowsController : ControllerBase
         }));
     }
 
-    [HttpPut("runs/{runId}/target")]
-    public async Task<IActionResult> SetTarget(long runId, [FromBody] SetTargetRequest request)
+    [HttpPut("runs/{id}/target")]
+    public async Task<IActionResult> SetTarget(int id, [FromBody] SetTargetRequest request)
     {
         var run = await _db.WorkflowRuns
-            .Where(w => w.RunId == runId && w.Status == "in_progress")
+            .Where(w => w.Id == id)
             .FirstOrDefaultAsync();
 
         if (run == null)
-            return NotFound("No in-progress workflow run found with that runId.");
+            return NotFound("Workflow run not found.");
 
         run.TargetGitHubIds = SerializeIds(request.TargetGitHubIds);
         await _db.SaveChangesAsync();
 
-        return Ok(new { runId, targetGitHubIds = DeserializeIds(run.TargetGitHubIds) });
+        return Ok(new { runId = run.RunId, targetGitHubIds = DeserializeIds(run.TargetGitHubIds) });
     }
 
     private static string? SerializeIds(long[]? ids) =>

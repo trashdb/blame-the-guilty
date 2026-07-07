@@ -2,6 +2,7 @@ import Combine
 import Foundation
 
 private struct ApiWorkflowRun: Decodable {
+    let id: Int
     let runId: Int64
     let workflowName: String?
     let repo: String
@@ -14,6 +15,7 @@ private struct ApiWorkflowRun: Decodable {
     func toWorkflowRun() -> WorkflowRun {
         WorkflowRun(
             id: UUID(),
+            dbId: id,
             runId: runId,
             workflowName: workflowName ?? "Workflow",
             repo: repo,
@@ -141,7 +143,8 @@ class SignalRService: ObservableObject {
             recentWorkflows = saved.map { run in
                 if run.status == "in_progress" {
                     return WorkflowRun(
-                        id: run.id, runId: run.runId,
+                        id: run.id, dbId: run.dbId,
+                        runId: run.runId,
                         workflowName: run.workflowName,
                         repo: run.repo, actor: run.actor,
                         status: "failure",
@@ -238,7 +241,8 @@ class SignalRService: ObservableObject {
             runStatus = .running
 
             let run = WorkflowRun(
-                id: UUID(), runId: runId, workflowName: name, repo: repo,
+                id: UUID(), dbId: nil,
+                runId: runId, workflowName: name, repo: repo,
                 actor: actor, status: "in_progress",
                 htmlUrl: htmlUrl, startedAt: startedAt, targetGitHubIds: []
             )
@@ -268,7 +272,8 @@ class SignalRService: ObservableObject {
 
             let originalStartedAt = recentWorkflows.first(where: { $0.runId == runId })?.startedAt ?? Date()
             let completedRun = WorkflowRun(
-                id: UUID(), runId: runId,
+                id: UUID(), dbId: nil,
+                runId: runId,
                 workflowName: name ?? "Workflow",
                 repo: repo,
                 actor: actor,
@@ -313,22 +318,24 @@ class SignalRService: ObservableObject {
         }
     }
 
-    func setTargetGitHubIds(for runId: Int64, targetIds: [Int64]) {
+    func setTargetGitHubIds(for dbId: Int, targetIds: [Int64]) {
         Task { @MainActor in
-            for i in recentWorkflows.indices where recentWorkflows[i].runId == runId {
+            for i in recentWorkflows.indices where recentWorkflows[i].dbId == dbId {
                 let old = recentWorkflows[i]
                 recentWorkflows[i] = WorkflowRun(
-                    id: old.id, runId: old.runId,
+                    id: old.id, dbId: old.dbId,
+                    runId: old.runId,
                     workflowName: old.workflowName, repo: old.repo,
                     actor: old.actor, status: old.status,
                     htmlUrl: old.htmlUrl, startedAt: old.startedAt,
                     targetGitHubIds: targetIds
                 )
             }
-            for i in runningWorkflows.indices where runningWorkflows[i].runId == runId {
+            for i in runningWorkflows.indices where runningWorkflows[i].dbId == dbId {
                 let old = runningWorkflows[i]
                 runningWorkflows[i] = WorkflowRun(
-                    id: old.id, runId: old.runId,
+                    id: old.id, dbId: old.dbId,
+                    runId: old.runId,
                     workflowName: old.workflowName, repo: old.repo,
                     actor: old.actor, status: old.status,
                     htmlUrl: old.htmlUrl, startedAt: old.startedAt,
