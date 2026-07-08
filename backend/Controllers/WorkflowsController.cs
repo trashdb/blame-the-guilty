@@ -136,6 +136,8 @@ public class WorkflowsController : ControllerBase
             htmlUrl = newRun.HtmlUrl
         });
 
+        await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
+
         return Ok(new { rerun = true });
     }
 

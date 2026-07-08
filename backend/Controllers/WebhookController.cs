@@ -123,6 +123,8 @@ public class WebhookController : ControllerBase
             _logger.LogInformation("Running workflow {RunId} notified to {Login}", runId, culprit.Login);
         }
 
+        await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
+
         return Ok(new { runId });
     }
 
@@ -176,6 +178,8 @@ public class WebhookController : ControllerBase
             });
         }
         await _db.SaveChangesAsync();
+
+        await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
 
         // Notify both the culprit and the target user (if set) via SignalR
         async Task NotifyCompleted(long gitHubId, bool succeeded)
