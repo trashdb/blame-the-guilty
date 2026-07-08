@@ -7,9 +7,8 @@ struct ActivePRsView: View {
         if pr.isMerged { return .purple }
         if pr.draft { return .gray }
         switch pr.mergeableState {
-        case "clean": return .green
-        case "blocked", "dirty", "behind", "unstable": return .red
-        default: return Color.accentColor
+        case "blocked", "dirty", "unstable": return .red
+        default: return .green
         }
     }
 
@@ -17,9 +16,8 @@ struct ActivePRsView: View {
         if pr.isMerged { return "MERGED" }
         if pr.draft { return "DRAFT" }
         switch pr.mergeableState {
-        case "clean": return "READY"
-        case "blocked", "dirty", "behind", "unstable": return "FAIL"
-        default: return "WAITING"
+        case "blocked", "dirty", "unstable": return "FAIL"
+        default: return "READY"
         }
     }
 

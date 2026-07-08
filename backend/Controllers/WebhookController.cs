@@ -57,6 +57,7 @@ public class WebhookController : ControllerBase
         return action switch
         {
             "in_progress" => await HandleWorkflowRunInProgress(payload),
+            "requested" => await HandleWorkflowRunInProgress(payload),
             "completed" => await HandleWorkflowRunCompleted(payload),
             _ => Ok($"Ignored: workflow_run action '{action}'.")
         };
