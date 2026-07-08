@@ -30,11 +30,11 @@ struct ContentView: View {
                     SignInCardView(isLoading: isLoading, loginError: loginError, onSignIn: login)
                 }
 
-                if signalR.isLoggedIn, !signalR.activePRs.isEmpty {
+                if signalR.isLoggedIn {
                     ActivePRsView(prs: signalR.activePRs, workflows: signalR.recentWorkflows)
                     Divider()
                 }
-
+                
                 if signalR.isLoggedIn {
                     if let event = signalR.lastEvent {
                         LastNotificationCardView(event: event)
