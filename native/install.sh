@@ -15,9 +15,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "🔍 Building BlameTheGuilty…"
 
-xcodebuild -project "$SCRIPT_DIR/btg.xcodeproj" -scheme "$APP_NAME" -configuration Release build 2>/dev/null || {
+if ! xcodebuild -project "$SCRIPT_DIR/btg.xcodeproj" -scheme "$APP_NAME" -configuration Release build; then
   echo "  ⚠️  Xcode CLI build failed, falling back to existing build…"
-}
+fi
 
 # Find the built .app in DerivedData
 XC_APP=$(
