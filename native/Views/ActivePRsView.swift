@@ -2,23 +2,23 @@ import SwiftUI
 
 struct ActivePRsView: View {
     let prs: [PullRequest]
+    let workflows: [WorkflowRun]
 
-    private func statusColor(for pr: PullRequest) -> Color {
-        if pr.isMerged { return .purple }
-        if pr.draft { return .gray }
-        switch pr.mergeableState {
-        case "blocked", "dirty", "unstable": return .red
-        default: return .green
-        }
+    private func workflows(for pr: PullRequest) -> [WorkflowRun] {
+        workflows.filter { $0.repo == pr.repo && $0.headBranch == pr.headBranch }
     }
 
-    private func statusLabel(for pr: PullRequest) -> String {
-        if pr.isMerged { return "MERGED" }
-        if pr.draft { return "DRAFT" }
-        switch pr.mergeableState {
-        case "blocked", "dirty", "unstable": return "FAIL"
-        default: return "READY"
-        }
+    private func status(for pr: PullRequest) -> (label: String, color: Color) {
+        if pr.isMerged { return ("MERGED", .purple) }
+        if pr.draft { return ("DRAFT", .gray) }
+
+        let prWorkflows = workflows(for: pr)
+        let running = prWorkflows.contains { $0.isRunning }
+        let failed = prWorkflows.contains { $0.status == "failure" }
+
+        if running { return ("WAITING", .orange) }
+        if failed { return ("FAIL", .red) }
+        return ("READY", .green)
     }
 
     var body: some View {
@@ -32,7 +32,8 @@ struct ActivePRsView: View {
 
             ScrollView {
                 ForEach(prs) { pr in
-                    Button {
+                    let s = status(for: pr)
+                    return Button {
                         NSWorkspace.shared.open(pr.prUrl)
                     } label: {
                         HStack(spacing: 8) {
@@ -49,26 +50,23 @@ struct ActivePRsView: View {
                                 .lineLimit(1)
                             }
                             Spacer()
-                            let label = statusLabel(for: pr)
-                            if !label.isEmpty {
-                                Text(label)
-                                    .font(.system(size: 8, weight: .bold))
-                                    .foregroundStyle(statusColor(for: pr))
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 2)
-                                    .background(statusColor(for: pr).opacity(0.2), in: RoundedRectangle(cornerRadius: 4))
-                            }
+                            Text(s.label)
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(s.color)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(s.color.opacity(0.2), in: RoundedRectangle(cornerRadius: 4))
                         }
+                        .background(s.color.opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(s.color.opacity(0.3), lineWidth: 1)
+                        )
                     }
                     .buttonStyle(.plain)
                     .cursor(.pointingHand)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
-                    .background(statusColor(for: pr).opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(statusColor(for: pr).opacity(0.3), lineWidth: 1)
-                    )
                 }
             }
             .scrollDisabled(prs.count < 5)

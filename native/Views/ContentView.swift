@@ -35,7 +35,7 @@ struct ContentView: View {
                 }
 
                 if isLoggedIn, !signalR.activePRs.isEmpty {
-                    ActivePRsView(prs: signalR.activePRs)
+                    ActivePRsView(prs: signalR.activePRs, workflows: signalR.recentWorkflows)
                     Divider()
                 }
 

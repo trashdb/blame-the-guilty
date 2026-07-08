@@ -22,6 +22,9 @@ public class WorkflowRun
     [MaxLength(100)]
     public string Actor { get; set; } = string.Empty;
 
+    [MaxLength(200)]
+    public string? HeadBranch { get; set; }
+
     public string? HtmlUrl { get; set; }
 
     [Required]

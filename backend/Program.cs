@@ -147,6 +147,9 @@ using (var scope = app.Services.CreateScope())
 
     // Add MergeableState column to existing PullRequestEvents table if missing
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "MergeableState" TEXT;"""); } catch { }
+
+    // Add HeadBranch column to existing WorkflowRuns table if missing
+    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "WorkflowRuns" ADD COLUMN "HeadBranch" TEXT;"""); } catch { }
 }
 
 app.UseCors("SignalR");

@@ -54,6 +54,7 @@ public class WorkflowsController : ControllerBase
             w.WorkflowName,
             w.Repo,
             w.Actor,
+            w.HeadBranch,
             w.Status,
             w.HtmlUrl,
             w.StartedAt,
@@ -116,6 +117,7 @@ public class WorkflowsController : ControllerBase
             WorkflowName = run.WorkflowName,
             Repo = run.Repo,
             Actor = run.Actor,
+            HeadBranch = run.HeadBranch,
             HtmlUrl = run.HtmlUrl,
             Status = "in_progress",
             StartedAt = DateTime.UtcNow
@@ -129,7 +131,7 @@ public class WorkflowsController : ControllerBase
             runId = newRun.RunId,
             workflowName = newRun.WorkflowName,
             repo = newRun.Repo,
-            branch = "",
+            branch = newRun.HeadBranch,
             actor = newRun.Actor,
             htmlUrl = newRun.HtmlUrl
         });

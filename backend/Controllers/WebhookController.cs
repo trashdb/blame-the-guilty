@@ -104,6 +104,7 @@ public class WebhookController : ControllerBase
             WorkflowName = name,
             Repo = repo,
             Actor = culprit.Login,
+            HeadBranch = branch,
             HtmlUrl = url,
             Status = "in_progress",
             StartedAt = startedAt
@@ -168,6 +169,7 @@ public class WebhookController : ControllerBase
                 WorkflowName = workflowName,
                 Repo = repoFullName,
                 Actor = culprit.Login,
+                HeadBranch = workflowRun.TryGetProperty("head_branch", out var hb) ? hb.GetString() : null,
                 HtmlUrl = workflowUrl,
                 Status = conclusion switch { "success" => "success", _ => "failure" },
                 StartedAt = DateTime.UtcNow

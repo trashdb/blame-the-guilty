@@ -7,6 +7,7 @@ private struct ApiWorkflowRun: Decodable {
     let workflowName: String?
     let repo: String
     let actor: String
+    let headBranch: String?
     let status: String
     let htmlUrl: String?
     let startedAt: Date
@@ -20,6 +21,7 @@ private struct ApiWorkflowRun: Decodable {
             workflowName: workflowName ?? "Workflow",
             repo: repo,
             actor: actor,
+            headBranch: headBranch,
             status: status,
             htmlUrl: htmlUrl ?? "",
             startedAt: startedAt,
@@ -147,6 +149,7 @@ class SignalRService: ObservableObject {
                         runId: run.runId,
                         workflowName: run.workflowName,
                         repo: run.repo, actor: run.actor,
+                        headBranch: run.headBranch,
                         status: "failure",
                         htmlUrl: run.htmlUrl, startedAt: run.startedAt,
                         targetGitHubIds: run.targetGitHubIds
@@ -238,6 +241,7 @@ class SignalRService: ObservableObject {
         let actor      = data["actor"] as? String ?? "someone"
         let htmlUrl    = data["htmlUrl"] as? String ?? ""
         let startedAt  = (data["startedAt"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) } ?? Date()
+        let branch     = data["branch"] as? String
 
         Task { @MainActor in
             runStatus = .running
@@ -245,7 +249,7 @@ class SignalRService: ObservableObject {
             let run = WorkflowRun(
                 id: UUID(), dbId: dbId,
                 runId: runId, workflowName: name, repo: repo,
-                actor: actor, status: "in_progress",
+                actor: actor, headBranch: branch, status: "in_progress",
                 htmlUrl: htmlUrl, startedAt: startedAt, targetGitHubIds: []
             )
 
@@ -280,6 +284,7 @@ class SignalRService: ObservableObject {
                 workflowName: name ?? "Workflow",
                 repo: repo,
                 actor: actor,
+                headBranch: existing?.headBranch,
                 status: succeeded ? "success" : "failure",
                 htmlUrl: htmlUrl ?? "https://github.com/\(repo)/actions/runs/\(runId)",
                 startedAt: originalStartedAt,
@@ -329,7 +334,7 @@ class SignalRService: ObservableObject {
                     id: old.id, dbId: old.dbId,
                     runId: old.runId,
                     workflowName: old.workflowName, repo: old.repo,
-                    actor: old.actor, status: old.status,
+                    actor: old.actor, headBranch: old.headBranch, status: old.status,
                     htmlUrl: old.htmlUrl, startedAt: old.startedAt,
                     targetGitHubIds: targetIds
                 )
@@ -340,7 +345,7 @@ class SignalRService: ObservableObject {
                     id: old.id, dbId: old.dbId,
                     runId: old.runId,
                     workflowName: old.workflowName, repo: old.repo,
-                    actor: old.actor, status: old.status,
+                    actor: old.actor, headBranch: old.headBranch, status: old.status,
                     htmlUrl: old.htmlUrl, startedAt: old.startedAt,
                     targetGitHubIds: targetIds
                 )
