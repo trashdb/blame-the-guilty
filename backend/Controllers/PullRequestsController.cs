@@ -41,10 +41,44 @@ public class PullRequestsController : ControllerBase
             })
             .ToListAsync();
 
+        // Fetch all workflow runs for these PRs' repos in one query
+        var repos = prs.Select(p => p.RepoFullName).Distinct().ToList();
+        var workflowRuns = new List<(string repo, string? branch, string status)>();
+        if (repos.Count != 0)
+        {
+            var raw = await _db.WorkflowRuns
+                .Where(w => w.HeadBranch != null && repos.Contains(w.Repo))
+                .Select(w => new { w.Repo, w.HeadBranch, w.Status })
+                .ToListAsync();
+            workflowRuns = raw.Select(r => (r.Repo, r.HeadBranch, r.Status)).ToList();
+        }
+
+        var workflowStatuses = new Dictionary<(string repo, string branch), string>();
+        var branchKeys = prs
+            .Where(p => !string.IsNullOrEmpty(p.HeadBranch))
+            .Select(p => (p.RepoFullName, p.HeadBranch!))
+            .Distinct();
+
+        foreach (var (repo, branch) in branchKeys)
+        {
+            var runs = workflowRuns.Where(w => w.repo == repo && w.branch == branch).ToList();
+            string ciStatus;
+            if (runs.Any(r => r.status == "in_progress"))
+                ciStatus = "waiting";
+            else if (runs.Any(r => r.status == "failure"))
+                ciStatus = "failed";
+            else
+                ciStatus = "ready";
+            workflowStatuses[(repo, branch)] = ciStatus;
+        }
+
         var results = new List<object>();
         foreach (var pr in prs)
         {
             var (draft, mergeableState) = await FetchPullRequestData(pr.PrNumber, pr.RepoFullName, token);
+            var ciStatus = pr.HeadBranch != null
+                && workflowStatuses.TryGetValue((pr.RepoFullName, pr.HeadBranch), out var st)
+                ? st : "ready";
             results.Add(new
             {
                 pr.PrNumber,
@@ -56,7 +90,8 @@ public class PullRequestsController : ControllerBase
                 pr.Status,
                 pr.Conclusion,
                 Draft = draft ?? pr.Draft,
-                MergeableState = mergeableState
+                MergeableState = mergeableState,
+                CiStatus = ciStatus
             });
         }
 

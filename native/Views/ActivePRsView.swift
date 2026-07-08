@@ -2,23 +2,15 @@ import SwiftUI
 
 struct ActivePRsView: View {
     let prs: [PullRequest]
-    let workflows: [WorkflowRun]
-
-    private func workflows(for pr: PullRequest) -> [WorkflowRun] {
-        workflows.filter { $0.repo == pr.repo && $0.headBranch == pr.headBranch }
-    }
 
     private func status(for pr: PullRequest) -> (label: String, color: Color) {
         if pr.isMerged { return ("MERGED", .purple) }
         if pr.draft { return ("DRAFT", .gray) }
-
-        let prWorkflows = workflows(for: pr)
-        let running = prWorkflows.contains { $0.isRunning }
-        let failed = prWorkflows.contains { $0.status == "failure" }
-
-        if running { return ("WAITING", .orange) }
-        if failed { return ("FAIL", .red) }
-        return ("READY", .green)
+        switch pr.ciStatus {
+        case "waiting": return ("WAITING", .orange)
+        case "failed":  return ("FAIL", .red)
+        default:        return ("READY", .green)
+        }
     }
 
     var body: some View {

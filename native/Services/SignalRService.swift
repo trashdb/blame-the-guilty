@@ -155,6 +155,7 @@ class SignalRService: ObservableObject {
                 let conclusion: String?
                 let draft: Bool?
                 let mergeableState: String?
+                let ciStatus: String?
             }
             if let prs = try? JSONDecoder().decode([ApiPR].self, from: data) {
                 await MainActor.run {
@@ -168,7 +169,8 @@ class SignalRService: ObservableObject {
                             status: pr.status ?? "open",
                             conclusion: pr.conclusion,
                             draft: pr.draft ?? false,
-                            mergeableState: pr.mergeableState
+                            mergeableState: pr.mergeableState,
+                            ciStatus: pr.ciStatus ?? "ready"
                         )
                     }
                 }
