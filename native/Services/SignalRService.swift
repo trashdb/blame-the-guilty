@@ -170,6 +170,7 @@ class SignalRService: ObservableObject {
 
     private func connectAndListen(gitHubId: Int64, username: String) async throws {
         await syncFromApi(gitHubId: gitHubId)
+        await syncPRsFromApi(gitHubId: gitHubId)
         let url = hubWebSocketUrl
         let ws = URLSession.shared.webSocketTask(with: url)
         ws.resume()
