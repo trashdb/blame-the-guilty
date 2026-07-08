@@ -3,11 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @ObservedObject var signalR: SignalRService
 
-    @State private var isLoggedIn = false
     @State private var keepSignedIn = true
-    @State private var username = ""
-    @State private var avatarUrl: String?
-    @State private var gitHubId: Int64 = 0
     @State private var isLoading = false
     @State private var loginError: String?
 
@@ -27,19 +23,19 @@ struct ContentView: View {
                     .lineLimit(2)
                 Divider()
 
-                if isLoggedIn {
-                    LoggedInCardView(username: username, avatarUrl: avatarUrl, onSignOut: logout)
+                if signalR.isLoggedIn {
+                    LoggedInCardView(username: signalR.username, avatarUrl: signalR.avatarUrl, onSignOut: logout)
                     KeepSignedInToggleView(isOn: $keepSignedIn)
                 } else {
                     SignInCardView(isLoading: isLoading, loginError: loginError, onSignIn: login)
                 }
 
-                if isLoggedIn, !signalR.activePRs.isEmpty {
+                if signalR.isLoggedIn, !signalR.activePRs.isEmpty {
                     ActivePRsView(prs: signalR.activePRs, workflows: signalR.recentWorkflows)
                     Divider()
                 }
 
-                if isLoggedIn {
+                if signalR.isLoggedIn {
                     if let event = signalR.lastEvent {
                         LastNotificationCardView(event: event)
                     } else {
@@ -75,9 +71,9 @@ struct ContentView: View {
                 .help("Send Test Notification")
                 .cursor(.pointingHand)
 
-                if isLoggedIn {
+                if signalR.isLoggedIn {
                     Button {
-                        WorkflowHistoryPanelManager.shared.show(signalR: signalR, gitHubId: gitHubId)
+                        WorkflowHistoryPanelManager.shared.show(signalR: signalR, gitHubId: signalR.userGitHubId)
                     } label: {
                         Image(systemName: "list.bullet.rectangle")
                             .font(.system(size: 13))
@@ -92,9 +88,9 @@ struct ContentView: View {
                 
                 
                 
-                if isLoggedIn, signalR.runningWorkflows.count > 0 {
+                if signalR.isLoggedIn, signalR.runningWorkflows.count > 0 {
                     Button {
-                        WorkflowHistoryPanelManager.shared.show(signalR: signalR, gitHubId: gitHubId)
+                        WorkflowHistoryPanelManager.shared.show(signalR: signalR, gitHubId: signalR.userGitHubId)
                     } label: {
                         HStack(spacing: 4) {
                             Circle()
@@ -136,7 +132,7 @@ struct ContentView: View {
         }
         .frame(width: 400, height: 630, alignment: .top)
         .background(.regularMaterial)
-        .onAppear { autoConnectIfNeeded() }
+        .onAppear { signalR.restoreSession() }
     }
 
     private func login() {
@@ -144,18 +140,7 @@ struct ContentView: View {
         loginError = nil
         Task {
             do {
-                let oauth = OAuthService()
-                let result = try await oauth.startLogin(backendUrl: backendUrl)
-                await MainActor.run {
-                    gitHubId = result.id
-                    username = result.username
-                    avatarUrl = result.avatarUrl
-                    isLoggedIn = true
-                    signalR.connect(gitHubId: result.id, username: result.username)
-                    if keepSignedIn {
-                        KeychainService.save(gitHubId: result.id, username: result.username, avatarUrl: result.avatarUrl)
-                    }
-                }
+                try await signalR.login(keepSignedIn: keepSignedIn)
             } catch {
                 await MainActor.run { loginError = "Login failed. Please try again." }
             }
@@ -164,22 +149,8 @@ struct ContentView: View {
     }
 
     private func logout() {
-        signalR.disconnect()
-        KeychainService.delete()
-        isLoggedIn = false
-        username = ""
-        avatarUrl = nil
-        gitHubId = 0
+        signalR.logout()
         loginError = nil
-    }
-
-    private func autoConnectIfNeeded() {
-        guard !isLoggedIn, let session = KeychainService.load() else { return }
-        gitHubId = session.gitHubId
-        username = session.username
-        avatarUrl = session.avatarUrl
-        isLoggedIn = true
-        signalR.connect(gitHubId: session.gitHubId, username: session.username)
     }
 
 }

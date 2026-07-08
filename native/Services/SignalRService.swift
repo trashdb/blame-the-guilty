@@ -36,6 +36,10 @@ enum RunStatus: Equatable {
 
 class SignalRService: ObservableObject {
     @Published var isConnected = false
+    @Published var isLoggedIn = false
+    @Published var username = ""
+    @Published var avatarUrl: String?
+    @Published var userGitHubId: Int64 = 0
     @Published var runStatus: RunStatus = .idle
     @Published var lastEvent: PunishmentEvent?
     @Published var runningWorkflows: [WorkflowRun] = []
@@ -48,6 +52,39 @@ class SignalRService: ObservableObject {
 
     init(baseUrl: String) {
         self.baseUrl = baseUrl
+    }
+
+    func restoreSession() {
+        guard let session = KeychainService.load() else { return }
+        userGitHubId = session.gitHubId
+        username = session.username
+        avatarUrl = session.avatarUrl
+        isLoggedIn = true
+        connect(gitHubId: session.gitHubId, username: session.username)
+    }
+
+    func login(keepSignedIn: Bool) async throws {
+        let oauth = OAuthService()
+        let result = try await oauth.startLogin(backendUrl: baseUrl)
+        await MainActor.run {
+            userGitHubId = result.id
+            username = result.username
+            avatarUrl = result.avatarUrl
+            isLoggedIn = true
+            connect(gitHubId: result.id, username: result.username)
+            if keepSignedIn {
+                KeychainService.save(gitHubId: result.id, username: result.username, avatarUrl: result.avatarUrl)
+            }
+        }
+    }
+
+    func logout() {
+        disconnect()
+        KeychainService.delete()
+        isLoggedIn = false
+        username = ""
+        avatarUrl = nil
+        userGitHubId = 0
     }
 
     func connect(gitHubId: Int64, username: String = "") {
