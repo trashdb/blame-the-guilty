@@ -41,11 +41,28 @@ public class WorkflowsController : ControllerBase
         [FromQuery] long gitHubId,
         [FromQuery] int limit = 20)
     {
-        var runs = await _db.WorkflowRuns
+        var myRuns = await _db.WorkflowRuns
             .Where(w => w.GitHubId == gitHubId && !IgnoredWorkflows.Contains(w.WorkflowName))
             .OrderByDescending(w => w.Id)
             .Take(limit)
             .ToListAsync();
+
+        var targetRuns = await _db.WorkflowRuns
+            .Where(w => w.GitHubId != gitHubId && w.TargetGitHubIds != null && !IgnoredWorkflows.Contains(w.WorkflowName))
+            .OrderByDescending(w => w.Id)
+            .Take(limit * 2)
+            .ToListAsync();
+
+        var filteredTargetRuns = targetRuns
+            .Where(w => DeserializeIds(w.TargetGitHubIds).Contains(gitHubId))
+            .Take(limit)
+            .ToList();
+
+        var runs = myRuns.Concat(filteredTargetRuns)
+            .DistinctBy(w => w.Id)
+            .OrderByDescending(w => w.Id)
+            .Take(limit)
+            .ToList();
 
         // Look up PRs matching each run's repo+branch
         var branchKeys = runs

@@ -19,8 +19,12 @@ builder.Services.AddHttpClient<GitHubOAuthService>();
 builder.Services.Configure<GitHubOAuthOptions>(
     builder.Configuration.GetSection("GitHubOAuth"));
 
-// Controllers
-builder.Services.AddControllers();
+// Controllers + JSON serialization
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new UtcDateTimeConverter());
+    });
 
 // CORS (for ngrok + WPF dev)
 builder.Services.AddCors(options =>

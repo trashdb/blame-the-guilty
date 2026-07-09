@@ -9,7 +9,7 @@ final class WorkflowHistoryPanelManager {
             let hostingController = NSHostingController(rootView: WorkflowHistoryView(signalR: signalR, gitHubId: gitHubId))
 
             panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 520, height: 500),
+                contentRect: NSRect(x: 0, y: 0, width: 600, height: 500),
                 styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
                 backing: .buffered,
                 defer: false

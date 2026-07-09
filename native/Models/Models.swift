@@ -2,6 +2,13 @@ import Foundation
 
 let backendUrl = "https://moonlike-silenced-sprung.ngrok-free.dev"
 
+func shortRepo(_ full: String) -> String {
+    if let slash = full.firstIndex(of: "/") {
+        return String(full[full.index(after: slash)...])
+    }
+    return full
+}
+
 struct PunishmentEvent {
     let culprit: String
     let repo: String
@@ -25,9 +32,15 @@ struct WorkflowRun: Identifiable, Codable {
     let status: String
     let htmlUrl: String
     let startedAt: Date
+    let completedAt: Date?
     let targetGitHubIds: [Int64]
 
     var isRunning: Bool { status == "in_progress" }
+
+    var duration: TimeInterval? {
+        guard let completedAt else { return nil }
+        return completedAt.timeIntervalSince(startedAt)
+    }
 }
 
 struct PullRequest: Identifiable {

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ActivePRsView: View {
     let prs: [PullRequest]
+    @State private var selectedPR: PullRequest?
 
     private func status(for pr: PullRequest) -> (label: String, color: Color) {
         if pr.isMerged { return ("MERGED", .purple) }
@@ -26,7 +27,7 @@ struct ActivePRsView: View {
                 ForEach(prs) { pr in
                     let s = status(for: pr)
                     return Button {
-                        NSWorkspace.shared.open(pr.prUrl)
+                        selectedPR = pr
                     } label: {
                         HStack(spacing: 8) {
                             VStack(alignment: .leading, spacing: 2) {
@@ -35,7 +36,7 @@ struct ActivePRsView: View {
                                     .foregroundStyle(Color(white: 0.85))
                                     .lineLimit(1)
                                 HStack(spacing: 0) {
-                                    Text(pr.repo).font(.system(size: 10)).foregroundStyle(.secondary)
+                                    Text(shortRepo(pr.repo)).font(.system(size: 10)).foregroundStyle(.secondary)
                                     Text(" → ").font(.system(size: 10)).foregroundStyle(.secondary)
                                     Text(pr.baseBranch).font(.system(size: 10, design: .monospaced)).foregroundStyle(.blue)
                                 }
@@ -59,7 +60,9 @@ struct ActivePRsView: View {
                     }
                     .buttonStyle(.plain)
                     .cursor(.pointingHand)
-                    
+                    .popover(item: $selectedPR) { pr in
+                        PRDetailView(pr: pr)
+                    }
                 }
             }
             .scrollDisabled(prs.count < 5)

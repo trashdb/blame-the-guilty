@@ -9,6 +9,7 @@
 /* Begin PBXFileReference section */
 		2C0847E92FFD0CBC007539F9 /* btg.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = btg.xcodeproj; sourceTree = "<group>"; };
 		2CF370BE2FFA808D002F6748 /* btg.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = btg.app; path = BlameTheGuilty.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		2CF5450E2FFF9AE4005B6DD1 /* btg.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = btg.xcodeproj; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -48,6 +49,11 @@
 			children = (
 				2CF370BE2FFA808D002F6748 /* btg.app */,
 			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		2CF545102FFF9AE4005B6DD1 /* Products */ = {
+			isa = PBXGroup;
 			name = Products;
 			sourceTree = "<group>";
 		};
@@ -107,6 +113,10 @@
 				{
 					ProductGroup = 2C0847EB2FFD0CBC007539F9 /* Products */;
 					ProjectRef = 2C0847E92FFD0CBC007539F9 /* btg.xcodeproj */;
+				},
+				{
+					ProductGroup = 2CF545102FFF9AE4005B6DD1 /* Products */;
+					ProjectRef = 2CF5450E2FFF9AE4005B6DD1 /* btg.xcodeproj */;
 				},
 			);
 			projectRoot = "";

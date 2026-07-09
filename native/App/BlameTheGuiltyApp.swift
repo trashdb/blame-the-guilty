@@ -1,8 +1,13 @@
+import ServiceManagement
 import SwiftUI
 
 @main
 struct BlameTheGuiltyApp: App {
     @StateObject private var signalR = SignalRService(baseUrl: backendUrl)
+
+    init() {
+        try? SMAppService.mainApp.register()
+    }
 
     var body: some Scene {
         MenuBarExtra {

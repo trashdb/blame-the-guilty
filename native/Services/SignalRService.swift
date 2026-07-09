@@ -31,6 +31,7 @@ private struct ApiWorkflowRun: Decodable {
             status: status,
             htmlUrl: htmlUrl ?? "",
             startedAt: startedAt,
+            completedAt: nil,
             targetGitHubIds: targetGitHubIds ?? []
         )
     }
@@ -130,7 +131,13 @@ class SignalRService: ObservableObject {
             withoutFrac.formatOptions = .withInternetDateTime
             decoder.dateDecodingStrategy = .custom { d in
                 let container = try d.singleValueContainer()
-                let str = try container.decode(String.self)
+                var str = try container.decode(String.self)
+                // Normalize: replace space separator with T, append Z if no timezone
+                str = str.replacingOccurrences(of: " ", with: "T")
+                if !str.contains("Z") && !str.contains("+") {
+                    // No timezone indicator — assume UTC
+                    str += "Z"
+                }
                 guard let date = withFrac.date(from: str) ?? withoutFrac.date(from: str) else {
                     throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid date: \(str)")
                 }
@@ -203,6 +210,7 @@ class SignalRService: ObservableObject {
                         prTitle: run.prTitle,
                         status: "failure",
                         htmlUrl: run.htmlUrl, startedAt: run.startedAt,
+                        completedAt: nil,
                         targetGitHubIds: run.targetGitHubIds
                     )
                 }
@@ -304,7 +312,7 @@ class SignalRService: ObservableObject {
                 actor: actor, headBranch: branch,
                 trigger: trigger, prNumber: nil, prTitle: nil,
                 status: "in_progress",
-                htmlUrl: htmlUrl, startedAt: startedAt, targetGitHubIds: []
+                htmlUrl: htmlUrl, startedAt: startedAt, completedAt: nil, targetGitHubIds: []
             )
 
             runningWorkflows.insert(run, at: 0)
@@ -333,6 +341,7 @@ class SignalRService: ObservableObject {
 
             let existing = recentWorkflows.first(where: { $0.runId == runId && $0.status == "in_progress" })
             let originalStartedAt = existing?.startedAt ?? Date()
+            let completedAt = Date()
             let completedRun = WorkflowRun(
                 id: UUID(), dbId: existing?.dbId,
                 runId: runId,
@@ -346,6 +355,7 @@ class SignalRService: ObservableObject {
                 status: succeeded ? "success" : "failure",
                 htmlUrl: htmlUrl ?? "https://github.com/\(repo)/actions/runs/\(runId)",
                 startedAt: originalStartedAt,
+                completedAt: completedAt,
                 targetGitHubIds: existing?.targetGitHubIds ?? []
             )
 
@@ -366,7 +376,7 @@ class SignalRService: ObservableObject {
                 )
                 showNotification(
                     title: "Workflow Failed",
-                    body: "\(wfName) failed for \(actor) in \(repo)",
+                    body: "\(wfName) failed for \(actor) in \(shortRepo(repo))",
                     subtitle: "Run #\(runId)",
                     actionURL: workflowURL
                 )
@@ -396,6 +406,7 @@ class SignalRService: ObservableObject {
                     trigger: old.trigger, prNumber: old.prNumber, prTitle: old.prTitle,
                     status: old.status,
                     htmlUrl: old.htmlUrl, startedAt: old.startedAt,
+                    completedAt: old.completedAt,
                     targetGitHubIds: targetIds
                 )
             }
@@ -409,6 +420,7 @@ class SignalRService: ObservableObject {
                     trigger: old.trigger, prNumber: old.prNumber, prTitle: old.prTitle,
                     status: old.status,
                     htmlUrl: old.htmlUrl, startedAt: old.startedAt,
+                    completedAt: old.completedAt,
                     targetGitHubIds: targetIds
                 )
             }

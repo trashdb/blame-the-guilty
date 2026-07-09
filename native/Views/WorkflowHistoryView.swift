@@ -37,7 +37,7 @@ struct WorkflowHistoryView: View {
             }
             .padding(24)
         }
-        .frame(width: 520, height: 500)
+        .frame(width: 600, height: 500)
     }
 }
 
@@ -109,7 +109,7 @@ struct WorkflowRunRow: View {
                         Text("·")
                             .foregroundStyle(.tertiary)
                     }
-                    Text(run.repo)
+                    Text(shortRepo(run.repo))
                         .font(.system(size: 10))
                         .foregroundStyle(.tertiary)
                     Text("·")
@@ -125,9 +125,15 @@ struct WorkflowRunRow: View {
                             .font(.system(size: 10))
                             .foregroundStyle(.purple)
                     }
-                    Text(run.startedAt, style: .relative)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
+                    if run.isRunning {
+                        Text(run.startedAt, style: .relative)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                    } else if let duration = run.duration {
+                        Text(durationString(from: duration))
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
@@ -327,6 +333,13 @@ struct WorkflowRunRow: View {
                 }
             }
         }.resume()
+    }
+
+    private func durationString(from interval: TimeInterval) -> String {
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.hour, .minute, .second]
+        formatter.unitsStyle = .abbreviated
+        return formatter.string(from: interval) ?? ""
     }
 
     private func saveTargets() {

@@ -32,7 +32,7 @@ struct LastNotificationCardView: View {
                     }
 
                     HStack(spacing: 4) {
-                        Text(event.repo)
+                        Text(shortRepo(event.repo))
                             .font(.system(size: 11))
                             .foregroundStyle(.tertiary)
                             .lineLimit(1)
