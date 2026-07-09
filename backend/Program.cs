@@ -169,6 +169,21 @@ using (var scope = app.Services.CreateScope())
 
     // Add IsIgnored column to existing WorkflowRuns table if missing
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "WorkflowRuns" ADD COLUMN "IsIgnored" INTEGER NOT NULL DEFAULT 0;"""); } catch { }
+
+    // Recover stuck runs: mark in_progress older than 24h as failure.
+    // Catches runs that were cancelled/superseded before the fix, or any
+    // future completions the webhook never delivered.
+    var cutoff = DateTime.UtcNow.AddHours(-24);
+    var stuck = db.WorkflowRuns.Count(w => w.Status == "in_progress" && w.StartedAt < cutoff);
+    if (stuck > 0)
+    {
+        db.Database.ExecuteSqlRaw("""
+            UPDATE "WorkflowRuns" SET "Status" = 'failure'
+            WHERE "Status" = 'in_progress' AND "StartedAt" < {0}
+            """, cutoff);
+        var log = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        log.LogInformation("Marked {Count} stale in_progress runs as failure", stuck);
+    }
 }
 
 app.UseCors("SignalR");
