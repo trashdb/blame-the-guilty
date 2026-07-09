@@ -68,15 +68,21 @@ class SignalRService: ObservableObject {
         username = session.username
         avatarUrl = session.avatarUrl
         isLoggedIn = true
-        // Try to refresh avatar from backend (fixes missing avatar after migration)
+        let gid = session.gitHubId
+
+        // Refresh workflows + avatar on every popover open
         Task {
-            if let fresh = await fetchMe(gitHubId: session.gitHubId), let url = fresh.avatarUrl {
+            await syncFromApi(gitHubId: gid)
+            await syncPRsFromApi(gitHubId: gid)
+
+            if let fresh = await fetchMe(gitHubId: gid), let url = fresh.avatarUrl {
                 await MainActor.run { avatarUrl = url }
-                KeychainService.save(gitHubId: session.gitHubId, username: session.username, avatarUrl: url)
+                KeychainService.save(gitHubId: gid, username: session.username, avatarUrl: url)
             }
         }
+
         guard task == nil else { return }
-        connect(gitHubId: session.gitHubId, username: session.username)
+        connect(gitHubId: gid, username: session.username)
     }
 
     private struct MeResponse: Decodable {
