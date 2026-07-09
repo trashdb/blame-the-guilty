@@ -142,6 +142,23 @@ public class WebhookController : ControllerBase
         _db.WorkflowRuns.Add(newRun);
         await _db.SaveChangesAsync();
 
+        // Mark previous in_progress runs for same repo+workflow+branch as failure
+        // (GitHub does not send completed webhooks for superseded runs)
+        if (branch != null)
+        {
+            var superseded = await _db.WorkflowRuns
+                .Where(w => w.Id != newRun.Id && w.Repo == repo && w.WorkflowName == name
+                    && w.HeadBranch == branch && w.Status == "in_progress")
+                .ToListAsync();
+            if (superseded.Count > 0)
+            {
+                foreach (var s in superseded)
+                    s.Status = "failure";
+                await _db.SaveChangesAsync();
+                _logger.LogInformation("Superseded {Count} previous run(s) for {Repo} {Name} on {Branch}", superseded.Count, repo, name, branch);
+            }
+        }
+
         // Notify via SignalR only for non-ignored workflows
         if (!isIgnored)
         {

@@ -184,6 +184,33 @@ using (var scope = app.Services.CreateScope())
         var log = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
         log.LogInformation("Marked {Count} stale in_progress runs as failure", stuck);
     }
+
+    // Mark superseded runs: any in_progress run that is NOT the latest for
+    // its (Repo, WorkflowName, HeadBranch) combo.  The older one was
+    // automatically cancelled by GitHub when a newer run started.
+    var superseded = db.Database.ExecuteSqlRaw("""
+        UPDATE "WorkflowRuns"
+        SET "Status" = 'failure'
+        WHERE "Id" IN (
+            SELECT w1."Id"
+            FROM "WorkflowRuns" w1
+            INNER JOIN (
+                SELECT "Repo", "WorkflowName", "HeadBranch", MAX("RunId") AS "MaxRunId"
+                FROM "WorkflowRuns"
+                WHERE "Status" = 'in_progress' AND "HeadBranch" IS NOT NULL
+                GROUP BY "Repo", "WorkflowName", "HeadBranch"
+            ) w2 ON w1."Repo" = w2."Repo"
+                AND w1."WorkflowName" = w2."WorkflowName"
+                AND w1."HeadBranch" = w2."HeadBranch"
+                AND w1."RunId" < w2."MaxRunId"
+            WHERE w1."Status" = 'in_progress'
+        )
+        """);
+    if (superseded > 0)
+    {
+        var log = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        log.LogInformation("Marked {Count} superseded in_progress runs as failure", superseded);
+    }
 }
 
 app.UseCors("SignalR");
