@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -20,6 +21,8 @@ public class WebhookController : ControllerBase
         "Verify ForgeRock Secrets"
     };
 
+    private static readonly ConcurrentQueue<WebhookLogEntry> _recentLogs = new();
+
     private readonly IHubContext<PunishmentHub> _hubContext;
     private readonly AppDbContext _db;
     private readonly ILogger<WebhookController> _logger;
@@ -34,18 +37,38 @@ public class WebhookController : ControllerBase
         _logger = logger;
     }
 
+    [HttpGet("logs")]
+    public IActionResult GetLogs([FromQuery] int limit = 30)
+    {
+        return Ok(_recentLogs.Reverse().Take(limit).ToList());
+    }
+
+    private static void LogWebhook(string eventType, string? action, string? repo, string? workflowName, string outcome, string? message = null)
+    {
+        _recentLogs.Enqueue(new WebhookLogEntry
+        {
+            EventType = eventType,
+            Action = action,
+            Repo = repo,
+            WorkflowName = workflowName,
+            Outcome = outcome,
+            Message = message,
+            OccurredAt = DateTime.UtcNow
+        });
+        while (_recentLogs.Count > 100)
+            _recentLogs.TryDequeue(out _);
+    }
+
     [HttpPost("github")]
     public async Task<IActionResult> HandleGitHubWebhook([FromBody] JsonElement payload)
     {
         var eventType = Request.Headers["X-GitHub-Event"].FirstOrDefault() ?? "";
 
-        return eventType switch
-        {
-            "workflow_run" => await HandleWorkflowRun(payload),
-            "check_suite" => await HandleCheckSuite(payload),
-            "pull_request" => await HandlePullRequest(payload),
-            _ => Ok($"Ignored: unsupported event '{eventType}'.")
-        };
+        if (eventType == "workflow_run") return await HandleWorkflowRun(payload);
+        if (eventType == "check_suite") return await HandleCheckSuite(payload);
+        if (eventType == "pull_request") return await HandlePullRequest(payload);
+        LogWebhook(eventType, null, TryGetRepo(payload), null, "ignored", "Unsupported event type");
+        return Ok($"Ignored: unsupported event '{eventType}'.");
     }
 
     // ─── workflow_run: dispatch by action ──────────────────────────────────
@@ -53,25 +76,32 @@ public class WebhookController : ControllerBase
     private async Task<IActionResult> HandleWorkflowRun(JsonElement payload)
     {
         var action = payload.GetProperty("action").GetString();
+        var repo = TryGetRepo(payload);
+        var name = TryGetWorkflowName(payload);
 
-        return action switch
-        {
-            "in_progress" => await HandleWorkflowRunInProgress(payload),
-            "requested" => await HandleWorkflowRunInProgress(payload),
-            "completed" => await HandleWorkflowRunCompleted(payload),
-            _ => Ok($"Ignored: workflow_run action '{action}'.")
-        };
+        if (action == "in_progress" || action == "requested") return await HandleWorkflowRunInProgress(payload);
+        if (action == "completed") return await HandleWorkflowRunCompleted(payload);
+        LogWebhook("workflow_run", action, repo, name, "ignored", $"Unsupported action '{action}'");
+        return Ok($"Ignored: workflow_run action '{action}'.");
     }
 
     private async Task<IActionResult> HandleWorkflowRunInProgress(JsonElement payload)
     {
         var run = payload.GetProperty("workflow_run");
         var culprit = ResolveWorkflowCulprit(payload);
-        if (culprit == null) return Ok("Could not resolve actor.");
+        if (culprit == null)
+        {
+            LogWebhook("workflow_run", "in_progress", TryGetRepo(payload), TryGetWorkflowName(payload), "ignored", "Could not resolve actor");
+            return Ok("Could not resolve actor.");
+        }
 
         var repo = payload.GetProperty("repository").GetProperty("full_name").GetString() ?? "unknown";
         var name = run.TryGetProperty("name", out var wn) ? wn.GetString() : "Workflow";
-        if (IgnoredWorkflows.Contains(name)) return Ok($"Ignored workflow '{name}'.");
+        if (IgnoredWorkflows.Contains(name))
+        {
+            LogWebhook("workflow_run", "in_progress", repo, name, "ignored", "Ignored workflow name");
+            return Ok($"Ignored workflow '{name}'.");
+        }
         var branch = run.TryGetProperty("head_branch", out var hb) ? hb.GetString() : null;
         var url = run.TryGetProperty("html_url", out var hu) ? hu.GetString() : null;
         var runId = run.GetProperty("id").GetInt64();
@@ -127,6 +157,8 @@ public class WebhookController : ControllerBase
 
         await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
 
+        var actor = culprit?.Login ?? "unknown";
+        LogWebhook("workflow_run", "in_progress", repo, name, "processed", $"actor={actor}, runId={runId}");
         return Ok(new { runId });
     }
 
@@ -146,7 +178,10 @@ public class WebhookController : ControllerBase
         var runId = workflowRun.GetProperty("id").GetInt64();
         var workflowName = workflowRun.TryGetProperty("name", out var wn) ? wn.GetString() : null;
         if (workflowName != null && IgnoredWorkflows.Contains(workflowName))
+        {
+            LogWebhook("workflow_run", "completed", repoFullName, workflowName, "ignored", "Ignored workflow name");
             return Ok($"Ignored workflow '{workflowName}'.");
+        }
         var workflowUrl = workflowRun.TryGetProperty("html_url", out var wu) ? wu.GetString() : null;
 
         // Update the latest in_progress row for this runId
@@ -214,11 +249,15 @@ public class WebhookController : ControllerBase
                 }
             }
 
+            LogWebhook("workflow_run", "completed", repoFullName, workflowName, "processed", $"conclusion={conclusion}, notified");
             return Ok(new { runId, conclusion });
         }
 
         if (conclusion != "failure")
+        {
+            LogWebhook("workflow_run", "completed", repoFullName, workflowName, "ignored", $"conclusion={conclusion}");
             return Ok("Ignored: conclusion is not 'failure'.");
+        }
 
         // Save punishment event (always)
         var historyEvent = new PunishmentEvent
@@ -250,6 +289,7 @@ public class WebhookController : ControllerBase
             }
         }
 
+        LogWebhook("workflow_run", "completed", repoFullName, workflowName, "processed", $"conclusion={conclusion}, failure handled");
         return Ok(new { runId, conclusion });
     }
 
@@ -310,13 +350,12 @@ public class WebhookController : ControllerBase
     private async Task<IActionResult> HandleCheckSuite(JsonElement payload)
     {
         var action = payload.GetProperty("action").GetString();
+        var repo = TryGetRepo(payload);
 
-        return action switch
-        {
-            "requested" or "rerequested" => await HandleCheckSuiteRequested(payload),
-            "completed" => await HandleCheckSuiteCompleted(payload),
-            _ => Ok($"Ignored: check_suite action '{action}'.")
-        };
+        if (action == "requested" || action == "rerequested") return await HandleCheckSuiteRequested(payload);
+        if (action == "completed") return await HandleCheckSuiteCompleted(payload);
+        LogWebhook("check_suite", action, repo, null, "ignored", $"Unsupported action '{action}'");
+        return Ok($"Ignored: check_suite action '{action}'.");
     }
 
     private async Task<IActionResult> HandleCheckSuiteRequested(JsonElement payload)
@@ -423,14 +462,12 @@ public class WebhookController : ControllerBase
         var authorId = pr.GetProperty("user").TryGetProperty("id", out var aid) ? aid.GetInt64() : (long?)null;
         var draft = pr.TryGetProperty("draft", out var d) && d.GetBoolean();
 
-        return action switch
-        {
-            "opened" => await HandlePullRequestOpened(prNumber, title, htmlUrl, repo, baseBranch, headBranch, authorLogin, authorId, draft),
-            "ready_for_review" => await HandlePullRequestReadyForReview(prNumber, repo),
-            "converted_to_draft" => await HandlePullRequestConvertedToDraft(prNumber, repo),
-            "closed" => await HandlePullRequestClosed(prNumber, title, htmlUrl, repo, baseBranch, headBranch, authorLogin, authorId, pr),
-            _ => Ok($"Ignored: pull_request action '{action}'.")
-        };
+        if (action == "opened") return await HandlePullRequestOpened(prNumber, title, htmlUrl, repo, baseBranch, headBranch, authorLogin, authorId, draft);
+        if (action == "ready_for_review") return await HandlePullRequestReadyForReview(prNumber, repo);
+        if (action == "converted_to_draft") return await HandlePullRequestConvertedToDraft(prNumber, repo);
+        if (action == "closed") return await HandlePullRequestClosed(prNumber, title, htmlUrl, repo, baseBranch, headBranch, authorLogin, authorId, pr);
+        LogWebhook("pull_request", action, repo, null, "ignored", $"Unsupported action '{action}'");
+        return Ok($"Ignored: pull_request action '{action}'.");
     }
 
     private async Task<IActionResult> HandlePullRequestOpened(
@@ -566,6 +603,33 @@ public class WebhookController : ControllerBase
     {
         return await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubUsername == login);
     }
+
+    private static string? TryGetRepo(JsonElement payload)
+    {
+        if (payload.TryGetProperty("repository", out var repo) &&
+            repo.TryGetProperty("full_name", out var name))
+            return name.GetString();
+        return null;
+    }
+
+    private static string? TryGetWorkflowName(JsonElement payload)
+    {
+        if (payload.TryGetProperty("workflow_run", out var run) &&
+            run.TryGetProperty("name", out var name))
+            return name.GetString();
+        return null;
+    }
+}
+
+public record WebhookLogEntry
+{
+    public string EventType { get; init; } = "";
+    public string? Action { get; init; }
+    public string? Repo { get; init; }
+    public string? WorkflowName { get; init; }
+    public string Outcome { get; init; } = "";
+    public string? Message { get; init; }
+    public DateTime OccurredAt { get; init; }
 }
 
 internal record CulpritInfo(string Login, long? Id);

@@ -188,6 +188,78 @@ public class WorkflowsController : ControllerBase
         return Ok(new { rerun = true });
     }
 
+    [HttpPost("sync-active")]
+    public async Task<IActionResult> SyncActiveWorkflows([FromQuery] long gitHubId)
+    {
+        var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
+        var token = user?.AccessToken ?? _configuration["GitHub:PatToken"];
+        if (string.IsNullOrEmpty(token))
+            return Unauthorized("No access token available.");
+
+        var repos = await _db.PullRequestEvents
+            .Where(e => e.Status == "open")
+            .Select(e => e.RepoFullName)
+            .Distinct()
+            .ToListAsync();
+
+        if (repos.Count == 0)
+            return Ok(new { synced = 0, repos = 0, message = "No active PRs found." });
+
+        var client = new HttpClient();
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("BlameTheGuilty");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var newCount = 0;
+        foreach (var repo in repos)
+        {
+            var url = $"https://api.github.com/repos/{repo}/actions/runs?status=in_progress&per_page=10";
+            var response = await client.GetAsync(url);
+            if (!response.IsSuccessStatusCode) continue;
+
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            foreach (var run in doc.RootElement.GetProperty("workflow_runs").EnumerateArray())
+            {
+                var runId = run.GetProperty("id").GetInt64();
+                var name = run.TryGetProperty("name", out var wn) ? wn.GetString() : "Workflow";
+                if (IgnoredWorkflows.Contains(name)) continue;
+
+                var exists = await _db.WorkflowRuns.AnyAsync(w => w.RunId == runId && w.Status == "in_progress");
+                if (exists) continue;
+
+                var actor = run.TryGetProperty("actor", out var act)
+                    ? act.GetProperty("login").GetString()
+                    : "unknown";
+                var branch = run.TryGetProperty("head_branch", out var hb) ? hb.GetString() : null;
+                var htmlUrl = run.TryGetProperty("html_url", out var hu) ? hu.GetString() : null;
+                var startedAt = run.TryGetProperty("run_started_at", out var rsa)
+                    ? rsa.GetDateTime()
+                    : DateTime.UtcNow;
+                var trigger = run.TryGetProperty("event", out var ev) ? ev.GetString() : null;
+
+                _db.WorkflowRuns.Add(new WorkflowRun
+                {
+                    RunId = runId,
+                    GitHubId = gitHubId,
+                    WorkflowName = name,
+                    Repo = repo,
+                    Actor = actor,
+                    HeadBranch = branch,
+                    Trigger = trigger,
+                    HtmlUrl = htmlUrl,
+                    Status = "in_progress",
+                    StartedAt = startedAt
+                });
+                newCount++;
+            }
+        }
+
+        if (newCount > 0)
+            await _db.SaveChangesAsync();
+
+        return Ok(new { synced = newCount, repos = repos.Count });
+    }
+
     private static string? SerializeIds(long[]? ids) =>
         ids is { Length: > 0 } ? JsonSerializer.Serialize(ids) : null;
 

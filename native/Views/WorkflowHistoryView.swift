@@ -76,62 +76,65 @@ struct WorkflowRunRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             Image(systemName: statusIcon)
-                .font(.system(size: 14))
+                .font(.system(size: 16))
                 .foregroundStyle(statusColor)
-                .frame(width: 18)
+                .frame(width: 20)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(run.workflowName)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color(white: 0.85))
-                    .lineLimit(1)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color(white: 0.9))
 
-                HStack(spacing: 4) {
-                    if let prNumber = run.prNumber {
+                if let prNumber = run.prNumber {
+                    HStack(spacing: 4) {
                         Text("PR #\(prNumber)")
-                            .font(.system(size: 10, weight: .medium))
+                            .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.blue)
                         if let prTitle = run.prTitle {
                             Text(prTitle)
-                                .font(.system(size: 10))
+                                .font(.system(size: 11))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
-                        Text("·")
-                            .foregroundStyle(.tertiary)
                     }
+                }
+
+                HStack(spacing: 6) {
                     if let trigger = run.trigger {
                         Text(trigger.replacingOccurrences(of: "_", with: " "))
-                            .font(.system(size: 10))
+                            .font(.system(size: 11))
                             .foregroundStyle(.tertiary)
                         Text("·")
                             .foregroundStyle(.tertiary)
                     }
                     Text(shortRepo(run.repo))
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                     Text("·")
                         .foregroundStyle(.tertiary)
                     Text("@\(run.actor)")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
-                    Text("·")
-                        .foregroundStyle(.tertiary)
+                }
+
+                HStack(spacing: 6) {
                     if !run.targetGitHubIds.isEmpty {
                         let names = run.targetGitHubIds.compactMap { userIdToLogin[$0] }
                         Text("→ \(names.joined(separator: ", "))")
-                            .font(.system(size: 10))
+                            .font(.system(size: 11))
                             .foregroundStyle(.purple)
+                        Text("·")
+                            .foregroundStyle(.tertiary)
                     }
                     if run.isRunning {
                         Text(run.startedAt, style: .relative)
-                            .font(.system(size: 10))
+                            .font(.system(size: 11))
                             .foregroundStyle(.tertiary)
                     } else if let duration = run.duration {
                         Text(durationString(from: duration))
-                            .font(.system(size: 10, design: .monospaced))
+                            .font(.system(size: 11, design: .monospaced))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -139,7 +142,7 @@ struct WorkflowRunRow: View {
 
             Spacer()
 
-            HStack(spacing: 4) {
+            VStack(spacing: 4) {
                 if run.isRunning {
                     Button {
                         loadUsers()
@@ -147,7 +150,7 @@ struct WorkflowRunRow: View {
                         showTargetPicker.toggle()
                     } label: {
                         Image(systemName: run.targetGitHubIds.isEmpty ? "person.badge.plus" : "person.fill.badge.plus")
-                            .font(.system(size: 10))
+                            .font(.system(size: 11))
                             .foregroundStyle(.purple)
                             .padding(6)
                             .background(.purple.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
@@ -168,10 +171,10 @@ struct WorkflowRunRow: View {
                             if isRerunning {
                                 ProgressView()
                                     .scaleEffect(0.6)
-                                    .frame(width: 10, height: 10)
+                                    .frame(width: 11, height: 11)
                             } else {
                                 Image(systemName: "arrow.clockwise")
-                                    .font(.system(size: 10))
+                                    .font(.system(size: 11))
                             }
                         }
                         .foregroundStyle(.blue)
@@ -189,7 +192,7 @@ struct WorkflowRunRow: View {
                         NSWorkspace.shared.open(url)
                     } label: {
                         Image(systemName: "arrow.up.right")
-                            .font(.system(size: 11))
+                            .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                             .padding(6)
                             .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
@@ -199,8 +202,8 @@ struct WorkflowRunRow: View {
                 }
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
         .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)

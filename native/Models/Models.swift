@@ -62,6 +62,21 @@ struct PullRequest: Identifiable {
     var isMerged: Bool { status == "merged" }
 }
 
+struct WebhookLogEntry: Decodable, Identifiable {
+    let id = UUID()
+    let eventType: String
+    let action: String?
+    let repo: String?
+    let workflowName: String?
+    let outcome: String
+    let message: String?
+    let occurredAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case eventType, action, repo, workflowName, outcome, message, occurredAt
+    }
+}
+
 struct GitHubUserInfo: Decodable, Identifiable {
     let gitHubId: Int64
     let login: String

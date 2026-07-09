@@ -427,6 +427,23 @@ class SignalRService: ObservableObject {
         }
     }
 
+    func syncActiveWorkflows(gitHubId: Int64) async -> Int {
+        guard let url = URL(string: "\(baseUrl)/api/workflows/sync-active?gitHubId=\(gitHubId)") else { return 0 }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        do {
+            let (data, _) = try await URLSession.shared.data(for: request)
+            struct SyncResult: Decodable { let synced: Int }
+            if let result = try? JSONDecoder().decode(SyncResult.self, from: data) {
+                if result.synced > 0 {
+                    await syncFromApi(gitHubId: gitHubId)
+                }
+                return result.synced
+            }
+        } catch {}
+        return 0
+    }
+
     func disconnect() {
         pollTask?.cancel()
         pollTask = nil

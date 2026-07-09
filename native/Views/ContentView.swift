@@ -53,6 +53,31 @@ struct ContentView: View {
             Divider()
 
             HStack {
+                if signalR.isLoggedIn {
+                    Button {
+                        Task {
+                            let n = await signalR.syncActiveWorkflows(gitHubId: signalR.userGitHubId)
+                            if n > 0 {
+                                showNotification(
+                                    title: "Workflows Synced",
+                                    body: "\(n) new running workflow\(n == 1 ? "" : "s") found via GitHub API",
+                                    subtitle: nil,
+                                    actionURL: nil
+                                )
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .padding(6)
+                            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Sync active workflows from GitHub API")
+                    .cursor(.pointingHand)
+                }
+
                 Button {
                     showNotification(
                         title: "Blame the Guilty",
@@ -85,9 +110,22 @@ struct ContentView: View {
                     .help("Workflow History")
                     .cursor(.pointingHand)
                 }
-                
-                
-                
+
+                if signalR.isLoggedIn {
+                    Button {
+                        WebhookLogPanelManager.shared.show(gitHubId: signalR.userGitHubId)
+                    } label: {
+                        Image(systemName: "antenna.radiowaves.left.and.right")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .padding(6)
+                            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Webhook Event Log (debug)")
+                    .cursor(.pointingHand)
+                }
+
                 if signalR.isLoggedIn, signalR.runningWorkflows.count > 0 {
                     Button {
                         WorkflowHistoryPanelManager.shared.show(signalR: signalR, gitHubId: signalR.userGitHubId)
