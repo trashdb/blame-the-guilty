@@ -187,16 +187,17 @@ public class WebhookController : ControllerBase
             .Where(w => w.RunId == runId && w.Status == "in_progress")
             .OrderByDescending(w => w.Id)
             .FirstOrDefaultAsync();
+        var isTerminal = conclusion is "success" or "failure" or "cancelled" or "timed_out" or "stale" or "action_required" or "skipped" or "neutral";
+        var dbStatus = isTerminal
+            ? conclusion == "success" ? "success" : "failure"
+            : (string?)null;
+
         if (dbRun != null)
         {
-            dbRun.Status = conclusion switch
-            {
-                "success" => "success",
-                "failure" => "failure",
-                _ => dbRun.Status
-            };
+            if (dbStatus != null)
+                dbRun.Status = dbStatus;
         }
-        else if (conclusion == "success" || conclusion == "failure")
+        else if (isTerminal)
         {
             var gitHubId = culprit.Id ?? (await FindUserByLogin(culprit.Login))?.GitHubId;
             _db.WorkflowRuns.Add(new WorkflowRun
@@ -209,7 +210,7 @@ public class WebhookController : ControllerBase
                 HeadBranch = workflowRun.TryGetProperty("head_branch", out var hb) ? hb.GetString() : null,
                 Trigger = workflowRun.TryGetProperty("event", out var ev) ? ev.GetString() : null,
                 HtmlUrl = workflowUrl,
-                Status = conclusion switch { "success" => "success", _ => "failure" },
+                Status = dbStatus ?? "failure",
                 StartedAt = DateTime.UtcNow,
                 IsIgnored = isIgnored
             });
@@ -263,10 +264,10 @@ public class WebhookController : ControllerBase
             return Ok(new { runId, conclusion });
         }
 
-        if (conclusion != "failure")
+        if (conclusion is "cancelled" or "timed_out" or "stale" or "action_required" or "skipped" or "neutral")
         {
-            LogWebhook("workflow_run", "completed", repoFullName, workflowName, "ignored", $"conclusion={conclusion}");
-            return Ok("Ignored: conclusion is not 'failure'.");
+            LogWebhook("workflow_run", "completed", repoFullName, workflowName, "processed", $"conclusion={conclusion}, no punishment");
+            return Ok(new { runId, conclusion });
         }
 
         // Save punishment event (always)
