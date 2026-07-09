@@ -38,4 +38,6 @@ public class WorkflowRun
 
     /// <summary>JSON array of GitHub user IDs, e.g. "[99991,99992]"</summary>
     public string? TargetGitHubIds { get; set; }
+
+    public bool IsIgnored { get; set; }
 }

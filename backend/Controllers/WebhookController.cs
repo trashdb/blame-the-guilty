@@ -98,11 +98,7 @@ public class WebhookController : ControllerBase
 
         var repo = payload.GetProperty("repository").GetProperty("full_name").GetString() ?? "unknown";
         var name = run.TryGetProperty("name", out var wn) ? wn.GetString() : "Workflow";
-        if (IgnoredWorkflows.Contains(name))
-        {
-            LogWebhook("workflow_run", "in_progress", repo, name, "ignored", "Ignored workflow name");
-            return Ok($"Ignored workflow '{name}'.");
-        }
+        var isIgnored = IgnoredWorkflows.Contains(name);
         var branch = run.TryGetProperty("head_branch", out var hb) ? hb.GetString() : null;
         var url = run.TryGetProperty("html_url", out var hu) ? hu.GetString() : null;
         var runId = run.GetProperty("id").GetInt64();
@@ -140,26 +136,31 @@ public class WebhookController : ControllerBase
             Trigger = trigger,
             HtmlUrl = url,
             Status = "in_progress",
-            StartedAt = startedAt
+            StartedAt = startedAt,
+            IsIgnored = isIgnored
         };
         _db.WorkflowRuns.Add(newRun);
         await _db.SaveChangesAsync();
 
-        // Notify via SignalR only if user is connected
-        var user = await FindConnectedUser(culprit.Login, culprit.Id);
-        if (user != null)
+        // Notify via SignalR only for non-ignored workflows
+        if (!isIgnored)
         {
-            await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("WorkflowRunStarted", new
+            var user = await FindConnectedUser(culprit.Login, culprit.Id);
+            if (user != null)
             {
-                id = newRun.Id, runId, workflowName = name, repo, branch, trigger, actor = culprit.Login, htmlUrl = url
-            });
-            _logger.LogInformation("Running workflow {RunId} notified to {Login}", runId, culprit.Login);
+                await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("WorkflowRunStarted", new
+                {
+                    id = newRun.Id, runId, workflowName = name, repo, branch, trigger, actor = culprit.Login, htmlUrl = url
+                });
+                _logger.LogInformation("Running workflow {RunId} notified to {Login}", runId, culprit.Login);
+            }
         }
 
+        // Always notify PR update so ciStatus refreshes even for ignored workflows
         await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
 
         var actor = culprit?.Login ?? "unknown";
-        LogWebhook("workflow_run", "in_progress", repo, name, "processed", $"actor={actor}, runId={runId}");
+        LogWebhook("workflow_run", "in_progress", repo, name, isIgnored ? "ignored" : "processed", $"actor={actor}, runId={runId}");
         return Ok(new { runId });
     }
 
@@ -178,11 +179,7 @@ public class WebhookController : ControllerBase
         var repoFullName = payload.GetProperty("repository").GetProperty("full_name").GetString() ?? "unknown";
         var runId = workflowRun.GetProperty("id").GetInt64();
         var workflowName = workflowRun.TryGetProperty("name", out var wn) ? wn.GetString() : null;
-        if (workflowName != null && IgnoredWorkflows.Contains(workflowName))
-        {
-            LogWebhook("workflow_run", "completed", repoFullName, workflowName, "ignored", "Ignored workflow name");
-            return Ok($"Ignored workflow '{workflowName}'.");
-        }
+        var isIgnored = workflowName != null && IgnoredWorkflows.Contains(workflowName);
         var workflowUrl = workflowRun.TryGetProperty("html_url", out var wu) ? wu.GetString() : null;
 
         // Update the latest in_progress row for this runId
@@ -213,12 +210,24 @@ public class WebhookController : ControllerBase
                 Trigger = workflowRun.TryGetProperty("event", out var ev) ? ev.GetString() : null,
                 HtmlUrl = workflowUrl,
                 Status = conclusion switch { "success" => "success", _ => "failure" },
-                StartedAt = DateTime.UtcNow
+                StartedAt = DateTime.UtcNow,
+                IsIgnored = isIgnored
             });
         }
+
+        // Mark existing run as ignored if it was matched
+        if (dbRun != null)
+        {
+            dbRun.IsIgnored = isIgnored;
+        }
+
         await _db.SaveChangesAsync();
 
+        // Always notify PR update so ciStatus refreshes for ignored workflows too
         await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
+
+        // Skip SignalR completion notifications for ignored workflows
+        if (isIgnored) return Ok(new { runId });
 
         // Notify both the culprit and the target user (if set) via SignalR
         async Task NotifyCompleted(long gitHubId, bool succeeded)

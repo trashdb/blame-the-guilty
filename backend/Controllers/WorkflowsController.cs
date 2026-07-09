@@ -42,13 +42,13 @@ public class WorkflowsController : ControllerBase
         [FromQuery] int limit = 20)
     {
         var myRuns = await _db.WorkflowRuns
-            .Where(w => w.GitHubId == gitHubId && !IgnoredWorkflows.Contains(w.WorkflowName))
+            .Where(w => w.GitHubId == gitHubId && !w.IsIgnored)
             .OrderByDescending(w => w.Id)
             .Take(limit)
             .ToListAsync();
 
         var targetRuns = await _db.WorkflowRuns
-            .Where(w => w.GitHubId != gitHubId && w.TargetGitHubIds != null && !IgnoredWorkflows.Contains(w.WorkflowName))
+            .Where(w => w.GitHubId != gitHubId && w.TargetGitHubIds != null && !w.IsIgnored)
             .OrderByDescending(w => w.Id)
             .Take(limit * 2)
             .ToListAsync();
@@ -222,7 +222,7 @@ public class WorkflowsController : ControllerBase
             {
                 var runId = run.GetProperty("id").GetInt64();
                 var name = run.TryGetProperty("name", out var wn) ? wn.GetString() : "Workflow";
-                if (IgnoredWorkflows.Contains(name)) continue;
+                var isIgnored = IgnoredWorkflows.Contains(name);
 
                 var exists = await _db.WorkflowRuns.AnyAsync(w => w.RunId == runId && w.Status == "in_progress");
                 if (exists) continue;
@@ -248,7 +248,8 @@ public class WorkflowsController : ControllerBase
                     Trigger = trigger,
                     HtmlUrl = htmlUrl,
                     Status = "in_progress",
-                    StartedAt = startedAt
+                    StartedAt = startedAt,
+                    IsIgnored = isIgnored
                 });
                 newCount++;
             }

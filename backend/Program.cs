@@ -166,6 +166,9 @@ using (var scope = app.Services.CreateScope())
 
     // Add AvatarUrl column to existing GitHubUsers table if missing
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "GitHubUsers" ADD COLUMN "AvatarUrl" TEXT;"""); } catch { }
+
+    // Add IsIgnored column to existing WorkflowRuns table if missing
+    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "WorkflowRuns" ADD COLUMN "IsIgnored" INTEGER NOT NULL DEFAULT 0;"""); } catch { }
 }
 
 app.UseCors("SignalR");
