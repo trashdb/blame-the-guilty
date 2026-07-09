@@ -12,10 +12,12 @@ public class PullRequestsController : ControllerBase
 {
     private static readonly HttpClient _githubClient = new();
     private readonly AppDbContext _db;
+    private readonly IConfiguration _configuration;
 
-    public PullRequestsController(AppDbContext db)
+    public PullRequestsController(AppDbContext db, IConfiguration configuration)
     {
         _db = db;
+        _configuration = configuration;
     }
 
     [HttpGet("active")]
@@ -96,6 +98,76 @@ public class PullRequestsController : ControllerBase
         }
 
         return Ok(results);
+    }
+
+    [HttpGet("{prNumber}/detail")]
+    public async Task<IActionResult> GetDetail(long prNumber, [FromQuery] string repo, [FromQuery] long gitHubId)
+    {
+        var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
+        var token = user?.AccessToken ?? _configuration["GitHub:PatToken"];
+
+        var prEvent = await _db.PullRequestEvents
+            .Where(e => e.PrNumber == prNumber && e.RepoFullName == repo)
+            .OrderByDescending(e => e.Id)
+            .FirstOrDefaultAsync();
+
+        int? behindBy = null, aheadBy = null;
+        string? mergeableState = null;
+
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get,
+                $"https://api.github.com/repos/{repo}/pulls/{prNumber}");
+            request.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await _githubClient.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                var data = JsonSerializer.Deserialize<JsonElement>(content);
+
+                if (data.TryGetProperty("mergeable_state", out var ms))
+                    mergeableState = ms.GetString();
+
+                var head = data.GetProperty("head").GetProperty("sha").GetString();
+                var baseSha = data.GetProperty("base").GetProperty("sha").GetString();
+
+                if (head != null && baseSha != null)
+                {
+                    var compareReq = new HttpRequestMessage(HttpMethod.Get,
+                        $"https://api.github.com/repos/{repo}/compare/{baseSha}...{head}");
+                    compareReq.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+                    if (!string.IsNullOrEmpty(token))
+                        compareReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+                    var compareResp = await _githubClient.SendAsync(compareReq);
+                    if (compareResp.IsSuccessStatusCode)
+                    {
+                        var compareContent = await compareResp.Content.ReadAsStringAsync();
+                        var compareData = JsonSerializer.Deserialize<JsonElement>(compareContent);
+                        if (compareData.TryGetProperty("behind_by", out var bb)) behindBy = bb.GetInt32();
+                        if (compareData.TryGetProperty("ahead_by", out var ab)) aheadBy = ab.GetInt32();
+                    }
+                }
+            }
+        }
+        catch { }
+
+        return Ok(new
+        {
+            prNumber,
+            repo,
+            mergeableState,
+            behindBy,
+            aheadBy,
+            title = prEvent?.Title,
+            headBranch = prEvent?.HeadBranch,
+            baseBranch = prEvent?.BaseBranch,
+            status = prEvent?.Status,
+            draft = prEvent?.Draft ?? false
+        });
     }
 
     private async Task<(bool? draft, string? mergeableState)> FetchPullRequestData(long prNumber, string repoFullName, string? token)
