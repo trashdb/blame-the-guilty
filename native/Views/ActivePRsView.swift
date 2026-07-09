@@ -11,6 +11,7 @@ struct ActivePRsView: View {
         switch pr.ciStatus {
         case "waiting": return ("WAITING", .orange)
         case "failed":  return ("FAIL", .red)
+        case "review":  return ("REVIEW", .blue)
         default:        return ("READY", .green)
         }
     }

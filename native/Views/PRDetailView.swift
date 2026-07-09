@@ -34,8 +34,19 @@ struct PRDetailView: View {
         switch pr.ciStatus {
         case "waiting": return ("CI WAITING", .orange)
         case "failed":  return ("CI FAIL", .red)
+        case "review":  return ("CI READY", .blue)
         default:        return ("CI READY", .green)
         }
+    }
+
+    var approvalInfo: (label: String, color: Color)? {
+        if pr.reviewApproved {
+            return ("APPROVED", .green)
+        }
+        if pr.ciStatus == "ready" && !pr.reviewApproved {
+            return nil // already green
+        }
+        return nil
     }
 
     var conclusionInfo: (label: String, color: Color)? {
@@ -89,6 +100,15 @@ struct PRDetailView: View {
                         .padding(.horizontal, 5)
                         .padding(.vertical, 2)
                         .background(cl.color.opacity(0.2), in: RoundedRectangle(cornerRadius: 4))
+                }
+
+                if let a = approvalInfo {
+                    Text(a.label)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(a.color)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(a.color.opacity(0.2), in: RoundedRectangle(cornerRadius: 4))
                 }
 
                 Spacer()

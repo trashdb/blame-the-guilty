@@ -172,6 +172,7 @@ class SignalRService: ObservableObject {
                 let draft: Bool?
                 let mergeableState: String?
                 let ciStatus: String?
+                let reviewApproved: Bool?
             }
             if let prs = try? JSONDecoder().decode([ApiPR].self, from: data) {
                 await MainActor.run {
@@ -186,7 +187,8 @@ class SignalRService: ObservableObject {
                             conclusion: pr.conclusion,
                             draft: pr.draft ?? false,
                             mergeableState: pr.mergeableState,
-                            ciStatus: pr.ciStatus ?? "ready"
+                            ciStatus: pr.ciStatus ?? "ready",
+                            reviewApproved: pr.reviewApproved ?? false
                         )
                     }
                 }
@@ -288,6 +290,10 @@ class SignalRService: ObservableObject {
             else { handleWorkflowCompleted(data) }
         case "PullRequestsUpdated":
             Task { await self.syncPRsFromApi(gitHubId: self.gitHubId) }
+        case "PrApproved":
+            guard let args = json["arguments"] as? [[String: Any]],
+                  let data = args.first else { return }
+            handlePrApproved(data)
         default: break
         }
     }
@@ -381,6 +387,24 @@ class SignalRService: ObservableObject {
                     actionURL: workflowURL
                 )
             }
+        }
+    }
+
+    private func handlePrApproved(_ data: [String: Any]) {
+        let prNumber = data["prNumber"] as? Int ?? 0
+        let repo = data["repo"] as? String ?? "unknown"
+        let reviewerLogin = data["reviewerLogin"] as? String ?? "someone"
+        let title = data["title"] as? String ?? ""
+
+        Task { @MainActor in
+            let body = "\(title) — approved by \(reviewerLogin)"
+            showNotification(
+                title: "PR #\(prNumber) Approved ✅",
+                body: body,
+                subtitle: shortRepo(repo),
+                actionURL: URL(string: "https://github.com/\(repo)/pull/\(prNumber)")
+            )
+            await syncPRsFromApi(gitHubId: gitHubId)
         }
     }
 

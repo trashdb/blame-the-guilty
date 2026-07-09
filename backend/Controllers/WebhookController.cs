@@ -67,6 +67,7 @@ public class WebhookController : ControllerBase
         if (eventType == "workflow_run") return await HandleWorkflowRun(payload);
         if (eventType == "check_suite") return await HandleCheckSuite(payload);
         if (eventType == "pull_request") return await HandlePullRequest(payload);
+        if (eventType == "pull_request_review") return await HandlePullRequestReview(payload);
         LogWebhook(eventType, null, TryGetRepo(payload), null, "ignored", "Unsupported event type");
         return Ok($"Ignored: unsupported event '{eventType}'.");
     }
@@ -463,6 +464,7 @@ public class WebhookController : ControllerBase
         var draft = pr.TryGetProperty("draft", out var d) && d.GetBoolean();
 
         if (action == "opened") return await HandlePullRequestOpened(prNumber, title, htmlUrl, repo, baseBranch, headBranch, authorLogin, authorId, draft);
+        if (action == "synchronize") return await HandlePullRequestSynchronize(prNumber, repo);
         if (action == "ready_for_review") return await HandlePullRequestReadyForReview(prNumber, repo);
         if (action == "converted_to_draft") return await HandlePullRequestConvertedToDraft(prNumber, repo);
         if (action == "closed") return await HandlePullRequestClosed(prNumber, title, htmlUrl, repo, baseBranch, headBranch, authorLogin, authorId, pr);
@@ -487,6 +489,25 @@ public class WebhookController : ControllerBase
         _logger.LogInformation("PR #{PrNumber} opened by {Author} (draft={Draft})", prNumber, authorLogin, draft);
         await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
         return Ok(new { prNumber, status = "tracking" });
+    }
+
+    private async Task<IActionResult> HandlePullRequestSynchronize(int prNumber, string repo)
+    {
+        var existing = await _db.PullRequestEvents
+            .Where(e => e.PrNumber == prNumber && e.RepoFullName == repo && e.Status == "open")
+            .OrderByDescending(e => e.Id)
+            .FirstOrDefaultAsync();
+
+        if (existing != null)
+        {
+            existing.ReviewApproved = false;
+            existing.ApprovedBy = null;
+            await _db.SaveChangesAsync();
+        }
+
+        _logger.LogInformation("PR #{PrNumber} synchronized — approval reset", prNumber);
+        await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
+        return Ok(new { prNumber, status = "synchronized" });
     }
 
     private async Task<IActionResult> HandlePullRequestReadyForReview(int prNumber, string repo)
@@ -547,6 +568,60 @@ public class WebhookController : ControllerBase
         _logger.LogInformation("PR #{PrNumber} {Status} by {Author}", prNumber, status, authorLogin);
         await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
         return Ok(new { prNumber, status });
+    }
+
+    private async Task<IActionResult> HandlePullRequestReview(JsonElement payload)
+    {
+        var action = payload.GetProperty("action").GetString();
+        if (action != "submitted")
+        {
+            LogWebhook("pull_request_review", action, TryGetRepo(payload), null, "ignored", $"Unsupported action '{action}'");
+            return Ok($"Ignored: pull_request_review action '{action}'.");
+        }
+
+        var review = payload.GetProperty("review");
+        var reviewState = review.GetProperty("state").GetString();
+        var pr = payload.GetProperty("pull_request");
+        var prNumber = pr.GetProperty("number").GetInt32();
+        var repo = payload.GetProperty("repository").GetProperty("full_name").GetString() ?? "unknown";
+        var reviewerLogin = review.GetProperty("user").GetProperty("login").GetString() ?? "unknown";
+
+        var existing = await _db.PullRequestEvents
+            .Where(e => e.PrNumber == prNumber && e.RepoFullName == repo && e.Status == "open")
+            .OrderByDescending(e => e.Id)
+            .FirstOrDefaultAsync();
+
+        if (existing == null)
+        {
+            LogWebhook("pull_request_review", action, repo, null, "ignored", "PR not tracked");
+            return Ok("PR not tracked, ignoring.");
+        }
+
+        var approved = reviewState == "approved";
+        existing.ReviewApproved = approved;
+        existing.ApprovedBy = approved ? reviewerLogin : null;
+        await _db.SaveChangesAsync();
+
+        LogWebhook("pull_request_review", action, repo, null, approved ? "approved" : reviewState!,
+            $"PR #{prNumber} reviewed by {reviewerLogin}: {reviewState}");
+
+        // Notify PR author when approved
+        if (approved && existing.AuthorGitHubId.HasValue)
+        {
+            var approverToken = await _db.GitHubUsers
+                .Where(u => u.GitHubId == existing.AuthorGitHubId.Value)
+                .Select(u => u.SignalRConnectionId)
+                .FirstOrDefaultAsync();
+
+            if (!string.IsNullOrEmpty(approverToken))
+            {
+                await _hubContext.Clients.Client(approverToken)
+                    .SendAsync("PrApproved", new { prNumber, repo, reviewerLogin, title = existing.Title });
+            }
+        }
+
+        await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
+        return Ok(new { prNumber, approved });
     }
 
     private (string? login, long? id, int? prNumber) ResolveCheckSuiteAuthor(JsonElement payload)

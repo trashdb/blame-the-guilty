@@ -157,6 +157,12 @@ using (var scope = app.Services.CreateScope())
 
     // Add Trigger column to existing WorkflowRuns table if missing
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "WorkflowRuns" ADD COLUMN "Trigger" TEXT;"""); } catch { }
+
+    // Add ReviewApproved column to existing PullRequestEvents table if missing
+    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "ReviewApproved" INTEGER NOT NULL DEFAULT 0;"""); } catch { }
+
+    // Add ApprovedBy column to existing PullRequestEvents table if missing
+    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "ApprovedBy" TEXT;"""); } catch { }
 }
 
 app.UseCors("SignalR");

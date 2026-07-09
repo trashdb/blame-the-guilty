@@ -39,7 +39,8 @@ public class PullRequestsController : ControllerBase
                 e.PrUrl,
                 e.Status,
                 e.Conclusion,
-                e.Draft
+                e.Draft,
+                e.ReviewApproved
             })
             .ToListAsync();
 
@@ -70,7 +71,7 @@ public class PullRequestsController : ControllerBase
             else if (runs.Any(r => r.status == "failure"))
                 ciStatus = "failed";
             else
-                ciStatus = "ready";
+                ciStatus = "review";
             workflowStatuses[(repo, branch)] = ciStatus;
         }
 
@@ -80,7 +81,9 @@ public class PullRequestsController : ControllerBase
             var (draft, mergeableState) = await FetchPullRequestData(pr.PrNumber, pr.RepoFullName, token);
             var ciStatus = pr.HeadBranch != null
                 && workflowStatuses.TryGetValue((pr.RepoFullName, pr.HeadBranch), out var st)
-                ? st : "ready";
+                ? st : "review";
+            if (ciStatus == "review" && pr.ReviewApproved)
+                ciStatus = "ready";
             results.Add(new
             {
                 pr.PrNumber,
@@ -93,7 +96,8 @@ public class PullRequestsController : ControllerBase
                 pr.Conclusion,
                 Draft = draft ?? pr.Draft,
                 MergeableState = mergeableState,
-                CiStatus = ciStatus
+                CiStatus = ciStatus,
+                ReviewApproved = pr.ReviewApproved
             });
         }
 

@@ -41,6 +41,11 @@ public class PullRequestEvent
     [MaxLength(50)]
     public string? MergeableState { get; set; }
 
+    public bool ReviewApproved { get; set; }
+
+    [MaxLength(100)]
+    public string? ApprovedBy { get; set; }
+
     [MaxLength(500)]
     public string? ExtraInfo { get; set; }
 
