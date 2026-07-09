@@ -89,6 +89,26 @@ struct WorkflowRunRow: View {
                     .lineLimit(1)
 
                 HStack(spacing: 4) {
+                    if let prNumber = run.prNumber {
+                        Text("PR #\(prNumber)")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.blue)
+                        if let prTitle = run.prTitle {
+                            Text(prTitle)
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        Text("·")
+                            .foregroundStyle(.tertiary)
+                    }
+                    if let trigger = run.trigger {
+                        Text(trigger.replacingOccurrences(of: "_", with: " "))
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                        Text("·")
+                            .foregroundStyle(.tertiary)
+                    }
                     Text(run.repo)
                         .font(.system(size: 10))
                         .foregroundStyle(.tertiary)

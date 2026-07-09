@@ -47,6 +47,27 @@ public class WorkflowsController : ControllerBase
             .Take(limit)
             .ToListAsync();
 
+        // Look up PRs matching each run's repo+branch
+        var branchKeys = runs
+            .Where(r => r.HeadBranch != null)
+            .Select(r => new { r.Repo, r.HeadBranch })
+            .Distinct()
+            .ToList();
+        var prs = new List<(string repo, string branch, long prNumber, string title)>();
+        if (branchKeys.Count != 0)
+        {
+            var repoList = branchKeys.Select(b => b.Repo).ToList();
+            var branchList = branchKeys.Select(b => b.HeadBranch!).ToList();
+            var prEvents = await _db.PullRequestEvents
+                .Where(e => e.Status == "open" && repoList.Contains(e.RepoFullName) && branchList.Contains(e.HeadBranch))
+                .Select(e => new { e.RepoFullName, e.HeadBranch, e.PrNumber, e.Title })
+                .ToListAsync();
+            prs = prEvents
+                .Where(e => e.HeadBranch != null)
+                .Select(e => (e.RepoFullName, e.HeadBranch!, e.PrNumber, e.Title ?? ""))
+                .ToList();
+        }
+
         return Ok(runs.Select(w => new
         {
             w.Id,
@@ -55,10 +76,17 @@ public class WorkflowsController : ControllerBase
             w.Repo,
             w.Actor,
             w.HeadBranch,
+            w.Trigger,
             w.Status,
             w.HtmlUrl,
             w.StartedAt,
-            TargetGitHubIds = DeserializeIds(w.TargetGitHubIds)
+            TargetGitHubIds = DeserializeIds(w.TargetGitHubIds),
+            PrNumber = w.HeadBranch != null
+                ? (int?)prs.FirstOrDefault(p => p.repo == w.Repo && p.branch == w.HeadBranch).prNumber
+                : null,
+            PrTitle = w.HeadBranch != null
+                ? prs.FirstOrDefault(p => p.repo == w.Repo && p.branch == w.HeadBranch).title
+                : null
         }));
     }
 
@@ -118,6 +146,7 @@ public class WorkflowsController : ControllerBase
             Repo = run.Repo,
             Actor = run.Actor,
             HeadBranch = run.HeadBranch,
+            Trigger = "workflow_dispatch",
             HtmlUrl = run.HtmlUrl,
             Status = "in_progress",
             StartedAt = DateTime.UtcNow
@@ -132,6 +161,7 @@ public class WorkflowsController : ControllerBase
             workflowName = newRun.WorkflowName,
             repo = newRun.Repo,
             branch = newRun.HeadBranch,
+            trigger = newRun.Trigger,
             actor = newRun.Actor,
             htmlUrl = newRun.HtmlUrl
         });

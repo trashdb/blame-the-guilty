@@ -8,6 +8,9 @@ private struct ApiWorkflowRun: Decodable {
     let repo: String
     let actor: String
     let headBranch: String?
+    let trigger: String?
+    let prNumber: Int?
+    let prTitle: String?
     let status: String
     let htmlUrl: String?
     let startedAt: Date
@@ -22,6 +25,9 @@ private struct ApiWorkflowRun: Decodable {
             repo: repo,
             actor: actor,
             headBranch: headBranch,
+            trigger: trigger,
+            prNumber: prNumber,
+            prTitle: prTitle,
             status: status,
             htmlUrl: htmlUrl ?? "",
             startedAt: startedAt,
@@ -49,6 +55,7 @@ class SignalRService: ObservableObject {
     private let baseUrl: String
     private var task: Task<Void, Never>?
     private var gitHubId: Int64 = 0
+    private var pollTask: Task<Void, Never>?
 
     init(baseUrl: String) {
         self.baseUrl = baseUrl
@@ -60,6 +67,7 @@ class SignalRService: ObservableObject {
         username = session.username
         avatarUrl = session.avatarUrl
         isLoggedIn = true
+        guard task == nil else { return }
         connect(gitHubId: session.gitHubId, username: session.username)
     }
 
@@ -95,6 +103,7 @@ class SignalRService: ObservableObject {
 
             await syncFromApi(gitHubId: gitHubId)
             await syncPRsFromApi(gitHubId: gitHubId)
+            startPolling(gitHubId: gitHubId)
 
             while !Task.isCancelled {
                 do {
@@ -189,6 +198,9 @@ class SignalRService: ObservableObject {
                         workflowName: run.workflowName,
                         repo: run.repo, actor: run.actor,
                         headBranch: run.headBranch,
+                        trigger: run.trigger,
+                        prNumber: run.prNumber,
+                        prTitle: run.prTitle,
                         status: "failure",
                         htmlUrl: run.htmlUrl, startedAt: run.startedAt,
                         targetGitHubIds: run.targetGitHubIds
@@ -281,6 +293,7 @@ class SignalRService: ObservableObject {
         let htmlUrl    = data["htmlUrl"] as? String ?? ""
         let startedAt  = (data["startedAt"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) } ?? Date()
         let branch     = data["branch"] as? String
+        let trigger    = data["trigger"] as? String
 
         Task { @MainActor in
             runStatus = .running
@@ -288,7 +301,9 @@ class SignalRService: ObservableObject {
             let run = WorkflowRun(
                 id: UUID(), dbId: dbId,
                 runId: runId, workflowName: name, repo: repo,
-                actor: actor, headBranch: branch, status: "in_progress",
+                actor: actor, headBranch: branch,
+                trigger: trigger, prNumber: nil, prTitle: nil,
+                status: "in_progress",
                 htmlUrl: htmlUrl, startedAt: startedAt, targetGitHubIds: []
             )
 
@@ -305,6 +320,7 @@ class SignalRService: ObservableObject {
         let repo       = data["repo"] as? String ?? "unknown"
         let actor      = data["actor"] as? String ?? "someone"
         let htmlUrl    = data["htmlUrl"] as? String
+        let trigger    = data["trigger"] as? String
         let workflowURL: URL? = URL(string: htmlUrl ?? "https://github.com/\(repo)/actions/runs/\(runId)")
 
         Task { @MainActor in
@@ -324,6 +340,9 @@ class SignalRService: ObservableObject {
                 repo: repo,
                 actor: actor,
                 headBranch: existing?.headBranch,
+                trigger: trigger ?? existing?.trigger,
+                prNumber: existing?.prNumber,
+                prTitle: existing?.prTitle,
                 status: succeeded ? "success" : "failure",
                 htmlUrl: htmlUrl ?? "https://github.com/\(repo)/actions/runs/\(runId)",
                 startedAt: originalStartedAt,
@@ -373,7 +392,9 @@ class SignalRService: ObservableObject {
                     id: old.id, dbId: old.dbId,
                     runId: old.runId,
                     workflowName: old.workflowName, repo: old.repo,
-                    actor: old.actor, headBranch: old.headBranch, status: old.status,
+                    actor: old.actor, headBranch: old.headBranch,
+                    trigger: old.trigger, prNumber: old.prNumber, prTitle: old.prTitle,
+                    status: old.status,
                     htmlUrl: old.htmlUrl, startedAt: old.startedAt,
                     targetGitHubIds: targetIds
                 )
@@ -384,7 +405,9 @@ class SignalRService: ObservableObject {
                     id: old.id, dbId: old.dbId,
                     runId: old.runId,
                     workflowName: old.workflowName, repo: old.repo,
-                    actor: old.actor, headBranch: old.headBranch, status: old.status,
+                    actor: old.actor, headBranch: old.headBranch,
+                    trigger: old.trigger, prNumber: old.prNumber, prTitle: old.prTitle,
+                    status: old.status,
                     htmlUrl: old.htmlUrl, startedAt: old.startedAt,
                     targetGitHubIds: targetIds
                 )
@@ -393,6 +416,8 @@ class SignalRService: ObservableObject {
     }
 
     func disconnect() {
+        pollTask?.cancel()
+        pollTask = nil
         task?.cancel()
         task = nil
         Task { @MainActor in
@@ -401,6 +426,17 @@ class SignalRService: ObservableObject {
             lastEvent = nil
             runningWorkflows = []
             activePRs = []
+        }
+    }
+
+    private func startPolling(gitHubId: Int64) {
+        pollTask?.cancel()
+        pollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                guard !Task.isCancelled, let self else { return }
+                await syncPRsFromApi(gitHubId: gitHubId)
+            }
         }
     }
 

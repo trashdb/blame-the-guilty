@@ -76,6 +76,7 @@ public class WebhookController : ControllerBase
         var url = run.TryGetProperty("html_url", out var hu) ? hu.GetString() : null;
         var runId = run.GetProperty("id").GetInt64();
         var startedAt = run.TryGetProperty("run_started_at", out var rsa) ? rsa.GetDateTime() : DateTime.UtcNow;
+        var trigger = run.TryGetProperty("event", out var ev) ? ev.GetString() : null;
 
         // Update existing in_progress row, or create new one for reruns
         var existingInProgress = await _db.WorkflowRuns
@@ -105,6 +106,7 @@ public class WebhookController : ControllerBase
             Repo = repo,
             Actor = culprit.Login,
             HeadBranch = branch,
+            Trigger = trigger,
             HtmlUrl = url,
             Status = "in_progress",
             StartedAt = startedAt
@@ -118,7 +120,7 @@ public class WebhookController : ControllerBase
         {
             await _hubContext.Clients.Group(user.GitHubId.ToString()).SendAsync("WorkflowRunStarted", new
             {
-                id = newRun.Id, runId, workflowName = name, repo, branch, actor = culprit.Login, htmlUrl = url
+                id = newRun.Id, runId, workflowName = name, repo, branch, trigger, actor = culprit.Login, htmlUrl = url
             });
             _logger.LogInformation("Running workflow {RunId} notified to {Login}", runId, culprit.Login);
         }
@@ -172,6 +174,7 @@ public class WebhookController : ControllerBase
                 Repo = repoFullName,
                 Actor = culprit.Login,
                 HeadBranch = workflowRun.TryGetProperty("head_branch", out var hb) ? hb.GetString() : null,
+                Trigger = workflowRun.TryGetProperty("event", out var ev) ? ev.GetString() : null,
                 HtmlUrl = workflowUrl,
                 Status = conclusion switch { "success" => "success", _ => "failure" },
                 StartedAt = DateTime.UtcNow
@@ -188,7 +191,7 @@ public class WebhookController : ControllerBase
             {
                 runId, succeeded, conclusion,
                 workflowName, repo = repoFullName, actor = culprit.Login,
-                htmlUrl = workflowUrl
+                htmlUrl = workflowUrl, trigger = workflowRun.TryGetProperty("event", out var ev2) ? ev2.GetString() : null
             });
         }
 

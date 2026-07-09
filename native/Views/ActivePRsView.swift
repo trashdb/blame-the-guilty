@@ -49,6 +49,8 @@ struct ActivePRsView: View {
                                 .padding(.vertical, 2)
                                 .background(s.color.opacity(0.2), in: RoundedRectangle(cornerRadius: 4))
                         }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
                         .background(s.color.opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
                         .overlay(
                             RoundedRectangle(cornerRadius: 6)
@@ -57,8 +59,7 @@ struct ActivePRsView: View {
                     }
                     .buttonStyle(.plain)
                     .cursor(.pointingHand)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
+                    
                 }
             }
             .scrollDisabled(prs.count < 5)

@@ -150,6 +150,9 @@ using (var scope = app.Services.CreateScope())
 
     // Add HeadBranch column to existing WorkflowRuns table if missing
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "WorkflowRuns" ADD COLUMN "HeadBranch" TEXT;"""); } catch { }
+
+    // Add Trigger column to existing WorkflowRuns table if missing
+    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "WorkflowRuns" ADD COLUMN "Trigger" TEXT;"""); } catch { }
 }
 
 app.UseCors("SignalR");

@@ -25,6 +25,9 @@ public class WorkflowRun
     [MaxLength(200)]
     public string? HeadBranch { get; set; }
 
+    [MaxLength(50)]
+    public string? Trigger { get; set; }
+
     public string? HtmlUrl { get; set; }
 
     [Required]

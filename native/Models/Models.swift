@@ -19,6 +19,9 @@ struct WorkflowRun: Identifiable, Codable {
     let repo: String
     let actor: String
     let headBranch: String?
+    let trigger: String?
+    let prNumber: Int?
+    let prTitle: String?
     let status: String
     let htmlUrl: String
     let startedAt: Date
