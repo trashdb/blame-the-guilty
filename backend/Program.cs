@@ -163,6 +163,9 @@ using (var scope = app.Services.CreateScope())
 
     // Add ApprovedBy column to existing PullRequestEvents table if missing
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "ApprovedBy" TEXT;"""); } catch { }
+
+    // Add AvatarUrl column to existing GitHubUsers table if missing
+    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "GitHubUsers" ADD COLUMN "AvatarUrl" TEXT;"""); } catch { }
 }
 
 app.UseCors("SignalR");

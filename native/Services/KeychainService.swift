@@ -23,7 +23,7 @@ enum KeychainService {
     static func load() -> Session? {
         if let session = loadFrom(service: service) { return session }
         if let session = loadFrom(service: oldService) {
-            save(gitHubId: session.gitHubId, username: session.username)
+            save(gitHubId: session.gitHubId, username: session.username, avatarUrl: session.avatarUrl)
             SecItemDelete(baseQuery(service: oldService) as CFDictionary)
             return session
         }

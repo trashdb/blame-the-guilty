@@ -22,4 +22,7 @@ public class GitHubUser
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? LastLoginAt { get; set; }
+
+    [MaxLength(500)]
+    public string? AvatarUrl { get; set; }
 }

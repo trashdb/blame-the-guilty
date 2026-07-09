@@ -51,6 +51,7 @@ public class AuthController : ControllerBase
                 GitHubId = userInfo.Id,
                 GitHubUsername = userInfo.Login,
                 AccessToken = userInfo.AccessToken,
+                AvatarUrl = userInfo.AvatarUrl,
                 CreatedAt = DateTime.UtcNow,
                 LastLoginAt = DateTime.UtcNow
             });
@@ -59,6 +60,7 @@ public class AuthController : ControllerBase
         {
             existing.GitHubUsername = userInfo.Login;
             existing.AccessToken = userInfo.AccessToken;
+            existing.AvatarUrl = userInfo.AvatarUrl;
             existing.LastLoginAt = DateTime.UtcNow;
         }
 
@@ -73,5 +75,18 @@ public class AuthController : ControllerBase
         }
 
         return Ok(new { id = userInfo.Id, username = userInfo.Login, avatarUrl = userInfo.AvatarUrl });
+    }
+
+    [HttpGet("me")]
+    public async Task<IActionResult> GetMe([FromQuery] long gitHubId)
+    {
+        var user = await _db.GitHubUsers
+            .Where(u => u.GitHubId == gitHubId)
+            .Select(u => new { u.GitHubId, u.GitHubUsername, u.AvatarUrl })
+            .FirstOrDefaultAsync();
+
+        if (user == null) return NotFound();
+
+        return Ok(new { id = user.GitHubId, username = user.GitHubUsername, avatarUrl = user.AvatarUrl });
     }
 }

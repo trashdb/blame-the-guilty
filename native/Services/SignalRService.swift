@@ -68,8 +68,27 @@ class SignalRService: ObservableObject {
         username = session.username
         avatarUrl = session.avatarUrl
         isLoggedIn = true
+        // Try to refresh avatar from backend (fixes missing avatar after migration)
+        Task {
+            if let fresh = await fetchMe(gitHubId: session.gitHubId), let url = fresh.avatarUrl {
+                await MainActor.run { avatarUrl = url }
+                KeychainService.save(gitHubId: session.gitHubId, username: session.username, avatarUrl: url)
+            }
+        }
         guard task == nil else { return }
         connect(gitHubId: session.gitHubId, username: session.username)
+    }
+
+    private struct MeResponse: Decodable {
+        let id: Int64
+        let username: String
+        let avatarUrl: String?
+    }
+
+    private func fetchMe(gitHubId: Int64) async -> MeResponse? {
+        guard let url = URL(string: "\(baseUrl)/api/auth/me?gitHubId=\(gitHubId)") else { return nil }
+        guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
+        return try? JSONDecoder().decode(MeResponse.self, from: data)
     }
 
     func login(keepSignedIn: Bool) async throws {
