@@ -8,6 +8,7 @@ private struct PRDetailsResponse: Decodable {
 
 struct PRDetailView: View {
     let pr: PullRequest
+    let gitHubId: Int64
 
     @State private var behindBy: Int?
     @State private var aheadBy: Int?
@@ -191,7 +192,7 @@ struct PRDetailView: View {
 
     private func loadDetails() {
         let repoEscaped = pr.repo.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? pr.repo
-        guard let url = URL(string: "\(backendUrl)/api/pullrequests/\(pr.prNumber)/detail?repo=\(repoEscaped)&gitHubId=0") else { return }
+        guard let url = URL(string: "\(backendUrl)/api/pullrequests/\(pr.prNumber)/detail?repo=\(repoEscaped)&gitHubId=\(gitHubId)") else { return }
         loadingDetails = true
         URLSession.shared.dataTask(with: url) { data, _, err in
             DispatchQueue.main.async {

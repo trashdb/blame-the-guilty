@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ActivePRsView: View {
     let prs: [PullRequest]
+    let gitHubId: Int64
     @State private var selectedPR: PullRequest?
 
     private func status(for pr: PullRequest) -> (label: String, color: Color) {
@@ -61,7 +62,7 @@ struct ActivePRsView: View {
                     .buttonStyle(.plain)
                     .cursor(.pointingHand)
                     .popover(item: $selectedPR) { pr in
-                        PRDetailView(pr: pr)
+                        PRDetailView(pr: pr, gitHubId: gitHubId)
                     }
                 }
             }
