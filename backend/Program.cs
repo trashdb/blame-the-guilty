@@ -185,9 +185,10 @@ using (var scope = app.Services.CreateScope())
         log.LogInformation("Marked {Count} stale in_progress runs as failure", stuck);
     }
 
-    // Mark superseded runs: any in_progress run that is NOT the latest for
-    // its (Repo, WorkflowName, HeadBranch) combo.  The older one was
-    // automatically cancelled by GitHub when a newer run started.
+    // Mark superseded runs: any in_progress run that is NOT the latest
+    // (by RunId) for its (Repo, WorkflowName, HeadBranch) combo.
+    // The older one was automatically cancelled by GitHub when a newer
+    // run started — whether that newer run completed or is still running.
     var superseded = db.Database.ExecuteSqlRaw("""
         UPDATE "WorkflowRuns"
         SET "Status" = 'failure'
@@ -197,7 +198,7 @@ using (var scope = app.Services.CreateScope())
             INNER JOIN (
                 SELECT "Repo", "WorkflowName", "HeadBranch", MAX("RunId") AS "MaxRunId"
                 FROM "WorkflowRuns"
-                WHERE "Status" = 'in_progress' AND "HeadBranch" IS NOT NULL
+                WHERE "HeadBranch" IS NOT NULL
                 GROUP BY "Repo", "WorkflowName", "HeadBranch"
             ) w2 ON w1."Repo" = w2."Repo"
                 AND w1."WorkflowName" = w2."WorkflowName"
