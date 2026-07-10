@@ -59,19 +59,23 @@ struct WorkflowRunRow: View {
 
     var statusColor: Color {
         switch run.status {
-        case "in_progress": return .orange
-        case "success":     return .green
-        case "failure":     return .red
-        default:            return .secondary
+        case "in_progress":  return .orange
+        case "success":      return .green
+        case "failure":      return .red
+        case "cancelled":    return .secondary
+        case "superseded":   return .yellow
+        default:             return .secondary
         }
     }
 
     var statusIcon: String {
         switch run.status {
-        case "in_progress": return "arrow.triangle.2.circlepath"
-        case "success":     return "checkmark.circle.fill"
-        case "failure":     return "xmark.circle.fill"
-        default:            return "questionmark.circle"
+        case "in_progress":  return "arrow.triangle.2.circlepath"
+        case "success":      return "checkmark.circle.fill"
+        case "failure":      return "xmark.circle.fill"
+        case "cancelled":    return "xmark.circle"
+        case "superseded":   return "arrow.triangle.branch"
+        default:             return "questionmark.circle"
         }
     }
 

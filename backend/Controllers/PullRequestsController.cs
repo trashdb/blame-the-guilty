@@ -72,7 +72,7 @@ public class PullRequestsController : ControllerBase
             string ciStatus;
             if (runs.Any(r => r.status == "in_progress"))
                 ciStatus = "waiting";
-            else if (runs.Any(r => r.status == "failure"))
+            else if (runs.Any(r => r.status is "failure" or "cancelled" or "superseded"))
                 ciStatus = "failed";
             else
                 ciStatus = "review";

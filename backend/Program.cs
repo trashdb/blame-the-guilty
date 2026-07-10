@@ -170,7 +170,7 @@ using (var scope = app.Services.CreateScope())
     // Add IsIgnored column to existing WorkflowRuns table if missing
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "WorkflowRuns" ADD COLUMN "IsIgnored" INTEGER NOT NULL DEFAULT 0;"""); } catch { }
 
-    // Recover stuck runs: mark in_progress older than 24h as failure.
+    // Recover stuck runs: mark in_progress older than 24h as cancelled.
     // Catches runs that were cancelled/superseded before the fix, or any
     // future completions the webhook never delivered.
     var cutoff = DateTime.UtcNow.AddHours(-24);
@@ -178,11 +178,11 @@ using (var scope = app.Services.CreateScope())
     if (stuck > 0)
     {
         db.Database.ExecuteSqlRaw("""
-            UPDATE "WorkflowRuns" SET "Status" = 'failure'
+            UPDATE "WorkflowRuns" SET "Status" = 'cancelled'
             WHERE "Status" = 'in_progress' AND "StartedAt" < {0}
             """, cutoff);
         var log = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        log.LogInformation("Marked {Count} stale in_progress runs as failure", stuck);
+        log.LogInformation("Marked {Count} stale in_progress runs as cancelled", stuck);
     }
 
     // Mark superseded runs: any in_progress run that is NOT the latest
@@ -191,7 +191,7 @@ using (var scope = app.Services.CreateScope())
     // run started — whether that newer run completed or is still running.
     var superseded = db.Database.ExecuteSqlRaw("""
         UPDATE "WorkflowRuns"
-        SET "Status" = 'failure'
+        SET "Status" = 'superseded'
         WHERE "Id" IN (
             SELECT w1."Id"
             FROM "WorkflowRuns" w1
@@ -210,7 +210,7 @@ using (var scope = app.Services.CreateScope())
     if (superseded > 0)
     {
         var log = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        log.LogInformation("Marked {Count} superseded in_progress runs as failure", superseded);
+        log.LogInformation("Marked {Count} superseded in_progress runs as superseded", superseded);
     }
 }
 

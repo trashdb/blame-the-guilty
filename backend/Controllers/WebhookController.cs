@@ -153,7 +153,7 @@ public class WebhookController : ControllerBase
             if (superseded.Count > 0)
             {
                 foreach (var s in superseded)
-                    s.Status = "failure";
+                    s.Status = "superseded";
                 await _db.SaveChangesAsync();
                 _logger.LogInformation("Superseded {Count} previous run(s) for {Repo} {Name} on {Branch}", superseded.Count, repo, name, branch);
             }
@@ -206,7 +206,9 @@ public class WebhookController : ControllerBase
             .FirstOrDefaultAsync();
         var isTerminal = conclusion is "success" or "failure" or "cancelled" or "timed_out" or "stale" or "action_required" or "skipped" or "neutral";
         var dbStatus = isTerminal
-            ? conclusion == "success" ? "success" : "failure"
+            ? conclusion == "success" ? "success"
+            : conclusion == "failure" ? "failure"
+            : "cancelled"
             : (string?)null;
 
         if (dbRun != null)
