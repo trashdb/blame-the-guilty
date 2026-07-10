@@ -1,5 +1,10 @@
 import AppKit
 
+enum NotificationStyle {
+    case punishment
+    case info
+}
+
 func setupNotifications() {}
 
 private func playPunishmentSound() {
@@ -17,7 +22,18 @@ private func playPunishmentSound() {
     }
 }
 
-func showNotification(title: String, body: String, subtitle: String? = nil, actionURL: URL? = nil) {
-    playPunishmentSound()
-    NotificationBanner.shared.show(title: title, body: body, subtitle: subtitle, actionURL: actionURL)
+private func playInfoSound() {
+    if let sound = NSSound(contentsOfFile: "/System/Library/Sounds/Ping.aiff", byReference: false) {
+        sound.volume = 0.3
+        sound.play()
+    }
+}
+
+func showNotification(title: String, body: String, subtitle: String? = nil, actionURL: URL? = nil, style: NotificationStyle = .punishment) {
+    if style == .punishment {
+        playPunishmentSound()
+    } else {
+        playInfoSound()
+    }
+    NotificationBanner.shared.show(title: title, body: body, subtitle: subtitle, actionURL: actionURL, style: style)
 }

@@ -44,7 +44,10 @@ public class PullRequestsController : ControllerBase
                 e.Status,
                 e.Conclusion,
                 e.Draft,
-                e.ReviewApproved
+                e.ReviewApproved,
+                e.LastCommentBy,
+                e.LastCommentBody,
+                e.LastCommentAt
             })
             .ToListAsync();
 
@@ -101,7 +104,10 @@ public class PullRequestsController : ControllerBase
                 Draft = draft ?? pr.Draft,
                 MergeableState = mergeableState,
                 CiStatus = ciStatus,
-                ReviewApproved = pr.ReviewApproved
+                ReviewApproved = pr.ReviewApproved,
+                LastCommentBy = pr.LastCommentBy,
+                LastCommentBody = pr.LastCommentBody,
+                LastCommentAt = pr.LastCommentAt
             });
         }
 
@@ -174,7 +180,10 @@ public class PullRequestsController : ControllerBase
             headBranch = prEvent?.HeadBranch,
             baseBranch = prEvent?.BaseBranch,
             status = prEvent?.Status,
-            draft = prEvent?.Draft ?? false
+            draft = prEvent?.Draft ?? false,
+            lastCommentBy = prEvent?.LastCommentBy,
+            lastCommentBody = prEvent?.LastCommentBody,
+            lastCommentAt = prEvent?.LastCommentAt
         });
     }
 

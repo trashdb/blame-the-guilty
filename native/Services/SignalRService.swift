@@ -198,6 +198,9 @@ class SignalRService: ObservableObject {
                 let mergeableState: String?
                 let ciStatus: String?
                 let reviewApproved: Bool?
+                let lastCommentBy: String?
+                let lastCommentBody: String?
+                let lastCommentAt: Date?
             }
             if let prs = try? JSONDecoder().decode([ApiPR].self, from: data) {
                 await MainActor.run {
@@ -213,7 +216,10 @@ class SignalRService: ObservableObject {
                             draft: pr.draft ?? false,
                             mergeableState: pr.mergeableState,
                             ciStatus: pr.ciStatus ?? "ready",
-                            reviewApproved: pr.reviewApproved ?? false
+                            reviewApproved: pr.reviewApproved ?? false,
+                            lastCommentBy: pr.lastCommentBy,
+                            lastCommentBody: pr.lastCommentBody,
+                            lastCommentAt: pr.lastCommentAt
                         )
                     }
                 }
@@ -319,6 +325,10 @@ class SignalRService: ObservableObject {
             guard let args = json["arguments"] as? [[String: Any]],
                   let data = args.first else { return }
             handlePrApproved(data)
+        case "PrCommented":
+            guard let args = json["arguments"] as? [[String: Any]],
+                  let data = args.first else { return }
+            handlePrCommented(data)
         default: break
         }
     }
@@ -427,7 +437,29 @@ class SignalRService: ObservableObject {
                 title: "PR #\(prNumber) Approved ✅",
                 body: body,
                 subtitle: shortRepo(repo),
-                actionURL: URL(string: "https://github.com/\(repo)/pull/\(prNumber)")
+                actionURL: URL(string: "https://github.com/\(repo)/pull/\(prNumber)"),
+                style: .info
+            )
+            await syncPRsFromApi(gitHubId: gitHubId)
+        }
+    }
+
+    private func handlePrCommented(_ data: [String: Any]) {
+        let prNumber = data["prNumber"] as? Int ?? 0
+        let repo = data["repo"] as? String ?? "unknown"
+        let commenterLogin = data["commenterLogin"] as? String ?? "someone"
+        let title = data["title"] as? String ?? ""
+        let commentBody = data["commentBody"] as? String ?? ""
+
+        Task { @MainActor in
+            let preview = String(commentBody.prefix(120)).replacingOccurrences(of: "\n", with: " ")
+            let body = "\(title) — \(commenterLogin): \(preview)"
+            showNotification(
+                title: "PR #\(prNumber) Commented 💬",
+                body: body,
+                subtitle: shortRepo(repo),
+                actionURL: URL(string: "https://github.com/\(repo)/pull/\(prNumber)"),
+                style: .info
             )
             await syncPRsFromApi(gitHubId: gitHubId)
         }

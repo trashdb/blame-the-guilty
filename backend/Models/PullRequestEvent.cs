@@ -46,6 +46,14 @@ public class PullRequestEvent
     [MaxLength(100)]
     public string? ApprovedBy { get; set; }
 
+    [MaxLength(100)]
+    public string? LastCommentBy { get; set; }
+
+    [MaxLength(500)]
+    public string? LastCommentBody { get; set; }
+
+    public DateTime? LastCommentAt { get; set; }
+
     [MaxLength(500)]
     public string? ExtraInfo { get; set; }
 

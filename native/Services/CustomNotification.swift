@@ -18,13 +18,18 @@ struct NotificationBannerView: View {
     let message: String
     let subtitle: String?
     let hasURL: Bool
+    let style: NotificationStyle
     let onDismiss: () -> Void
     let onOpen: () -> Void
+
+    var accentColor: Color {
+        style == .punishment ? .red : .blue
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
             Circle()
-                .fill(.red)
+                .fill(accentColor)
                 .frame(width: 8, height: 8)
                 .padding(.top, 6)
 
@@ -50,7 +55,7 @@ struct NotificationBannerView: View {
                 if hasURL {
                     Text("Open workflow ↗")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.red.opacity(0.8))
+                        .foregroundColor(accentColor.opacity(0.8))
                         .padding(.top, 3)
                 }
             }
@@ -86,11 +91,11 @@ final class NotificationBanner: NSObject {
     private var panel: NSPanel?
     private var timer: Timer?
 
-    func show(title: String, body: String, subtitle: String?, actionURL: URL?) {
-        present(title: title, body: body, subtitle: subtitle, actionURL: actionURL)
+    func show(title: String, body: String, subtitle: String?, actionURL: URL?, style: NotificationStyle = .punishment) {
+        present(title: title, body: body, subtitle: subtitle, actionURL: actionURL, style: style)
     }
 
-    private func present(title: String, body: String, subtitle: String?, actionURL: URL?) {
+    private func present(title: String, body: String, subtitle: String?, actionURL: URL?, style: NotificationStyle = .punishment) {
         dismiss()
 
         guard let screen = NSScreen.main else { return }
@@ -122,6 +127,7 @@ final class NotificationBanner: NSObject {
             message: body,
             subtitle: subtitle,
             hasURL: actionURL != nil,
+            style: style,
             onDismiss: { [weak self] in self?.dismiss() },
             onOpen: { [weak self] in
                 if let url = actionURL { NSWorkspace.shared.open(url) }

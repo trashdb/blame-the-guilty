@@ -57,6 +57,9 @@ struct PullRequest: Identifiable {
     let mergeableState: String?
     let ciStatus: String
     let reviewApproved: Bool
+    let lastCommentBy: String?
+    let lastCommentBody: String?
+    let lastCommentAt: Date?
 
     var prUrl: URL { htmlUrl ?? URL(string: "https://github.com/\(repo)/pull/\(prNumber)")! }
 

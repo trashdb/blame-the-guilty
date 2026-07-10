@@ -169,6 +169,26 @@ struct PRDetailView: View {
                 }
             }
 
+            if let commenter = pr.lastCommentBy, let body = pr.lastCommentBody {
+                HStack(spacing: 6) {
+                    Image(systemName: "bubble.left")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.blue)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("@\(commenter)")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.blue)
+                        Text(String(body.prefix(120)).replacingOccurrences(of: "\n", with: " "))
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+                .background(.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 4))
+            }
+
             if loadingDetails {
                 HStack(spacing: 6) {
                     ProgressView()
@@ -238,7 +258,7 @@ struct PRDetailView: View {
             Spacer()
         }
         .padding(16)
-        .frame(width: 320, height: 260)
+        .frame(width: 320, height: 300)
         .onAppear(perform: loadDetails)
     }
 

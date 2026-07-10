@@ -170,6 +170,11 @@ using (var scope = app.Services.CreateScope())
     // Add IsIgnored column to existing WorkflowRuns table if missing
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "WorkflowRuns" ADD COLUMN "IsIgnored" INTEGER NOT NULL DEFAULT 0;"""); } catch { }
 
+    // Add LastComment* columns to existing PullRequestEvents table if missing
+    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "LastCommentBy" TEXT;"""); } catch { }
+    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "LastCommentBody" TEXT;"""); } catch { }
+    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "LastCommentAt" TEXT;"""); } catch { }
+
     // Recover stuck runs: mark in_progress older than 24h as cancelled.
     // Catches runs that were cancelled/superseded before the fix, or any
     // future completions the webhook never delivered.
