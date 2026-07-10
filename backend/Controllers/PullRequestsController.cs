@@ -53,34 +53,39 @@ public class PullRequestsController : ControllerBase
 
         // Fetch all workflow runs for these PRs' repos in one query
         var repos = prs.Select(p => p.RepoFullName).Distinct().ToList();
-        var workflowRuns = new List<(string repo, string? branch, string status)>();
+        var branchWorkflows = new Dictionary<(string repo, string branch), string>();
         if (repos.Count != 0)
         {
             var raw = await _db.WorkflowRuns
                 .Where(w => w.HeadBranch != null && repos.Contains(w.Repo))
-                .Select(w => new { w.Repo, w.HeadBranch, w.Status })
+                .Select(w => new { w.Repo, w.HeadBranch, w.WorkflowName, w.Id, w.Status })
                 .ToListAsync();
-            workflowRuns = raw.Select(r => (r.Repo, r.HeadBranch, r.Status)).ToList();
+
+            // Only consider the LATEST run per (repo, headBranch, workflowName)
+            var latestByWorkflow = raw
+                .GroupBy(r => (r.Repo, r.HeadBranch, r.WorkflowName))
+                .Select(g => g.OrderByDescending(r => r.Id).First())
+                .ToList();
+
+            // For each (repo, branch), derive ciStatus from latest runs
+            foreach (var (repo, branch) in prs
+                .Where(p => !string.IsNullOrEmpty(p.HeadBranch))
+                .Select(p => (p.RepoFullName, p.HeadBranch!))
+                .Distinct())
+            {
+                var latest = latestByWorkflow.Where(w => w.Repo == repo && w.HeadBranch == branch).ToList();
+                string ciStatus;
+                if (latest.Any(r => r.Status == "in_progress"))
+                    ciStatus = "waiting";
+                else if (latest.Any(r => r.Status is "failure" or "cancelled" or "superseded"))
+                    ciStatus = "failed";
+                else
+                    ciStatus = "review";
+                branchWorkflows[(repo, branch)] = ciStatus;
+            }
         }
 
-        var workflowStatuses = new Dictionary<(string repo, string branch), string>();
-        var branchKeys = prs
-            .Where(p => !string.IsNullOrEmpty(p.HeadBranch))
-            .Select(p => (p.RepoFullName, p.HeadBranch!))
-            .Distinct();
-
-        foreach (var (repo, branch) in branchKeys)
-        {
-            var runs = workflowRuns.Where(w => w.repo == repo && w.branch == branch).ToList();
-            string ciStatus;
-            if (runs.Any(r => r.status == "in_progress"))
-                ciStatus = "waiting";
-            else if (runs.Any(r => r.status is "failure" or "cancelled" or "superseded"))
-                ciStatus = "failed";
-            else
-                ciStatus = "review";
-            workflowStatuses[(repo, branch)] = ciStatus;
-        }
+        var workflowStatuses = branchWorkflows;
 
         var results = new List<object>();
         foreach (var pr in prs)
