@@ -6,6 +6,13 @@ private struct PRDetailsResponse: Decodable {
     let aheadBy: Int?
 }
 
+private struct MergeResponse: Decodable {
+    let merged: Bool
+    let sha: String?
+    let message: String?
+    let error: String?
+}
+
 struct PRDetailView: View {
     let pr: PullRequest
     let gitHubId: Int64
@@ -14,6 +21,13 @@ struct PRDetailView: View {
     @State private var aheadBy: Int?
     @State private var loadingDetails = false
     @State private var detailError: String?
+    @State private var merging = false
+    @State private var mergeResult: String?
+    @State private var mergeError: String?
+
+    var canMerge: Bool {
+        !pr.draft && pr.ciStatus == "ready" && pr.reviewApproved
+    }
 
     var mergeableInfo: (label: String, color: Color) {
         guard let state = pr.mergeableState else {
@@ -188,6 +202,39 @@ struct PRDetailView: View {
                 }
             }
 
+            if canMerge, pr.status != "merged" {
+                Divider()
+                if let result = mergeResult {
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.green)
+                        Text(result)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.green)
+                    }
+                } else if let err = mergeError {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.red)
+                        Text(err)
+                            .font(.system(size: 9))
+                            .foregroundStyle(.red)
+                            .lineLimit(2)
+                    }
+                }
+                HStack(spacing: 6) {
+                    if merging {
+                        ProgressView()
+                            .scaleEffect(0.4)
+                            .frame(width: 12)
+                    }
+                    mergeMethodPicker
+                    mergeButton
+                }
+            }
+
             Spacer()
         }
         .padding(16)
@@ -208,6 +255,70 @@ struct PRDetailView: View {
         }
         .buttonStyle(.plain)
         .cursor(.pointingHand)
+    }
+
+    @State private var mergeMethod = "squash"
+
+    private var mergeMethodPicker: some View {
+        Picker("", selection: $mergeMethod) {
+            Text("Squash").tag("squash")
+            Text("Rebase").tag("rebase")
+            Text("Merge").tag("merge")
+        }
+        .pickerStyle(.segmented)
+        .scaleEffect(0.75)
+        .frame(width: 140)
+        .disabled(merging)
+    }
+
+    private var mergeButton: some View {
+        Button {
+            performMerge()
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.triangle.merge")
+                    .font(.system(size: 10))
+                Text("Merge")
+                    .font(.system(size: 10, weight: .semibold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(.green.opacity(0.8), in: RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+        .cursor(.pointingHand)
+        .disabled(merging)
+    }
+
+    private func performMerge() {
+        merging = true
+        mergeResult = nil
+        mergeError = nil
+        let repoEscaped = pr.repo.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? pr.repo
+        guard let url = URL(string: "\(backendUrl)/api/pullrequests/\(pr.prNumber)/merge?repo=\(repoEscaped)&gitHubId=\(gitHubId)&method=\(mergeMethod)") else {
+            mergeError = "Invalid URL"
+            merging = false
+            return
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        URLSession.shared.dataTask(with: request) { data, _, err in
+            DispatchQueue.main.async {
+                merging = false
+                if let err { mergeError = err.localizedDescription; return }
+                guard let data else { return }
+                if let resp = try? JSONDecoder().decode(MergeResponse.self, from: data) {
+                    if resp.merged {
+                        mergeResult = resp.message ?? "Merged"
+                    } else {
+                        mergeError = resp.error ?? resp.message ?? "Merge failed"
+                    }
+                } else {
+                    mergeError = "Invalid response"
+                }
+            }
+        }.resume()
     }
 
     private func loadDetails() {

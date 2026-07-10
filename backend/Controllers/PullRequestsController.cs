@@ -1,7 +1,9 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using BlameTheGuilty.Api.Data;
+using BlameTheGuilty.Api.Hubs;
 using BlameTheGuilty.Api.Models;
 
 namespace BlameTheGuilty.Api.Controllers;
@@ -13,11 +15,13 @@ public class PullRequestsController : ControllerBase
     private static readonly HttpClient _githubClient = new();
     private readonly AppDbContext _db;
     private readonly IConfiguration _configuration;
+    private readonly IHubContext<PunishmentHub> _hubContext;
 
-    public PullRequestsController(AppDbContext db, IConfiguration configuration)
+    public PullRequestsController(AppDbContext db, IConfiguration configuration, IHubContext<PunishmentHub> hubContext)
     {
         _db = db;
         _configuration = configuration;
+        _hubContext = hubContext;
     }
 
     [HttpGet("active")]
@@ -171,6 +175,84 @@ public class PullRequestsController : ControllerBase
             baseBranch = prEvent?.BaseBranch,
             status = prEvent?.Status,
             draft = prEvent?.Draft ?? false
+        });
+    }
+
+    [HttpPost("{prNumber}/merge")]
+    public async Task<IActionResult> Merge(long prNumber,
+        [FromQuery] string repo,
+        [FromQuery] long gitHubId,
+        [FromQuery] string method = "squash")
+    {
+        var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
+        var token = user?.AccessToken ?? _configuration["GitHub:PatToken"];
+        if (string.IsNullOrEmpty(token))
+            return Unauthorized(new { error = "No access token found" });
+
+        // Fetch PR to get head SHA for the merge request
+        var prRequest = new HttpRequestMessage(HttpMethod.Get,
+            $"https://api.github.com/repos/{repo}/pulls/{prNumber}");
+        prRequest.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        prRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        HttpResponseMessage prResponse;
+        try { prResponse = await _githubClient.SendAsync(prRequest); }
+        catch (Exception ex) { return StatusCode(502, new { error = $"GitHub API error: {ex.Message}" }); }
+
+        if (!prResponse.IsSuccessStatusCode)
+            return StatusCode((int)prResponse.StatusCode, new { error = "Failed to fetch PR details from GitHub" });
+
+        var prJson = await prResponse.Content.ReadAsStringAsync();
+        var prData = JsonSerializer.Deserialize<JsonElement>(prJson);
+        var headSha = prData.GetProperty("head").GetProperty("sha").GetString();
+
+        var mergeRequest = new HttpRequestMessage(HttpMethod.Put,
+            $"https://api.github.com/repos/{repo}/pulls/{prNumber}/merge");
+        mergeRequest.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        mergeRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        var mergeBody = new
+        {
+            merge_method = method,
+            sha = headSha,
+            commit_title = $"Merge PR #{prNumber} — {prData.GetProperty("title").GetString()}"
+        };
+        mergeRequest.Content = new StringContent(
+            JsonSerializer.Serialize(mergeBody),
+            System.Text.Encoding.UTF8,
+            "application/json");
+
+        HttpResponseMessage mergeResponse;
+        try { mergeResponse = await _githubClient.SendAsync(mergeRequest); }
+        catch (Exception ex) { return StatusCode(502, new { error = $"GitHub merge API error: {ex.Message}" }); }
+
+        var mergeJson = await mergeResponse.Content.ReadAsStringAsync();
+        var mergeData = JsonSerializer.Deserialize<JsonElement>(mergeJson);
+
+        if (!mergeResponse.IsSuccessStatusCode)
+        {
+            var msg = mergeData.TryGetProperty("message", out var m) ? m.GetString() : "Unknown error";
+            return StatusCode((int)mergeResponse.StatusCode, new { error = msg, details = mergeData });
+        }
+
+        // Mark PR as merged in DB
+        var prEvent = await _db.PullRequestEvents
+            .Where(e => e.PrNumber == prNumber && e.RepoFullName == repo && e.Status == "open")
+            .OrderByDescending(e => e.Id)
+            .FirstOrDefaultAsync();
+        if (prEvent != null)
+        {
+            prEvent.Status = "merged";
+            await _db.SaveChangesAsync();
+        }
+
+        await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
+
+        return Ok(new
+        {
+            merged = mergeData.TryGetProperty("merged", out var merged) && merged.GetBoolean(),
+            sha = mergeData.TryGetProperty("sha", out var sha) ? sha.GetString() : null,
+            message = mergeData.TryGetProperty("message", out var msg2) ? msg2.GetString() : null
         });
     }
 
