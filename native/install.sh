@@ -19,12 +19,12 @@ if ! xcodebuild -project "$SCRIPT_DIR/btg.xcodeproj" -scheme "$APP_NAME" -config
   echo "  ⚠️  Xcode CLI build failed, falling back to existing build…"
 fi
 
-# Find the built .app in DerivedData
-XC_APP=$(
-  find "$HOME/Library/Developer/Xcode/DerivedData" \
-       -name "$APP_NAME.app" -path "*/Release/*" \
-        2>/dev/null | xargs ls -td 2>/dev/null | head -1
-)
+# Find the most recently built .app in DerivedData
+XC_APP=$(find "$HOME/Library/Developer/Xcode/DerivedData" \
+    -name "$APP_NAME.app" -path "*/Release/*" \
+    2>/dev/null | while IFS= read -r app; do
+    echo "$(stat -f%m "$app/Contents/MacOS/$APP_NAME" 2>/dev/null) $app"
+done | sort -rn | head -1 | cut -d' ' -f2-)
 
 if [ -z "$XC_APP" ]; then
   echo "❌  BlameTheGuilty.app not found. Open the project in Xcode and run Product → Archive or build Release first."
