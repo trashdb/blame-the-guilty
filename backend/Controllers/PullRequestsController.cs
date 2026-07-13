@@ -77,7 +77,7 @@ public class PullRequestsController : ControllerBase
                 string ciStatus;
                 if (latest.Any(r => r.Status == "in_progress"))
                     ciStatus = "waiting";
-                else if (latest.Any(r => r.Status is "failure" or "cancelled" or "superseded"))
+                else if (latest.Any(r => r.Status == "failure"))
                     ciStatus = "failed";
                 else
                     ciStatus = "review";

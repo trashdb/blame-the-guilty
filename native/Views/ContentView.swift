@@ -8,47 +8,52 @@ struct ContentView: View {
     @State private var loginError: String?
 
     var body: some View {
-        VStack(alignment: .leading) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 6) {
-                    Image(systemName: "flame.fill")
-                        .font(.system(size: 13)).padding(.bottom, 2)
-                    Text("Blame the Guilty")
-                        .font(.system(size: 16, weight: .semibold))
-                }
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "flame.fill")
+                            .font(.system(size: 13)).padding(.bottom, 2)
+                        Text("Blame the Guilty")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
 
-                Text("CI/CD notifications when a merged PR breaks the build.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                Divider()
-
-                if signalR.isLoggedIn {
-                    LoggedInCardView(username: signalR.username, avatarUrl: signalR.avatarUrl, onSignOut: logout)
-                    KeepSignedInToggleView(isOn: $keepSignedIn)
-                } else {
-                    SignInCardView(isLoading: isLoading, loginError: loginError, onSignIn: login)
-                }
-
-                if signalR.isLoggedIn {
-                    ActivePRsView(prs: signalR.activePRs, gitHubId: signalR.userGitHubId)
+                    Text("CI/CD notifications when a merged PR breaks the build.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
                     Divider()
-                }
-                
-                if signalR.isLoggedIn {
-                    if let event = signalR.lastEvent {
-                        LastNotificationCardView(event: event)
+
+                    if signalR.isLoggedIn {
+                        LoggedInCardView(username: signalR.username, avatarUrl: signalR.avatarUrl, onSignOut: logout)
+                        KeepSignedInToggleView(isOn: $keepSignedIn)
                     } else {
-                        EmptyNotificationView()
+                        SignInCardView(isLoading: isLoading, loginError: loginError, onSignIn: login)
+                    }
+
+                    if signalR.isLoggedIn {
+                        ActivePRsView(prs: signalR.activePRs, gitHubId: signalR.userGitHubId)
+                        Divider()
+                    }
+                    
+                    if signalR.isLoggedIn {
+                        if let event = signalR.lastEvent {
+                            LastNotificationCardView(event: event)
+                        } else {
+                            EmptyNotificationView()
+                        }
+                    }
+
+                    if signalR.isLoggedIn {
+                        Divider()
+                        LocalBranchesView(gitHubId: signalR.userGitHubId, backendUrl: signalR.baseUrl)
                     }
                 }
+                .foregroundStyle(Color(white: 0.7))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 10)
+                .padding(.horizontal, 16)
             }
-            .foregroundStyle(Color(white: 0.7))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 10)
-            .padding(.horizontal, 16)
-
-            Spacer(minLength: 0)
 
             Divider()
 
@@ -126,6 +131,21 @@ struct ContentView: View {
                     .cursor(.pointingHand)
                 }
 
+                if signalR.isLoggedIn {
+                    Button {
+                        SettingsPanelManager.shared.show()
+                    } label: {
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                            .padding(6)
+                            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Settings")
+                    .cursor(.pointingHand)
+                }
+
                 if signalR.isLoggedIn, signalR.runningWorkflows.count > 0 {
                     Button {
                         WorkflowHistoryPanelManager.shared.show(signalR: signalR, gitHubId: signalR.userGitHubId)
@@ -168,7 +188,7 @@ struct ContentView: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 10)
         }
-        .frame(width: 400, height: 630, alignment: .top)
+        .frame(width: 400, height: 780, alignment: .top)
         .background(.regularMaterial)
         .onAppear { signalR.restoreSession() }
     }

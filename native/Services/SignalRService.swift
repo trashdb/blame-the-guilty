@@ -53,7 +53,7 @@ class SignalRService: ObservableObject {
     @Published var recentWorkflows: [WorkflowRun] = []
     @Published var activePRs: [PullRequest] = []
 
-    private let baseUrl: String
+    let baseUrl: String
     private var task: Task<Void, Never>?
     private var gitHubId: Int64 = 0
     private var pollTask: Task<Void, Never>?
