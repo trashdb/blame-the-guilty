@@ -7,28 +7,26 @@ final class SettingsPanelManager {
     var backendUrl: String = ""
 
     func show() {
-        if panel == nil {
-            let hostingController = NSHostingController(rootView: SettingsView(gitHubId: gitHubId, backendUrl: backendUrl))
+        let hostingController = NSHostingController(rootView: SettingsView(gitHubId: gitHubId, backendUrl: backendUrl))
 
-            panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 540, height: 440),
-                styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
-                backing: .buffered,
-                defer: false
-            )
+        let p = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 540, height: 400),
+            styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
 
-            panel?.contentViewController = hostingController
-            panel?.title = "Settings"
-            panel?.center()
-            panel?.level = .floating
-            panel?.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            panel?.isReleasedWhenClosed = false
-            panel?.backgroundColor = .clear
-            panel?.isOpaque = false
-            panel?.hasShadow = true
-        }
-
-        panel?.makeKeyAndOrderFront(nil)
+        p.contentViewController = hostingController
+        p.title = "Settings"
+        p.center()
+        p.level = .floating
+        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        p.isReleasedWhenClosed = false
+        p.backgroundColor = .clear
+        p.isOpaque = false
+        p.hasShadow = true
+        panel = p
+        p.makeKeyAndOrderFront(nil)
     }
 
     func close() {

@@ -182,7 +182,7 @@ struct LocalBranchesView: View {
 
                 Spacer()
 
-                if !branch.isCurrent {
+                if !branch.isCurrent && !isDefaultBranch(branch.name) {
                     Button {
                         branchToDelete = (repo, branch)
                     } label: {
@@ -222,19 +222,25 @@ struct LocalBranchesView: View {
 
                 Spacer()
 
-                Button {
-                    remoteBranchToDelete = (repo, branch)
-                } label: {
-                    Image(systemName: "trash")
+                if isDefaultBranch(branch.name) {
+                    Text("protected")
                         .font(.system(size: 8))
-                        .foregroundStyle(branch.isMerged ? .red.opacity(0.7) : .gray.opacity(0.3))
-                        .padding(3)
-                        .background((branch.isMerged ? Color.red : Color.gray).opacity(0.1), in: RoundedRectangle(cornerRadius: 3))
+                        .foregroundStyle(.secondary)
+                } else {
+                    Button {
+                        remoteBranchToDelete = (repo, branch)
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 8))
+                            .foregroundStyle(branch.isMerged ? .red.opacity(0.7) : .gray.opacity(0.3))
+                            .padding(3)
+                            .background((branch.isMerged ? Color.red : Color.gray).opacity(0.1), in: RoundedRectangle(cornerRadius: 3))
+                    }
+                    .buttonStyle(.plain)
+                    .help(branch.isMerged ? "Delete \"\(branch.name)\" (safe — merged)" : "Not merged yet — cannot delete")
+                    .cursor(.pointingHand)
+                    .disabled(!branch.isMerged)
                 }
-                .buttonStyle(.plain)
-                .help(branch.isMerged ? "Delete \"\(branch.name)\" (safe — merged)" : "Not merged yet — cannot delete")
-                .cursor(.pointingHand)
-                .disabled(!branch.isMerged)
             }
             .padding(.leading, 16)
             .padding(.trailing, 6)
@@ -292,6 +298,10 @@ struct LocalBranchesView: View {
                 repos[ri].isExpanded = true
             }
         }
+    }
+
+    private func isDefaultBranch(_ name: String) -> Bool {
+        name == "main" || name == "master"
     }
 
     private func deleteRemoteBranch(repo: ScannedRepo, branch: RemoteBranch) async {
