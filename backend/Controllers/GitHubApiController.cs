@@ -24,7 +24,7 @@ public class GitHubApiController : ControllerBase
     public async Task<IActionResult> GetMyBranches([FromQuery] long gitHubId, [FromQuery] string repo)
     {
         var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
-        var token = user?.AccessToken ?? _configuration["GitHub:PatToken"];
+        var token = user?.UserPatToken ?? user?.AccessToken ?? _configuration["GitHub:PatToken"];
         if (string.IsNullOrEmpty(token))
             return Unauthorized(new { error = "No token" });
 

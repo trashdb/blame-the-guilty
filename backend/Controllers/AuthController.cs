@@ -82,11 +82,27 @@ public class AuthController : ControllerBase
     {
         var user = await _db.GitHubUsers
             .Where(u => u.GitHubId == gitHubId)
-            .Select(u => new { u.GitHubId, u.GitHubUsername, u.AvatarUrl })
+            .Select(u => new { u.GitHubId, u.GitHubUsername, u.AvatarUrl, u.UserPatToken })
             .FirstOrDefaultAsync();
 
         if (user == null) return NotFound();
 
-        return Ok(new { id = user.GitHubId, username = user.GitHubUsername, avatarUrl = user.AvatarUrl });
+        return Ok(new { id = user.GitHubId, username = user.GitHubUsername, avatarUrl = user.AvatarUrl, hasPat = user.UserPatToken != null });
     }
+
+    [HttpPost("pat")]
+    public async Task<IActionResult> SavePat([FromQuery] long gitHubId, [FromBody] PatRequest body)
+    {
+        var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
+        if (user == null) return NotFound();
+
+        user.UserPatToken = string.IsNullOrWhiteSpace(body.PatToken) ? null : body.PatToken;
+        await _db.SaveChangesAsync();
+        return Ok(new { saved = true });
+    }
+}
+
+public class PatRequest
+{
+    public string? PatToken { get; set; }
 }

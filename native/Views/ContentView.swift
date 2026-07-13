@@ -133,7 +133,10 @@ struct ContentView: View {
 
                 if signalR.isLoggedIn {
                     Button {
-                        SettingsPanelManager.shared.show()
+                        let m = SettingsPanelManager.shared
+                        m.gitHubId = signalR.userGitHubId
+                        m.backendUrl = signalR.baseUrl
+                        m.show()
                     } label: {
                         Image(systemName: "gearshape.fill")
                             .font(.system(size: 13))

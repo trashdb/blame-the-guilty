@@ -15,6 +15,8 @@ public class GitHubUser
 
     public string? AccessToken { get; set; }
 
+    public string? UserPatToken { get; set; }
+
     public string? SignalRConnectionId { get; set; }
 
     public bool IsOnline => SignalRConnectionId != null;

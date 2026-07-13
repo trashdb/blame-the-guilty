@@ -3,13 +3,15 @@ import SwiftUI
 final class SettingsPanelManager {
     static let shared = SettingsPanelManager()
     private var panel: NSPanel?
+    var gitHubId: Int64 = 0
+    var backendUrl: String = ""
 
     func show() {
         if panel == nil {
-            let hostingController = NSHostingController(rootView: SettingsView())
+            let hostingController = NSHostingController(rootView: SettingsView(gitHubId: gitHubId, backendUrl: backendUrl))
 
             panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 480, height: 400),
+                contentRect: NSRect(x: 0, y: 0, width: 540, height: 440),
                 styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
                 backing: .buffered,
                 defer: false
