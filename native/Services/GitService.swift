@@ -124,7 +124,7 @@ actor GitService {
         guard let remote = try? await runGit(repoPath: repoPath, args: ["config", "--get", "remote.origin.url"]) else { return nil }
         let s = remote.trimmingCharacters(in: .whitespacesAndNewlines)
         if s.contains("github.com") {
-            if let range = s.range(of: "github.com[:/]") {
+            if let range = s.range(of: "github.com[:/]", options: .regularExpression) {
                 var after = s[range.upperBound...]
                 if after.hasSuffix(".git") { after = after.dropLast(4) }
                 return after.replacingOccurrences(of: ":", with: "/")
