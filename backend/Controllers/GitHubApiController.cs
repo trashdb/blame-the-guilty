@@ -28,32 +28,66 @@ public class GitHubApiController : ControllerBase
         if (string.IsNullOrEmpty(token))
             return Unauthorized(new { error = "No token" });
 
-        var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{repo}/branches?per_page=100");
-        request.Headers.UserAgent.ParseAdd("BlameTheGuilty");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        // 1. List all branches
+        var listReq = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{repo}/branches?per_page=100");
+        listReq.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        listReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        var response = await _client.SendAsync(request);
-        if (!response.IsSuccessStatusCode)
-            return StatusCode((int)response.StatusCode, new { error = "GitHub API error" });
+        var listResp = await _client.SendAsync(listReq);
+        if (!listResp.IsSuccessStatusCode)
+            return StatusCode((int)listResp.StatusCode, new { error = "GitHub API error" });
 
-        var content = await response.Content.ReadAsStringAsync();
+        var content = await listResp.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(content);
         var branches = doc.RootElement.EnumerateArray();
+        var username = user?.GitHubUsername ?? "";
 
+        // 2. For each branch, fetch details to get the author login
         var myBranches = new List<object>();
-        foreach (var branch in branches)
+        var semaphore = new SemaphoreSlim(10);
+
+        await Parallel.ForEachAsync(branches, async (branch, ct) =>
         {
             var branchName = branch.GetProperty("name").GetString() ?? "";
-            var commit = branch.GetProperty("commit");
-            if (commit.TryGetProperty("author", out var author) && author.ValueKind == JsonValueKind.Object
-                && author.TryGetProperty("login", out var login))
+
+            // Skip dependabot branches
+            if (branchName.StartsWith("dependabot/"))
+                return;
+
+            await semaphore.WaitAsync(ct);
+            try
             {
-                var authorLogin = login.GetString();
-                if (!string.Equals(authorLogin, user?.GitHubUsername, StringComparison.OrdinalIgnoreCase))
-                    continue;
-                myBranches.Add(new { name = branchName });
+                var detailReq = new HttpRequestMessage(
+                    HttpMethod.Get,
+                    $"https://api.github.com/repos/{repo}/branches/{branchName}");
+                detailReq.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+                detailReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+                var detailResp = await _client.SendAsync(detailReq, ct);
+                if (!detailResp.IsSuccessStatusCode) return;
+
+                var detailContent = await detailResp.Content.ReadAsStringAsync(ct);
+                using var detailDoc = JsonDocument.Parse(detailContent);
+
+                var authorLogin = detailDoc.RootElement
+                    .GetProperty("commit")
+                    .GetProperty("author")
+                    .GetProperty("login")
+                    .GetString();
+
+                if (string.Equals(authorLogin, username, StringComparison.OrdinalIgnoreCase))
+                {
+                    lock (myBranches)
+                    {
+                        myBranches.Add(new { name = branchName });
+                    }
+                }
             }
-        }
+            finally
+            {
+                semaphore.Release();
+            }
+        });
 
         return Ok(myBranches);
     }
