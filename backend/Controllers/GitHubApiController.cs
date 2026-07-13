@@ -44,12 +44,15 @@ public class GitHubApiController : ControllerBase
         foreach (var branch in branches)
         {
             var branchName = branch.GetProperty("name").GetString() ?? "";
-            var authorLogin = branch.GetProperty("commit").GetProperty("author").GetProperty("login").GetString();
-
-            if (!string.Equals(authorLogin, user?.GitHubUsername, StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            myBranches.Add(new { name = branchName });
+            var commit = branch.GetProperty("commit");
+            if (commit.TryGetProperty("author", out var author) && author.ValueKind == JsonValueKind.Object
+                && author.TryGetProperty("login", out var login))
+            {
+                var authorLogin = login.GetString();
+                if (!string.Equals(authorLogin, user?.GitHubUsername, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                myBranches.Add(new { name = branchName });
+            }
         }
 
         return Ok(myBranches);

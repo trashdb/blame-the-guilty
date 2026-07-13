@@ -121,21 +121,34 @@ actor GitService {
     }
 
     func repoFullName(repoPath: String) async -> String? {
-        guard let remote = try? await runGit(repoPath: repoPath, args: ["config", "--get", "remote.origin.url"]) else { return nil }
-        let s = remote.trimmingCharacters(in: .whitespacesAndNewlines)
-        if s.contains("github.com") {
-            if let range = s.range(of: "github.com[:/]", options: .regularExpression) {
-                var after = s[range.upperBound...]
-                if after.hasSuffix(".git") { after = after.dropLast(4) }
-                return after.replacingOccurrences(of: ":", with: "/")
+        guard let raw = try? await runGit(repoPath: repoPath, args: ["config", "--get", "remote.origin.url"]) else { return nil }
+        let url = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let colon = url.firstIndex(of: ":") {
+            var after = String(url[url.index(after: colon)...])
+            if after.hasSuffix(".git") { after = String(after.dropLast(4)) }
+            return after
+        }
+        if let scheme = url.range(of: "://") {
+            let afterScheme = url[scheme.upperBound...]
+            if let slash = afterScheme.firstIndex(of: "/") {
+                var after = String(afterScheme[afterScheme.index(after: slash)...])
+                if after.hasSuffix(".git") { after = String(after.dropLast(4)) }
+                return after
             }
         }
-        return nil
+        var s = url
+        if s.hasSuffix(".git") { s = String(s.dropLast(4)) }
+        return s
     }
 
     func listMyRemoteBranchesViaAPI(repoPath: String, backendUrl: String, gitHubId: Int64) async -> [(name: String, isMerged: Bool)] {
-        guard let fullName = await repoFullName(repoPath: repoPath),
-              let encoded = fullName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+        guard let fullName = await repoFullName(repoPath: repoPath) else {
+            let email = await currentUserEmail() ?? ""
+            return await listMyRemoteBranches(repoPath: repoPath, email: email)
+        }
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove("/")
+        guard let encoded = fullName.addingPercentEncoding(withAllowedCharacters: allowed),
               let url = URL(string: "\(backendUrl)/api/github/my-branches?gitHubId=\(gitHubId)&repo=\(encoded)") else {
             let email = await currentUserEmail() ?? ""
             return await listMyRemoteBranches(repoPath: repoPath, email: email)
