@@ -387,6 +387,11 @@ class SignalRService: ObservableObject {
                 runningWorkflows.remove(at: idx)
             }
 
+            if runningWorkflows.isEmpty && runStatus == .running {
+                runStatus = .idle
+                resetTask?.cancel()
+            }
+
             let existing = recentWorkflows.first(where: { $0.runId == runId && $0.status == "in_progress" })
             let originalStartedAt = existing?.startedAt ?? Date()
             let completedAt = Date()

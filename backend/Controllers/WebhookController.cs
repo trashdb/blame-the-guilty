@@ -205,7 +205,7 @@ public class WebhookController : ControllerBase
             .Where(w => w.RunId == runId && w.Status == "in_progress")
             .OrderByDescending(w => w.Id)
             .FirstOrDefaultAsync();
-        var isTerminal = conclusion is "success" or "failure" or "cancelled" or "timed_out" or "stale" or "action_required" or "skipped" or "neutral";
+        var isTerminal = conclusion is "success" or "failure" or "cancelled" or "timed_out" or "stale" or "action_required" or "skipped" or "neutral" or "startup_failure";
         var dbStatus = isTerminal
             ? conclusion == "success" ? "success"
             : conclusion == "failure" ? "failure"
@@ -284,7 +284,7 @@ public class WebhookController : ControllerBase
             return Ok(new { runId, conclusion });
         }
 
-        if (conclusion is "cancelled" or "timed_out" or "stale" or "action_required" or "skipped" or "neutral")
+        if (conclusion is "cancelled" or "timed_out" or "stale" or "action_required" or "skipped" or "neutral" or "startup_failure")
         {
             var cancelUser = await FindConnectedUser(culprit.Login, culprit.Id);
             if (cancelUser != null)
