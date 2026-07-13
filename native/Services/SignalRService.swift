@@ -241,7 +241,7 @@ class SignalRService: ObservableObject {
                         trigger: run.trigger,
                         prNumber: run.prNumber,
                         prTitle: run.prTitle,
-                        status: "failure",
+                        status: "cancelled",
                         htmlUrl: run.htmlUrl, startedAt: run.startedAt,
                         completedAt: nil,
                         targetGitHubIds: run.targetGitHubIds
@@ -365,6 +365,7 @@ class SignalRService: ObservableObject {
     private func handleWorkflowCompleted(_ data: [String: Any]) {
         let runId      = data["runId"] as? Int64 ?? 0
         let succeeded  = data["succeeded"] as? Bool ?? false
+        let conclusion = data["conclusion"] as? String
         let name       = data["workflowName"] as? String
         let repo       = data["repo"] as? String ?? "unknown"
         let actor      = data["actor"] as? String ?? "someone"
@@ -372,9 +373,15 @@ class SignalRService: ObservableObject {
         let trigger    = data["trigger"] as? String
         let workflowURL: URL? = URL(string: htmlUrl ?? "https://github.com/\(repo)/actions/runs/\(runId)")
 
+        let isActualFailure = !succeeded && (conclusion == nil || conclusion == "failure")
+
         Task { @MainActor in
-            runStatus = succeeded ? .success : .failure
-            scheduleStatusReset()
+            if isActualFailure {
+                runStatus = .failure
+            } else if succeeded {
+                runStatus = .success
+            }
+            if isActualFailure || succeeded { scheduleStatusReset() }
 
             if let idx = runningWorkflows.firstIndex(where: { $0.runId == runId }) {
                 runningWorkflows.remove(at: idx)
@@ -383,6 +390,12 @@ class SignalRService: ObservableObject {
             let existing = recentWorkflows.first(where: { $0.runId == runId && $0.status == "in_progress" })
             let originalStartedAt = existing?.startedAt ?? Date()
             let completedAt = Date()
+
+            let statusString: String
+            if succeeded { statusString = "success" }
+            else if let c = conclusion, c != "failure" { statusString = "cancelled" }
+            else { statusString = "failure" }
+
             let completedRun = WorkflowRun(
                 id: UUID(), dbId: existing?.dbId,
                 runId: runId,
@@ -393,7 +406,7 @@ class SignalRService: ObservableObject {
                 trigger: trigger ?? existing?.trigger,
                 prNumber: existing?.prNumber,
                 prTitle: existing?.prTitle,
-                status: succeeded ? "success" : "failure",
+                status: statusString,
                 htmlUrl: htmlUrl ?? "https://github.com/\(repo)/actions/runs/\(runId)",
                 startedAt: originalStartedAt,
                 completedAt: completedAt,
@@ -408,8 +421,8 @@ class SignalRService: ObservableObject {
             if recentWorkflows.count > 10 { recentWorkflows = Array(recentWorkflows.prefix(10)) }
             persistHistory()
 
-            let wfName = name ?? "Workflow"
-            if !succeeded {
+            if isActualFailure {
+                let wfName = name ?? "Workflow"
                 lastEvent = PunishmentEvent(
                     culprit: actor, repo: repo, runId: runId,
                     workflowName: wfName,
