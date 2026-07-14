@@ -10,6 +10,7 @@ struct LocalBranchesView: View {
     @State private var selectedTab = 0
     @State private var branchToDelete: (repo: ScannedRepo, branch: GitBranch)?
     @State private var remoteBranchToDelete: (repo: ScannedRepo, branch: RemoteBranch)?
+    @State private var showDeleteConfirmation = false
 
     @AppStorage("workspacePath") private var workspacePath: String = {
         NSHomeDirectory() + "/Desktop/dev"
@@ -33,20 +34,23 @@ struct LocalBranchesView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 130)
-                if isLoading {
-                    ProgressView()
-                        .scaleEffect(0.6)
-                } else {
-                    Button {
-                        Task { await scan() }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 10))
+                Group {
+                    if isLoading {
+                        ProgressView()
+                            .scaleEffect(0.6)
+                    } else {
+                        Button {
+                            Task { await scan() }
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 10))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Refresh branches")
+                        .cursor(.pointingHand)
                     }
-                    .buttonStyle(.plain)
-                    .help("Refresh branches")
-                    .cursor(.pointingHand)
                 }
+                .frame(width: 22, height: 22)
             }
 
             if let error {
@@ -74,37 +78,63 @@ struct LocalBranchesView: View {
                     }
                 }
             }
-            .frame(height: 150)
+            .frame(height: 180)
         }
-        .onAppear { if repos.isEmpty { Task { await scan() } } }
-        .confirmationDialog(
-            branchToDelete != nil
-                ? "Delete branch \"\(branchToDelete!.branch.name)\"?"
-                : "Delete remote branch \"\(remoteBranchToDelete?.branch.name ?? "")\"?",
-            isPresented: .init(
-                get: { branchToDelete != nil || remoteBranchToDelete != nil },
-                set: { if !$0 { branchToDelete = nil; remoteBranchToDelete = nil } }
-            ),
-            actions: {
-                Button("Delete", role: .destructive) {
-                    if let r = branchToDelete?.repo, let b = branchToDelete?.branch {
-                        Task { await deleteBranch(repo: r, branch: b) }
-                        branchToDelete = nil
-                    } else if let r = remoteBranchToDelete?.repo, let b = remoteBranchToDelete?.branch {
-                        Task { await deleteRemoteBranch(repo: r, branch: b) }
-                        remoteBranchToDelete = nil
+        .overlay(alignment: .center) {
+            if showDeleteConfirmation {
+                ZStack {
+                    Color.black.opacity(0.3)
+                        .ignoresSafeArea()
+                    VStack(spacing: 12) {
+                        let isRemote = remoteBranchToDelete != nil
+                        Text(isRemote
+                             ? "Delete remote branch \"\(remoteBranchToDelete!.branch.name)\"?"
+                             : "Delete branch \"\(branchToDelete!.branch.name)\"?")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color(white: 0.85))
+                        Text(isRemote
+                             ? "This will run `git push origin --delete` on the remote."
+                             : "This will run `git branch -D` locally. Unmerged changes will be lost.")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                        HStack(spacing: 12) {
+                            Button("Cancel", role: .cancel) {
+                                branchToDelete = nil
+                                remoteBranchToDelete = nil
+                                showDeleteConfirmation = false
+                            }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 11))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 6)
+                            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                            Button("Delete", role: .destructive) {
+                                if let r = branchToDelete?.repo, let b = branchToDelete?.branch {
+                                    Task { await deleteBranch(repo: r, branch: b) }
+                                } else if let r = remoteBranchToDelete?.repo, let b = remoteBranchToDelete?.branch {
+                                    Task { await deleteRemoteBranch(repo: r, branch: b) }
+                                }
+                                branchToDelete = nil
+                                remoteBranchToDelete = nil
+                                showDeleteConfirmation = false
+                            }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 11, weight: .medium))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 6)
+                            .background(.red.opacity(0.2), in: RoundedRectangle(cornerRadius: 6))
+                            .foregroundStyle(.red)
+                        }
                     }
-                }
-                Button("Cancel", role: .cancel) { branchToDelete = nil; remoteBranchToDelete = nil }
-            },
-            message: {
-                if branchToDelete != nil {
-                    Text("This will run `git branch -D` locally. Unmerged changes will be lost.")
-                } else {
-                    Text("This will run `git push origin --delete` on the remote. The branch will be permanently removed.")
+                    .padding(16)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(.white.opacity(0.1), lineWidth: 1))
+                    .padding(.horizontal, 20)
                 }
             }
-        )
+        }
+        .onAppear { if repos.isEmpty { Task { await scan() } } }
     }
 
     @ViewBuilder
@@ -185,6 +215,7 @@ struct LocalBranchesView: View {
                 if !branch.isCurrent && !isDefaultBranch(branch.name) {
                     Button {
                         branchToDelete = (repo, branch)
+                        showDeleteConfirmation = true
                     } label: {
                         Image(systemName: "trash")
                             .font(.system(size: 8))
@@ -229,6 +260,7 @@ struct LocalBranchesView: View {
                 } else {
                     Button {
                         remoteBranchToDelete = (repo, branch)
+                        showDeleteConfirmation = true
                     } label: {
                         Image(systemName: "trash")
                             .font(.system(size: 8))
