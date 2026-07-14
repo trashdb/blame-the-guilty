@@ -12,6 +12,7 @@ struct LocalBranchesView: View {
     @State private var remoteBranchToDelete: (repo: ScannedRepo, branch: RemoteBranch)?
     @State private var showDeleteConfirmation = false
     @State private var checkingOutBranch: (repo: ScannedRepo, name: String)?
+    @State private var selectedBranchInfo: BranchInfo?
 
     @AppStorage("workspacePath") private var workspacePath: String = {
         NSHomeDirectory() + "/Desktop/dev"
@@ -136,6 +137,9 @@ struct LocalBranchesView: View {
             }
         }
         .onAppear { if repos.isEmpty { Task { await scan() } } }
+        .popover(item: $selectedBranchInfo) { info in
+            BranchDetailView(info: info)
+        }
     }
 
     @ViewBuilder
@@ -190,44 +194,33 @@ struct LocalBranchesView: View {
     private func localBranchList(_ repo: ScannedRepo) -> some View {
         ForEach(repo.branches) { branch in
             HStack(spacing: 5) {
-                if branch.isCurrent {
-                    Text("*")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .foregroundStyle(.green)
-                        .frame(width: 8)
-                } else {
-                    Text(" ")
-                        .frame(width: 8)
-                }
-
-                if branch.isCurrent {
-                    Text(branch.name)
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(.green)
-                        .lineLimit(1)
-                    Text("(current)")
-                        .font(.system(size: 8))
-                        .foregroundStyle(.secondary)
-                } else {
-                    Button {
-                        Task { await checkoutBranch(repo: repo, name: branch.name) }
-                    } label: {
-                        HStack(spacing: 4) {
-                            if checkingOutBranch?.repo.id == repo.id && checkingOutBranch?.name == branch.name {
-                                ProgressView()
-                                    .scaleEffect(0.5)
-                                    .frame(width: 10, height: 10)
-                            }
-                            Text(branch.name)
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(Color(white: 0.75))
-                                .lineLimit(1)
+                Button {
+                    selectedBranchInfo = BranchInfo(
+                        name: branch.name, repoPath: repo.path,
+                        repoName: GitService.repoName(from: repo.path),
+                        isCurrent: branch.isCurrent, isLocal: true,
+                        isMerged: false,
+                        isDefault: isDefaultBranch(branch.name))
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(branch.isCurrent ? "*" : " ")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.green)
+                            .frame(width: 8)
+                        Text(branch.name)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(branch.isCurrent ? .green : Color(white: 0.75))
+                            .lineLimit(1)
+                        if branch.isCurrent {
+                            Text("(current)")
+                                .font(.system(size: 8))
+                                .foregroundStyle(.secondary)
                         }
                     }
-                    .buttonStyle(.plain)
-                    .cursor(.pointingHand)
-                    .help("Checkout \"\(branch.name)\"")
                 }
+                .buttonStyle(.plain)
+                .cursor(.pointingHand)
+                .help("Details for \"\(branch.name)\"")
 
                 Spacer()
 
@@ -261,14 +254,27 @@ struct LocalBranchesView: View {
                     .fill(branch.isMerged ? .green : .orange)
                     .frame(width: 6, height: 6)
 
-                Text(branch.name)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(Color(white: 0.75))
-                    .lineLimit(1)
-
-                Text(branch.isMerged ? "merged" : "unmerged")
-                    .font(.system(size: 8))
-                    .foregroundStyle(branch.isMerged ? .green : .orange)
+                Button {
+                    selectedBranchInfo = BranchInfo(
+                        name: branch.name, repoPath: repo.path,
+                        repoName: GitService.repoName(from: repo.path),
+                        isCurrent: false, isLocal: false,
+                        isMerged: branch.isMerged,
+                        isDefault: isDefaultBranch(branch.name))
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(branch.name)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(Color(white: 0.75))
+                            .lineLimit(1)
+                        Text(branch.isMerged ? "merged" : "unmerged")
+                            .font(.system(size: 8))
+                            .foregroundStyle(branch.isMerged ? .green : .orange)
+                    }
+                }
+                .buttonStyle(.plain)
+                .cursor(.pointingHand)
+                .help("Details for \"\(branch.name)\"")
 
                 Spacer()
 
@@ -346,6 +352,9 @@ struct LocalBranchesView: View {
         await MainActor.run { checkingOutBranch = (repo, name) }
         do {
             try await git.checkoutBranch(repoPath: repo.path, name: name)
+            if !(await git.pullCurrentBranch(repoPath: repo.path)) {
+                await openRider(repo.path)
+            }
             let branches = try await git.listMyBranches(repoPath: repo.path)
             await MainActor.run {
                 if let ri = repos.firstIndex(where: { $0.id == repo.id }) {
@@ -356,6 +365,14 @@ struct LocalBranchesView: View {
         } catch {
             await MainActor.run { checkingOutBranch = nil }
         }
+    }
+
+    @MainActor
+    private func openRider(_ repoPath: String) {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        task.arguments = ["open", "-a", "Rider", repoPath]
+        try? task.run()
     }
 
     private func deleteBranch(repo: ScannedRepo, branch: GitBranch) async {

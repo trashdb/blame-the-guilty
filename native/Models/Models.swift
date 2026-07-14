@@ -86,3 +86,28 @@ struct GitHubUserInfo: Decodable, Identifiable {
     let login: String
     var id: Int64 { gitHubId }
 }
+
+func extractTicketNumber(from branchName: String) -> String? {
+    let pattern = try? NSRegularExpression(pattern: "[A-Z]+-\\d+")
+    let range = NSRange(branchName.startIndex..., in: branchName)
+    guard let match = pattern?.firstMatch(in: branchName, range: range) else { return nil }
+    return String(branchName[Range(match.range, in: branchName)!])
+}
+
+struct BranchInfo: Identifiable {
+    let id = UUID()
+    let name: String
+    let repoPath: String
+    let repoName: String
+    let isCurrent: Bool
+    let isLocal: Bool
+    let isMerged: Bool
+    let isDefault: Bool
+
+    var ticketNumber: String? { extractTicketNumber(from: name) }
+    var jiraUrl: URL? {
+        guard let ticket = ticketNumber else { return nil }
+        let url = UserDefaults.standard.string(forKey: "jiraBoardUrl") ?? "https://easyjet.atlassian.net/browse/"
+        return URL(string: "\(url)\(ticket)")
+    }
+}

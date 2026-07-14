@@ -7,7 +7,9 @@ struct SettingsView: View {
     @AppStorage("workspacePath") private var workspacePath: String = {
         NSHomeDirectory() + "/Desktop/dev"
     }()
+    @AppStorage("jiraBoardUrl") private var jiraBoardUrl = "https://easyjet.atlassian.net/browse/"
     @State private var pathDraft = ""
+    @State private var jiraDraft = ""
     @State private var patDraft = ""
     @State private var patSaved = false
     @State private var patSaving = false
@@ -45,6 +47,43 @@ struct SettingsView: View {
                         Button("Save") {
                             workspacePath = pathDraft
                             SettingsPanelManager.shared.close()
+                        }
+                        .font(.system(size: 11, weight: .medium))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(.green.opacity(0.2), in: RoundedRectangle(cornerRadius: 5))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 5)
+                                .stroke(.green.opacity(0.3), lineWidth: 1)
+                        )
+                        .buttonStyle(.plain)
+                        .cursor(.pointingHand)
+                    }
+                }
+
+                Divider()
+
+                Group {
+                    Text("Jira Board URL")
+                        .font(.system(size: 13, weight: .medium))
+                    Text("Used to build links to tickets extracted from branch names (e.g. LOY-1234).")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .padding(.top, -8)
+                    HStack(spacing: 6) {
+                        TextField("https://your-domain.atlassian.net/browse/", text: $jiraDraft)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 12, design: .monospaced))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                            .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(.white.opacity(0.1), lineWidth: 1)
+                            )
+                            .onAppear { jiraDraft = jiraBoardUrl }
+                        Button("Save") {
+                            jiraBoardUrl = jiraDraft
                         }
                         .font(.system(size: 11, weight: .medium))
                         .padding(.horizontal, 10)
@@ -120,7 +159,7 @@ struct SettingsView: View {
             }
             .padding(24)
         }
-        .frame(width: 540, height: 440)
+        .frame(width: 540, height: 560)
     }
 
     private func savePat() async {

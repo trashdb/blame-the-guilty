@@ -73,6 +73,13 @@ actor GitService {
         try await runGit(repoPath: repoPath, args: ["checkout", name])
     }
 
+    func pullCurrentBranch(repoPath: String) async -> Bool {
+        if (try? await runGit(repoPath: repoPath, args: ["pull", "--rebase"])) != nil {
+            return true
+        }
+        return false
+    }
+
     func deleteLocalBranch(repoPath: String, name: String) async throws {
         try await runGit(repoPath: repoPath, args: ["branch", "-D", name])
     }
