@@ -2,6 +2,7 @@ import SwiftUI
 
 struct BranchDetailView: View {
     let info: BranchInfo
+    var onCheckout: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
 
     @State private var deleting = false
@@ -129,6 +130,7 @@ struct BranchDetailView: View {
             if case .conflict = await git.pullCurrentBranch(repoPath: info.repoPath) {
                 openRider()
             }
+            await MainActor.run { onCheckout?() }
             dismiss()
         } catch {}
         checkingOut = false
@@ -157,9 +159,27 @@ struct BranchDetailView: View {
     }
 
     private func openRider() {
+        let repoURL = URL(fileURLWithPath: info.repoPath)
+        let file = findSolutionFile(in: repoURL, extension: "slnx")
+            ?? findSolutionFile(in: repoURL, extension: "sln")
+            ?? repoURL
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        task.arguments = ["open", "-a", "Rider", info.repoPath]
+        task.arguments = ["open", "-a", "Rider", file.path]
         try? task.run()
+    }
+
+    private func findSolutionFile(in dir: URL, extension ext: String = "slnx") -> URL? {
+        guard let enumerator = FileManager.default.enumerator(
+            at: dir, includingPropertiesForKeys: nil,
+            options: [.skipsPackageDescendants, .skipsHiddenFiles]
+        ) else { return nil }
+        while let item = enumerator.nextObject() as? URL {
+            if item.pathExtension == ext { return item }
+            if item.pathComponents.count - dir.pathComponents.count > 3 {
+                enumerator.skipDescendants()
+            }
+        }
+        return nil
     }
 }

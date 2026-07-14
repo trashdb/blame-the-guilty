@@ -218,9 +218,6 @@ struct LocalBranchesView: View {
                 .buttonStyle(.plain)
                 .cursor(.pointingHand)
                 .help("Details for \"\(branch.name)\"")
-                .popover(item: $selectedBranchInfo) { info in
-                    BranchDetailView(info: info)
-                }
 
                 Spacer()
 
@@ -243,6 +240,9 @@ struct LocalBranchesView: View {
             .padding(.leading, 16)
             .padding(.trailing, 6)
             .padding(.vertical, 2)
+            .popover(item: $selectedBranchInfo) { info in
+                BranchDetailView(info: info, onCheckout: { Task { await scan() } })
+            }
         }
     }
 
@@ -275,9 +275,6 @@ struct LocalBranchesView: View {
                 .buttonStyle(.plain)
                 .cursor(.pointingHand)
                 .help("Details for \"\(branch.name)\"")
-                .popover(item: $selectedBranchInfo) { info in
-                    BranchDetailView(info: info)
-                }
 
                 Spacer()
 
@@ -305,6 +302,9 @@ struct LocalBranchesView: View {
             .padding(.leading, 16)
             .padding(.trailing, 6)
             .padding(.vertical, 2)
+            .popover(item: $selectedBranchInfo) { info in
+                BranchDetailView(info: info, onCheckout: { Task { await scan() } })
+            }
         }
     }
 
