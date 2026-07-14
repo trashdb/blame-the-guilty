@@ -137,9 +137,6 @@ struct LocalBranchesView: View {
             }
         }
         .onAppear { if repos.isEmpty { Task { await scan() } } }
-        .popover(item: $selectedBranchInfo) { info in
-            BranchDetailView(info: info)
-        }
     }
 
     @ViewBuilder
@@ -221,6 +218,9 @@ struct LocalBranchesView: View {
                 .buttonStyle(.plain)
                 .cursor(.pointingHand)
                 .help("Details for \"\(branch.name)\"")
+                .popover(item: $selectedBranchInfo) { info in
+                    BranchDetailView(info: info)
+                }
 
                 Spacer()
 
@@ -275,6 +275,9 @@ struct LocalBranchesView: View {
                 .buttonStyle(.plain)
                 .cursor(.pointingHand)
                 .help("Details for \"\(branch.name)\"")
+                .popover(item: $selectedBranchInfo) { info in
+                    BranchDetailView(info: info)
+                }
 
                 Spacer()
 

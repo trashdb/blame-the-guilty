@@ -11,17 +11,6 @@ struct BranchDetailView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 4) {
-                Spacer()
-                if info.isLocal {
-                    linkButton("Open in Rider") { openRider() }
-                }
-                if let url = info.jiraUrl {
-                    linkButton("Open Jira") { NSWorkspace.shared.open(url) }
-                }
-                linkButton("Open in Terminal") { openTerminal() }
-            }
-
             VStack(alignment: .leading, spacing: 4) {
                 Text(info.name)
                     .font(.system(size: 13, weight: .semibold, design: .monospaced))
@@ -115,19 +104,6 @@ struct BranchDetailView: View {
         .frame(width: 300, height: 220)
     }
 
-    private func linkButton(_ label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(label)
-                .font(.system(size: 10))
-                .foregroundStyle(.blue)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 4))
-        }
-        .buttonStyle(.plain)
-        .cursor(.pointingHand)
-    }
-
     private func actionButton(_ label: String, color: Color, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(label)
@@ -182,13 +158,6 @@ struct BranchDetailView: View {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         task.arguments = ["open", "-a", "Rider", info.repoPath]
-        try? task.run()
-    }
-
-    private func openTerminal() {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        task.arguments = ["open", "-a", "Terminal", info.repoPath]
         try? task.run()
     }
 }
