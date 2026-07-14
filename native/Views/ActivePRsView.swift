@@ -67,8 +67,8 @@ struct ActivePRsView: View {
                     }
                 }
             }
-            .scrollDisabled(prs.count < 5)
-            .frame(height: 210, alignment: .top)
+            .scrollDisabled(prs.count < 4)
+            .frame(height: 170, alignment: .top)
         }
         .padding(.top, 2)
         .padding(.bottom, 4)

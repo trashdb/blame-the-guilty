@@ -9,51 +9,51 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "flame.fill")
-                            .font(.system(size: 13)).padding(.bottom, 2)
-                        Text("Blame the Guilty")
-                            .font(.system(size: 16, weight: .semibold))
-                    }
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 13)).padding(.bottom, 2)
+                    Text("Blame the Guilty")
+                        .font(.system(size: 16, weight: .semibold))
+                }
 
-                    Text("CI/CD notifications when a merged PR breaks the build.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                Text("CI/CD notifications when a merged PR breaks the build.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                Divider()
+
+                if signalR.isLoggedIn {
+                    LoggedInCardView(username: signalR.username, avatarUrl: signalR.avatarUrl, onSignOut: logout)
+                    KeepSignedInToggleView(isOn: $keepSignedIn)
+                } else {
+                    SignInCardView(isLoading: isLoading, loginError: loginError, onSignIn: login)
+                }
+
+                if signalR.isLoggedIn {
+                    ActivePRsView(prs: signalR.activePRs, gitHubId: signalR.userGitHubId)
                     Divider()
-
-                    if signalR.isLoggedIn {
-                        LoggedInCardView(username: signalR.username, avatarUrl: signalR.avatarUrl, onSignOut: logout)
-                        KeepSignedInToggleView(isOn: $keepSignedIn)
+                }
+                
+                if signalR.isLoggedIn {
+                    if let event = signalR.lastEvent {
+                        LastNotificationCardView(event: event)
                     } else {
-                        SignInCardView(isLoading: isLoading, loginError: loginError, onSignIn: login)
-                    }
-
-                    if signalR.isLoggedIn {
-                        ActivePRsView(prs: signalR.activePRs, gitHubId: signalR.userGitHubId)
-                        Divider()
-                    }
-                    
-                    if signalR.isLoggedIn {
-                        if let event = signalR.lastEvent {
-                            LastNotificationCardView(event: event)
-                        } else {
-                            EmptyNotificationView()
-                        }
-                    }
-
-                    if signalR.isLoggedIn {
-                        Divider()
-                        LocalBranchesView(gitHubId: signalR.userGitHubId, backendUrl: signalR.baseUrl)
+                        EmptyNotificationView()
                     }
                 }
-                .foregroundStyle(Color(white: 0.7))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 10)
-                .padding(.horizontal, 16)
+
+                if signalR.isLoggedIn {
+                    Divider()
+                    LocalBranchesView(gitHubId: signalR.userGitHubId, backendUrl: signalR.baseUrl)
+                }
+                
+                Spacer(minLength: 0)
             }
+            .foregroundStyle(Color(white: 0.7))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 10)
+            .padding(.horizontal, 16)
 
             Divider()
 
@@ -189,9 +189,9 @@ struct ContentView: View {
                 .cursor(.pointingHand)
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, 10)
+            .padding(.vertical, 10)
         }
-        .frame(width: 400, height: 780, alignment: .top)
+        .frame(width: 400, height: 860, alignment: .top)
         .background(.regularMaterial)
         .onAppear { signalR.restoreSession() }
     }

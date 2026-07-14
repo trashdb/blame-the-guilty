@@ -74,9 +74,9 @@ struct LocalBranchesView: View {
                     }
                 }
             }
-            .frame(height: 200)
+            .frame(height: 150)
         }
-        .onAppear { Task { await scan() } }
+        .onAppear { if repos.isEmpty { Task { await scan() } } }
         .confirmationDialog(
             branchToDelete != nil
                 ? "Delete branch \"\(branchToDelete!.branch.name)\"?"
