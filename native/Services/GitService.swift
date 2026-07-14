@@ -79,18 +79,15 @@ actor GitService {
 
     func pullCurrentBranch(repoPath: String) async -> PullResult {
         guard await hasUpstream(repoPath: repoPath) else { return .noUpstream }
-        let errPipe = Pipe()
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["git", "pull", "--rebase"]
-        process.currentDirectoryURL = URL(fileURLWithPath: repoPath)
-        process.standardError = errPipe
-        guard (try? process.run()) != nil else { return .failed }
-        process.waitUntilExit()
-        if process.terminationStatus == 0 { return .success }
-        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-        let errOutput = String(data: errData, encoding: .utf8) ?? ""
-        return errOutput.lowercased().contains("conflict") ? .conflict : .failed
+        do {
+            try await runGit(repoPath: repoPath, args: ["pull", "--rebase"])
+            return .success
+        } catch let error as GitError {
+            let msg = error.localizedDescription.lowercased()
+            return msg.contains("conflict") ? .conflict : .failed
+        } catch {
+            return .failed
+        }
     }
 
     enum PullResult {

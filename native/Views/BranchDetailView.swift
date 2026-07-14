@@ -2,6 +2,7 @@ import SwiftUI
 
 struct BranchDetailView: View {
     let info: BranchInfo
+    @Environment(\.dismiss) private var dismiss
 
     @State private var deleting = false
     @State private var checkingOut = false
@@ -125,12 +126,10 @@ struct BranchDetailView: View {
         checkingOut = true
         do {
             try await git.checkoutBranch(repoPath: info.repoPath, name: info.name)
-            switch await git.pullCurrentBranch(repoPath: info.repoPath) {
-            case .conflict:
+            if case .conflict = await git.pullCurrentBranch(repoPath: info.repoPath) {
                 openRider()
-            default:
-                break
             }
+            dismiss()
         } catch {}
         checkingOut = false
     }
