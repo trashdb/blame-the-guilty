@@ -73,11 +73,28 @@ actor GitService {
         try await runGit(repoPath: repoPath, args: ["checkout", name])
     }
 
-    func pullCurrentBranch(repoPath: String) async -> Bool {
-        if (try? await runGit(repoPath: repoPath, args: ["pull", "--rebase"])) != nil {
-            return true
-        }
-        return false
+    func hasUpstream(repoPath: String) async -> Bool {
+        (try? await runGit(repoPath: repoPath, args: ["rev-parse", "--abbrev-ref", "@{u}"])) != nil
+    }
+
+    func pullCurrentBranch(repoPath: String) async -> PullResult {
+        guard await hasUpstream(repoPath: repoPath) else { return .noUpstream }
+        let errPipe = Pipe()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["git", "pull", "--rebase"]
+        process.currentDirectoryURL = URL(fileURLWithPath: repoPath)
+        process.standardError = errPipe
+        guard (try? process.run()) != nil else { return .failed }
+        process.waitUntilExit()
+        if process.terminationStatus == 0 { return .success }
+        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+        let errOutput = String(data: errData, encoding: .utf8) ?? ""
+        return errOutput.lowercased().contains("conflict") ? .conflict : .failed
+    }
+
+    enum PullResult {
+        case success, noUpstream, conflict, failed
     }
 
     func deleteLocalBranch(repoPath: String, name: String) async throws {

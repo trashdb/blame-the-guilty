@@ -125,8 +125,11 @@ struct BranchDetailView: View {
         checkingOut = true
         do {
             try await git.checkoutBranch(repoPath: info.repoPath, name: info.name)
-            if !(await git.pullCurrentBranch(repoPath: info.repoPath)) {
+            switch await git.pullCurrentBranch(repoPath: info.repoPath) {
+            case .conflict:
                 openRider()
+            default:
+                break
             }
         } catch {}
         checkingOut = false

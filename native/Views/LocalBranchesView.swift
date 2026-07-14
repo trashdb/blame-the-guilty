@@ -355,7 +355,7 @@ struct LocalBranchesView: View {
         await MainActor.run { checkingOutBranch = (repo, name) }
         do {
             try await git.checkoutBranch(repoPath: repo.path, name: name)
-            if !(await git.pullCurrentBranch(repoPath: repo.path)) {
+            if case .conflict = await git.pullCurrentBranch(repoPath: repo.path) {
                 await openRider(repo.path)
             }
             let branches = try await git.listMyBranches(repoPath: repo.path)
