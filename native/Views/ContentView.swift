@@ -47,8 +47,6 @@ struct ContentView: View {
                     Divider()
                     LocalBranchesView(gitHubId: signalR.userGitHubId, backendUrl: signalR.baseUrl)
                 }
-                
-                Spacer(minLength: 0)
             }
             .foregroundStyle(Color(white: 0.7))
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -191,7 +189,7 @@ struct ContentView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
         }
-        .frame(width: 400, height: 860, alignment: .top)
+        .frame(width: 400, height: 820, alignment: .top)
         .background(.regularMaterial)
         .onAppear { signalR.restoreSession() }
     }

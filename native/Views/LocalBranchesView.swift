@@ -11,6 +11,7 @@ struct LocalBranchesView: View {
     @State private var branchToDelete: (repo: ScannedRepo, branch: GitBranch)?
     @State private var remoteBranchToDelete: (repo: ScannedRepo, branch: RemoteBranch)?
     @State private var showDeleteConfirmation = false
+    @State private var checkingOutBranch: (repo: ScannedRepo, name: String)?
 
     @AppStorage("workspacePath") private var workspacePath: String = {
         NSHomeDirectory() + "/Desktop/dev"
@@ -199,15 +200,33 @@ struct LocalBranchesView: View {
                         .frame(width: 8)
                 }
 
-                Text(branch.name)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(branch.isCurrent ? .green : Color(white: 0.75))
-                    .lineLimit(1)
-
                 if branch.isCurrent {
+                    Text(branch.name)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(.green)
+                        .lineLimit(1)
                     Text("(current)")
                         .font(.system(size: 8))
                         .foregroundStyle(.secondary)
+                } else {
+                    Button {
+                        Task { await checkoutBranch(repo: repo, name: branch.name) }
+                    } label: {
+                        HStack(spacing: 4) {
+                            if checkingOutBranch?.repo.id == repo.id && checkingOutBranch?.name == branch.name {
+                                ProgressView()
+                                    .scaleEffect(0.5)
+                                    .frame(width: 10, height: 10)
+                            }
+                            Text(branch.name)
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(Color(white: 0.75))
+                                .lineLimit(1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .cursor(.pointingHand)
+                    .help("Checkout \"\(branch.name)\"")
                 }
 
                 Spacer()
@@ -289,7 +308,6 @@ struct LocalBranchesView: View {
             for (i, path) in paths.enumerated() {
                 group.addTask(priority: .userInitiated) {
                     do {
-                        await self.git.fetchRepo(repoPath: path)
                         let b = try await self.git.listMyBranches(repoPath: path)
                         let r = await self.git.listMyRemoteBranchesViaAPI(
                             repoPath: path, backendUrl: self.backendUrl, gitHubId: self.gitHubId
@@ -316,6 +334,27 @@ struct LocalBranchesView: View {
             }
             let sorted = results.sorted { $0.0 < $1.0 }.map { $0.1 }
             await MainActor.run { repos = sorted; isLoading = false }
+        }
+        Task { [paths] in
+            for p in paths {
+                await git.fetchRepo(repoPath: p)
+            }
+        }
+    }
+
+    private func checkoutBranch(repo: ScannedRepo, name: String) async {
+        await MainActor.run { checkingOutBranch = (repo, name) }
+        do {
+            try await git.checkoutBranch(repoPath: repo.path, name: name)
+            let branches = try await git.listMyBranches(repoPath: repo.path)
+            await MainActor.run {
+                if let ri = repos.firstIndex(where: { $0.id == repo.id }) {
+                    repos[ri].branches = branches.map { GitBranch(name: $0.name, isCurrent: $0.isCurrent) }
+                }
+                checkingOutBranch = nil
+            }
+        } catch {
+            await MainActor.run { checkingOutBranch = nil }
         }
     }
 
