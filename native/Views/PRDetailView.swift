@@ -43,6 +43,13 @@ struct PRDetailView: View {
 
     @State private var togglingDraft = false
     @State private var draftError: String?
+    @State private var localDraft: Bool
+
+    init(pr: PullRequest, gitHubId: Int64) {
+        self.pr = pr
+        self.gitHubId = gitHubId
+        _localDraft = State(initialValue: pr.draft)
+    }
 
     @State private var detailRefreshTimer: Timer?
 
@@ -51,7 +58,7 @@ struct PRDetailView: View {
     }()
 
     var canMerge: Bool {
-        !pr.draft && pr.ciStatus == "ready" && pr.reviewApproved
+        !localDraft && pr.ciStatus == "ready" && pr.reviewApproved
     }
 
     var mergeableInfo: (label: String, color: Color) {
@@ -184,7 +191,7 @@ struct PRDetailView: View {
             }
 
             HStack(spacing: 6) {
-                if pr.draft {
+                if localDraft {
                     HStack(spacing: 4) {
                         Image(systemName: "pencil")
                             .font(.system(size: 9))
@@ -465,13 +472,23 @@ struct PRDetailView: View {
                 let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
                 let body = data.flatMap { String(data: $0, encoding: .utf8) } ?? "nil"
                 os_log("[Draft] HTTP %d: %{public}@", log: draftLog, type: .debug, status, String(body.prefix(500)))
-                guard let data else { return }
+                guard let data else {
+                    // No body — assume success if status is 2xx
+                    if status >= 200 && status < 300 {
+                        self.localDraft = makeDraft
+                    }
+                    return
+                }
                 if let decoded = try? JSONDecoder().decode(DraftResponse.self, from: data) {
                     if let error = decoded.error {
                         self.draftError = error
+                    } else if decoded.success == true || (status >= 200 && status < 300) {
+                        self.localDraft = makeDraft
                     }
                 } else if status >= 400 {
                     self.draftError = "HTTP \(status): \(body.prefix(200))"
+                } else {
+                    self.localDraft = makeDraft
                 }
             }
         }.resume()
