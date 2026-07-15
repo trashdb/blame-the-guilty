@@ -126,7 +126,7 @@ public class PullRequestsController : ControllerBase
                 HtmlUrl = pr.PrUrl,
                 pr.Status,
                 pr.Conclusion,
-                Draft = draft ?? pr.Draft,
+                Draft = pr.Draft,
                 MergeableState = mergeable,
                 CiStatus = ciStatus,
                 ReviewApproved = pr.ReviewApproved,
