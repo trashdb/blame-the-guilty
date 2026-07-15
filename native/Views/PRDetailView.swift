@@ -1,4 +1,7 @@
 import SwiftUI
+import OSLog
+
+private let draftLog = OSLog(subsystem: "com.blametheguilty", category: "draft")
 
 private struct PRDetailsResponse: Decodable {
     let mergeableState: String?
@@ -13,6 +16,15 @@ private struct MergeResponse: Decodable {
     let error: String?
 }
 
+private struct UpdateBranchResponse: Decodable {
+    let message: String?
+}
+
+private struct DraftResponse: Decodable {
+    let success: Bool?
+    let error: String?
+}
+
 struct PRDetailView: View {
     let pr: PullRequest
     let gitHubId: Int64
@@ -24,6 +36,19 @@ struct PRDetailView: View {
     @State private var merging = false
     @State private var mergeResult: String?
     @State private var mergeError: String?
+
+    @State private var updatingBranch = false
+    @State private var branchUpdateResult: String?
+    @State private var branchUpdateError: String?
+
+    @State private var togglingDraft = false
+    @State private var draftError: String?
+
+    @State private var detailRefreshTimer: Timer?
+
+    @AppStorage("workspacePath") private var workspacePath: String = {
+        NSHomeDirectory() + "/Desktop/dev"
+    }()
 
     var canMerge: Bool {
         !pr.draft && pr.ciStatus == "ready" && pr.reviewApproved
@@ -158,14 +183,26 @@ struct PRDetailView: View {
                     .foregroundStyle(.secondary)
             }
 
-            if pr.draft {
-                HStack(spacing: 4) {
-                    Image(systemName: "pencil")
+            HStack(spacing: 6) {
+                if pr.draft {
+                    HStack(spacing: 4) {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.gray)
+                        Text("Draft")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.gray)
+                    }
+                    if pr.status != "merged" {
+                        draftButton(makeDraft: false, label: "Mark Ready", color: .blue)
+                    }
+                } else if pr.status != "merged" {
+                    draftButton(makeDraft: true, label: "Convert to Draft", color: .gray)
+                }
+                if let err = draftError {
+                    Text(err)
                         .font(.system(size: 9))
-                        .foregroundStyle(.gray)
-                    Text("Draft")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(.red)
                 }
             }
 
@@ -219,6 +256,35 @@ struct PRDetailView: View {
                             .foregroundStyle(.blue)
                     }
                     Spacer()
+                    if behind > 0 {
+                        if updatingBranch {
+                            ProgressView()
+                                .scaleEffect(0.5)
+                                .frame(width: 12)
+                        } else if let result = branchUpdateResult {
+                            Text(result)
+                                .font(.system(size: 9))
+                                .foregroundStyle(.green)
+                        } else {
+                            Button {
+                                performUpdateBranch()
+                            } label: {
+                                Text("Update branch")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(.orange, in: RoundedRectangle(cornerRadius: 4))
+                            }
+                            .buttonStyle(.plain)
+                            .cursor(.pointingHand)
+                        }
+                    }
+                }
+                if let err = branchUpdateError {
+                    Text(err)
+                        .font(.system(size: 9))
+                        .foregroundStyle(.red)
                 }
             }
 
@@ -258,8 +324,18 @@ struct PRDetailView: View {
             Spacer()
         }
         .padding(16)
-        .frame(width: 320, height: 300)
-        .onAppear(perform: loadDetails)
+        .frame(width: 320, height: 340)
+        .task(id: pr.id) {
+            loadDetails()
+            detailRefreshTimer?.invalidate()
+            detailRefreshTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
+                loadDetails()
+            }
+        }
+        .onDisappear {
+            detailRefreshTimer?.invalidate()
+            detailRefreshTimer = nil
+        }
     }
 
     private func linkButton(_ label: String, url: URL) -> some View {
@@ -311,6 +387,28 @@ struct PRDetailView: View {
         .disabled(merging)
     }
 
+    private func draftButton(makeDraft: Bool, label: String, color: Color) -> some View {
+        Button {
+            performToggleDraft(makeDraft)
+        } label: {
+            if togglingDraft {
+                ProgressView()
+                    .scaleEffect(0.5)
+                    .frame(width: 12)
+            } else {
+                Text(label)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(makeDraft ? Color.gray : Color.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(color.opacity(makeDraft ? 0.15 : 0.8), in: RoundedRectangle(cornerRadius: 4))
+            }
+        }
+        .buttonStyle(.plain)
+        .cursor(.pointingHand)
+        .disabled(togglingDraft)
+    }
+
     private func performMerge() {
         merging = true
         mergeResult = nil
@@ -341,18 +439,104 @@ struct PRDetailView: View {
         }.resume()
     }
 
+    private func performToggleDraft(_ makeDraft: Bool) {
+        togglingDraft = true
+        draftError = nil
+        let repoStr = pr.repo
+        let repoEscaped = repoStr.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? repoStr
+        let urlStr = "\(backendUrl)/api/pullrequests/\(pr.prNumber)/draft?repo=\(repoEscaped)&gitHubId=\(gitHubId)&draft=\(makeDraft ? "true" : "false")"
+        os_log("[Draft] URL: %{public}@", log: draftLog, type: .debug, urlStr)
+        guard let url = URL(string: urlStr) else {
+            draftError = "Invalid URL"
+            os_log("[Draft] Invalid URL: %{public}@", log: draftLog, type: .error, urlStr)
+            togglingDraft = false
+            return
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        URLSession.shared.dataTask(with: request) { data, resp, err in
+            DispatchQueue.main.async {
+                self.togglingDraft = false
+                if let err {
+                    self.draftError = err.localizedDescription
+                    os_log("[Draft] Network error: %{public}@", log: draftLog, type: .error, err.localizedDescription)
+                    return
+                }
+                let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+                let body = data.flatMap { String(data: $0, encoding: .utf8) } ?? "nil"
+                os_log("[Draft] HTTP %d: %{public}@", log: draftLog, type: .debug, status, String(body.prefix(500)))
+                guard let data else { return }
+                if let decoded = try? JSONDecoder().decode(DraftResponse.self, from: data) {
+                    if let error = decoded.error {
+                        self.draftError = error
+                    }
+                } else if status >= 400 {
+                    self.draftError = "HTTP \(status): \(body.prefix(200))"
+                }
+            }
+        }.resume()
+    }
+
+    private func performUpdateBranch() {
+        updatingBranch = true
+        branchUpdateResult = nil
+        branchUpdateError = nil
+        let repoEscaped = pr.repo.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? pr.repo
+        guard let url = URL(string: "\(backendUrl)/api/pullrequests/\(pr.prNumber)/update-branch?repo=\(repoEscaped)&gitHubId=\(gitHubId)") else {
+            branchUpdateError = "Invalid URL"
+            updatingBranch = false
+            return
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        URLSession.shared.dataTask(with: request) { data, resp, err in
+            DispatchQueue.main.async {
+                self.updatingBranch = false
+                if let err { self.branchUpdateError = err.localizedDescription; return }
+                guard let data else { return }
+                // Try to decode the response
+                if let decoded = try? JSONDecoder().decode(UpdateBranchResponse.self, from: data) {
+                    self.branchUpdateResult = decoded.message ?? "Branch updated"
+                    // Reload PR details after delay
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                        self.loadDetails()
+                    }
+                } else {
+                    let raw = String(data: data, encoding: .utf8) ?? "non-utf8"
+                    let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+                    // If status is not 2xx, show as error
+                    if status >= 200 && status < 300 {
+                        self.branchUpdateResult = "Update sent (check PR on GitHub)"
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                            self.loadDetails()
+                        }
+                    } else {
+                        self.branchUpdateError = "\(raw.prefix(200))"
+                    }
+                }
+            }
+        }.resume()
+    }
+
     private func loadDetails() {
         let repoEscaped = pr.repo.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? pr.repo
         guard let url = URL(string: "\(backendUrl)/api/pullrequests/\(pr.prNumber)/detail?repo=\(repoEscaped)&gitHubId=\(gitHubId)") else { return }
         loadingDetails = true
-        URLSession.shared.dataTask(with: url) { data, _, err in
+        URLSession.shared.dataTask(with: url) { data, resp, err in
             DispatchQueue.main.async {
-                loadingDetails = false
-                if let err { detailError = err.localizedDescription; return }
+                self.loadingDetails = false
+                if let err { self.detailError = err.localizedDescription; return }
                 guard let data else { return }
                 if let decoded = try? JSONDecoder().decode(PRDetailsResponse.self, from: data) {
-                    behindBy = decoded.behindBy
-                    aheadBy = decoded.aheadBy
+                    self.behindBy = decoded.behindBy
+                    self.aheadBy = decoded.aheadBy
+                    if decoded.behindBy == 0 {
+                        self.branchUpdateResult = nil
+                        self.branchUpdateError = nil
+                    }
+                } else {
+                    let raw = String(data: data, encoding: .utf8) ?? "non-utf8"
+                    self.detailError = "Parse error: \(raw.prefix(200))"
                 }
             }
         }.resume()

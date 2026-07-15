@@ -57,6 +57,9 @@ public class PullRequestEvent
     [MaxLength(500)]
     public string? ExtraInfo { get; set; }
 
+    [MaxLength(40)]
+    public string? HeadSha { get; set; }
+
     public DateTime OccurredAt { get; set; } = DateTime.UtcNow;
 
     public bool WasNotified { get; set; }

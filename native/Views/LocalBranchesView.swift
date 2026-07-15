@@ -13,7 +13,7 @@ struct LocalBranchesView: View {
     @State private var showDeleteConfirmation = false
     @State private var checkingOutBranch: (repo: ScannedRepo, name: String)?
     @State private var selectedBranchInfo: BranchInfo?
-
+    @AppStorage("favoriteRepo") private var favoriteRepo = "dcp-loyalty-monorepo"
     @AppStorage("workspacePath") private var workspacePath: String = {
         NSHomeDirectory() + "/Desktop/dev"
     }()
@@ -134,9 +134,15 @@ struct LocalBranchesView: View {
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(.white.opacity(0.1), lineWidth: 1))
                     .padding(.horizontal, 20)
                 }
-            }
         }
-        .onAppear { if repos.isEmpty { Task { await scan() } } }
+    }
+    .background {
+        Color.clear
+            .popover(item: $selectedBranchInfo) { info in
+                BranchDetailView(info: info, gitHubId: gitHubId, backendUrl: backendUrl, onCheckout: { Task { await scan() } })
+            }
+    }
+    .onAppear { if repos.isEmpty { Task { await scan() } } }
     }
 
     @ViewBuilder
@@ -155,6 +161,11 @@ struct LocalBranchesView: View {
                     Image(systemName: "folder")
                         .font(.system(size: 10))
                         .foregroundStyle(.green)
+                    if GitService.repoName(from: repo.path) == favoriteRepo {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 8))
+                            .foregroundStyle(.yellow)
+                    }
                     Text(GitService.repoName(from: repo.path))
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Color(white: 0.85))
@@ -218,9 +229,7 @@ struct LocalBranchesView: View {
                 .buttonStyle(.plain)
                 .cursor(.pointingHand)
                 .help("Details for \"\(branch.name)\"")
-
-                Spacer()
-
+                .frame(maxWidth: .infinity, alignment: .leading)
                 if !branch.isCurrent && !isDefaultBranch(branch.name) {
                     Button {
                         branchToDelete = (repo, branch)
@@ -240,9 +249,6 @@ struct LocalBranchesView: View {
             .padding(.leading, 16)
             .padding(.trailing, 6)
             .padding(.vertical, 2)
-            .popover(item: $selectedBranchInfo) { info in
-                BranchDetailView(info: info, onCheckout: { Task { await scan() } })
-            }
         }
     }
 
@@ -255,12 +261,16 @@ struct LocalBranchesView: View {
                     .frame(width: 6, height: 6)
 
                 Button {
-                    selectedBranchInfo = BranchInfo(
+                    let info = BranchInfo(
                         name: branch.name, repoPath: repo.path,
                         repoName: GitService.repoName(from: repo.path),
                         isCurrent: false, isLocal: false,
                         isMerged: branch.isMerged,
                         isDefault: isDefaultBranch(branch.name))
+                    selectedBranchInfo = nil
+                    DispatchQueue.main.async {
+                        selectedBranchInfo = info
+                    }
                 } label: {
                     HStack(spacing: 4) {
                         Text(branch.name)
@@ -269,15 +279,13 @@ struct LocalBranchesView: View {
                             .lineLimit(1)
                         Text(branch.isMerged ? "merged" : "unmerged")
                             .font(.system(size: 8))
-                            .foregroundStyle(branch.isMerged ? .green : .orange)
+                    .foregroundStyle(branch.isMerged ? .green : .orange)
                     }
                 }
                 .buttonStyle(.plain)
                 .cursor(.pointingHand)
                 .help("Details for \"\(branch.name)\"")
-
-                Spacer()
-
+                .frame(maxWidth: .infinity, alignment: .leading)
                 if isDefaultBranch(branch.name) {
                     Text("protected")
                         .font(.system(size: 8))
@@ -302,9 +310,6 @@ struct LocalBranchesView: View {
             .padding(.leading, 16)
             .padding(.trailing, 6)
             .padding(.vertical, 2)
-            .popover(item: $selectedBranchInfo) { info in
-                BranchDetailView(info: info, onCheckout: { Task { await scan() } })
-            }
         }
     }
 

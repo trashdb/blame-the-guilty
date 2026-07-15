@@ -13,11 +13,12 @@ struct BlameTheGuiltyApp: App {
         MenuBarExtra {
             ContentView(signalR: signalR)
         } label: {
-            if let image = NSImage(systemSymbolName: "flame.fill", accessibilityDescription: "Blame the Guilty") {
-                let config = NSImage.SymbolConfiguration(paletteColors: [.systemRed])
-                if let colored = image.withSymbolConfiguration(config) {
-                    Image(nsImage: colored)
-                }
+            HStack(spacing: 3) {
+                Image(systemName: "flame.fill")
+                    .foregroundStyle(.red)
+                Text("Blame")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.red)
             }
         }
         .menuBarExtraStyle(.window)

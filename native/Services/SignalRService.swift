@@ -534,9 +534,8 @@ class SignalRService: ObservableObject {
             let (data, _) = try await URLSession.shared.data(for: request)
             struct SyncResult: Decodable { let synced: Int }
             if let result = try? JSONDecoder().decode(SyncResult.self, from: data) {
-                if result.synced > 0 {
-                    await syncFromApi(gitHubId: gitHubId)
-                }
+                await syncFromApi(gitHubId: gitHubId)
+                await syncPRsFromApi(gitHubId: gitHubId)
                 return result.synced
             }
         } catch {}

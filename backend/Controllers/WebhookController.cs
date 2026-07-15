@@ -101,6 +101,7 @@ public class WebhookController : ControllerBase
         var name = run.TryGetProperty("name", out var wn) ? wn.GetString() : "Workflow";
         var isIgnored = IgnoredWorkflows.Contains(name);
         var branch = run.TryGetProperty("head_branch", out var hb) ? hb.GetString() : null;
+        var headSha = run.TryGetProperty("head_sha", out var hs) ? hs.GetString() : null;
         var url = run.TryGetProperty("html_url", out var hu) ? hu.GetString() : null;
         var runId = run.GetProperty("id").GetInt64();
         var startedAt = run.TryGetProperty("run_started_at", out var rsa) ? rsa.GetDateTime() : DateTime.UtcNow;
@@ -134,6 +135,7 @@ public class WebhookController : ControllerBase
             Repo = repo,
             Actor = culprit.Login,
             HeadBranch = branch,
+            HeadSha = headSha,
             Trigger = trigger,
             HtmlUrl = url,
             Status = "in_progress",
@@ -228,6 +230,7 @@ public class WebhookController : ControllerBase
                 Repo = repoFullName,
                 Actor = culprit.Login,
                 HeadBranch = workflowRun.TryGetProperty("head_branch", out var hb) ? hb.GetString() : null,
+                HeadSha = workflowRun.TryGetProperty("head_sha", out var hs) ? hs.GetString() : null,
                 Trigger = workflowRun.TryGetProperty("event", out var ev) ? ev.GetString() : null,
                 HtmlUrl = workflowUrl,
                 Status = dbStatus ?? "failure",
@@ -502,8 +505,10 @@ public class WebhookController : ControllerBase
         var authorId = pr.GetProperty("user").TryGetProperty("id", out var aid) ? aid.GetInt64() : (long?)null;
         var draft = pr.TryGetProperty("draft", out var d) && d.GetBoolean();
 
-        if (action == "opened") return await HandlePullRequestOpened(prNumber, title, htmlUrl, repo, baseBranch, headBranch, authorLogin, authorId, draft);
-        if (action == "synchronize") return await HandlePullRequestSynchronize(prNumber, repo);
+        if (action == "opened") return await HandlePullRequestOpened(prNumber, title, htmlUrl, repo, baseBranch, headBranch, authorLogin, authorId, draft,
+            pr.TryGetProperty("head", out var head) && head.TryGetProperty("sha", out var sha) ? sha.GetString() : null);
+        if (action == "synchronize") return await HandlePullRequestSynchronize(prNumber, repo,
+            pr.TryGetProperty("head", out var head2) && head2.TryGetProperty("sha", out var sha2) ? sha2.GetString() : null);
         if (action == "ready_for_review") return await HandlePullRequestReadyForReview(prNumber, repo);
         if (action == "converted_to_draft") return await HandlePullRequestConvertedToDraft(prNumber, repo);
         if (action == "closed") return await HandlePullRequestClosed(prNumber, title, htmlUrl, repo, baseBranch, headBranch, authorLogin, authorId, pr);
@@ -514,14 +519,14 @@ public class WebhookController : ControllerBase
     private async Task<IActionResult> HandlePullRequestOpened(
         int prNumber, string title, string htmlUrl, string repo,
         string baseBranch, string headBranch, string authorLogin, long? authorId,
-        bool draft)
+        bool draft, string? headSha)
     {
         _db.PullRequestEvents.Add(new PullRequestEvent
         {
             PrNumber = prNumber, Title = title, AuthorLogin = authorLogin,
             AuthorGitHubId = authorId, RepoFullName = repo,
             HeadBranch = headBranch, BaseBranch = baseBranch, PrUrl = htmlUrl,
-            Status = "open", Draft = draft, OccurredAt = DateTime.UtcNow
+            Status = "open", Draft = draft, HeadSha = headSha, OccurredAt = DateTime.UtcNow
         });
         await _db.SaveChangesAsync();
 
@@ -530,7 +535,7 @@ public class WebhookController : ControllerBase
         return Ok(new { prNumber, status = "tracking" });
     }
 
-    private async Task<IActionResult> HandlePullRequestSynchronize(int prNumber, string repo)
+    private async Task<IActionResult> HandlePullRequestSynchronize(int prNumber, string repo, string? headSha)
     {
         var existing = await _db.PullRequestEvents
             .Where(e => e.PrNumber == prNumber && e.RepoFullName == repo && e.Status == "open")
@@ -541,10 +546,11 @@ public class WebhookController : ControllerBase
         {
             existing.ReviewApproved = false;
             existing.ApprovedBy = null;
+            existing.HeadSha = headSha;
             await _db.SaveChangesAsync();
         }
 
-        _logger.LogInformation("PR #{PrNumber} synchronized — approval reset", prNumber);
+        _logger.LogInformation("PR #{PrNumber} synchronized — approval reset, headSha={headSha}", prNumber, headSha);
         await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
         return Ok(new { prNumber, status = "synchronized" });
     }

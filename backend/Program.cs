@@ -178,6 +178,10 @@ using (var scope = app.Services.CreateScope())
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "LastCommentBody" TEXT;"""); } catch { }
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "LastCommentAt" TEXT;"""); } catch { }
 
+    // Add HeadSha columns for ciStatus matching by commit SHA
+    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "WorkflowRuns" ADD COLUMN "HeadSha" TEXT;"""); } catch { }
+    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "HeadSha" TEXT;"""); } catch { }
+
     // Recover stuck runs: mark in_progress older than 24h as cancelled.
     // Catches runs that were cancelled/superseded before the fix, or any
     // future completions the webhook never delivered.

@@ -29,6 +29,8 @@ public class PullRequestsController : ControllerBase
     {
         var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
         var token = user?.UserPatToken ?? user?.AccessToken;
+        if (string.IsNullOrEmpty(token))
+            return Unauthorized(new { error = "No token" });
 
         var prs = await _db.PullRequestEvents
             .Where(e => (e.Status == "open" || e.Status == "in_progress") && e.AuthorGitHubId == gitHubId)
@@ -51,51 +53,69 @@ public class PullRequestsController : ControllerBase
             })
             .ToListAsync();
 
-        // Fetch all workflow runs for these PRs' repos in one query
         var repos = prs.Select(p => p.RepoFullName).Distinct().ToList();
-        var branchWorkflows = new Dictionary<(string repo, string branch), string>();
+
+        // Fetch head SHA, draft, mergeable for every PR from GitHub API
+        var prData = new Dictionary<long, (bool? Draft, string? Mergeable, string? HeadSha)>();
+        foreach (var pr in prs)
+        {
+            var (draft, mergeable, headSha) = await FetchPullRequestData(pr.PrNumber, pr.RepoFullName, token);
+            prData[pr.PrNumber] = (draft, mergeable, headSha);
+        }
+
+        // Sync workflow run states from GitHub check-runs for each unique (repo, headSha)
+        var shaRepoSet = new HashSet<(string Repo, string Sha)>();
+        foreach (var pr in prs)
+        {
+            if (prData.TryGetValue(pr.PrNumber, out var data) && data.HeadSha != null)
+                shaRepoSet.Add((pr.RepoFullName, data.HeadSha));
+        }
+
+        foreach (var (repo, sha) in shaRepoSet)
+        {
+            await SyncCheckRunsForCommit(repo, sha, token);
+        }
+
+        // Re-fetch all workflow runs after sync
+        var allRuns = new List<(string Repo, string? HeadSha, string? WorkflowName, int Id, string Status)>();
         if (repos.Count != 0)
         {
             var raw = await _db.WorkflowRuns
-                .Where(w => w.HeadBranch != null && repos.Contains(w.Repo))
-                .Select(w => new { w.Repo, w.HeadBranch, w.WorkflowName, w.Id, w.Status })
+                .Where(w => w.HeadSha != null && repos.Contains(w.Repo))
+                .Select(w => new { w.Repo, w.HeadSha, w.WorkflowName, w.Id, w.Status })
                 .ToListAsync();
-
-            // Only consider the LATEST run per (repo, headBranch, workflowName)
-            var latestByWorkflow = raw
-                .GroupBy(r => (r.Repo, r.HeadBranch, r.WorkflowName))
-                .Select(g => g.OrderByDescending(r => r.Id).First())
-                .ToList();
-
-            // For each (repo, branch), derive ciStatus from latest runs
-            foreach (var (repo, branch) in prs
-                .Where(p => !string.IsNullOrEmpty(p.HeadBranch))
-                .Select(p => (p.RepoFullName, p.HeadBranch!))
-                .Distinct())
-            {
-                var latest = latestByWorkflow.Where(w => w.Repo == repo && w.HeadBranch == branch).ToList();
-                string ciStatus;
-                if (latest.Any(r => r.Status == "in_progress"))
-                    ciStatus = "waiting";
-                else if (latest.Any(r => r.Status == "failure"))
-                    ciStatus = "failed";
-                else
-                    ciStatus = "review";
-                branchWorkflows[(repo, branch)] = ciStatus;
-            }
+            allRuns = raw.Select(r => (r.Repo, r.HeadSha, r.WorkflowName, r.Id, r.Status)).ToList();
         }
-
-        var workflowStatuses = branchWorkflows;
 
         var results = new List<object>();
         foreach (var pr in prs)
         {
-            var (draft, mergeableState) = await FetchPullRequestData(pr.PrNumber, pr.RepoFullName, token);
-            var ciStatus = pr.HeadBranch != null
-                && workflowStatuses.TryGetValue((pr.RepoFullName, pr.HeadBranch), out var st)
-                ? st : "review";
+            var (draft, mergeable, headSha) = prData.GetValueOrDefault(pr.PrNumber);
+
+            string ciStatus = "review";
+            if (headSha != null)
+            {
+                var prRuns = allRuns
+                    .Where(r => r.Repo == pr.RepoFullName && r.HeadSha == headSha)
+                    .ToList();
+                var latestByWorkflow = prRuns
+                    .GroupBy(r => r.WorkflowName)
+                    .Select(g => g.OrderByDescending(r => r.Id).First())
+                    .ToList();
+
+                if (latestByWorkflow.Count == 0)
+                    ciStatus = "waiting";
+                else if (latestByWorkflow.Any(r => r.Status == "in_progress"))
+                    ciStatus = "waiting";
+                else if (latestByWorkflow.Any(r => r.Status == "failure"))
+                    ciStatus = "failed";
+                else
+                    ciStatus = "review";
+            }
+
             if (ciStatus == "review" && pr.ReviewApproved)
                 ciStatus = "ready";
+
             results.Add(new
             {
                 pr.PrNumber,
@@ -107,7 +127,7 @@ public class PullRequestsController : ControllerBase
                 pr.Status,
                 pr.Conclusion,
                 Draft = draft ?? pr.Draft,
-                MergeableState = mergeableState,
+                MergeableState = mergeable,
                 CiStatus = ciStatus,
                 ReviewApproved = pr.ReviewApproved,
                 LastCommentBy = pr.LastCommentBy,
@@ -150,13 +170,13 @@ public class PullRequestsController : ControllerBase
                 if (data.TryGetProperty("mergeable_state", out var ms))
                     mergeableState = ms.GetString();
 
-                var head = data.GetProperty("head").GetProperty("sha").GetString();
-                var baseSha = data.GetProperty("base").GetProperty("sha").GetString();
+                var headSha = data.GetProperty("head").GetProperty("sha").GetString();
+                var baseRef = data.GetProperty("base").GetProperty("ref").GetString();
 
-                if (head != null && baseSha != null)
+                if (headSha != null && baseRef != null)
                 {
                     var compareReq = new HttpRequestMessage(HttpMethod.Get,
-                        $"https://api.github.com/repos/{repo}/compare/{baseSha}...{head}");
+                        $"https://api.github.com/repos/{repo}/compare/{baseRef}...{headSha}");
                     compareReq.Headers.UserAgent.ParseAdd("BlameTheGuilty");
                     if (!string.IsNullOrEmpty(token))
                         compareReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
@@ -270,7 +290,120 @@ public class PullRequestsController : ControllerBase
         });
     }
 
-    private async Task<(bool? draft, string? mergeableState)> FetchPullRequestData(long prNumber, string repoFullName, string? token)
+    [HttpPost("{prNumber}/draft")]
+    public async Task<IActionResult> SetDraft(long prNumber,
+        [FromQuery] string repo,
+        [FromQuery] long gitHubId,
+        [FromQuery] bool draft)
+    {
+        var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
+        var token = user?.UserPatToken ?? user?.AccessToken ?? _configuration["GitHub:PatToken"];
+        if (string.IsNullOrEmpty(token))
+            return Unauthorized(new { error = "No access token found" });
+
+        var request = new HttpRequestMessage(HttpMethod.Patch,
+            $"https://api.github.com/repos/{repo}/pulls/{prNumber}");
+        request.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        request.Content = new StringContent(
+            draft
+                ? JsonSerializer.Serialize(new { state = "open", draft = true })
+                : JsonSerializer.Serialize(new { draft = false }),
+            System.Text.Encoding.UTF8,
+            "application/json");
+
+        HttpResponseMessage response;
+        try { response = await _githubClient.SendAsync(request); }
+        catch (Exception ex) { return StatusCode(502, new { error = $"GitHub API error: {ex.Message}" }); }
+
+        var json = await response.Content.ReadAsStringAsync();
+        var data = JsonSerializer.Deserialize<JsonElement>(json);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var msg = data.TryGetProperty("message", out var m) ? m.GetString() : "Unknown error";
+            return StatusCode((int)response.StatusCode, new { error = msg });
+        }
+
+        // Update DB
+        var prEvent = await _db.PullRequestEvents
+            .Where(e => e.PrNumber == prNumber && e.RepoFullName == repo)
+            .OrderByDescending(e => e.Id)
+            .FirstOrDefaultAsync();
+        if (prEvent != null)
+        {
+            prEvent.Draft = draft;
+            await _db.SaveChangesAsync();
+        }
+
+        await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
+
+        return Ok(new { success = true, draft });
+    }
+
+    [HttpPost("{prNumber}/update-branch")]
+    public async Task<IActionResult> UpdateBranch(long prNumber,
+        [FromQuery] string repo,
+        [FromQuery] long gitHubId)
+    {
+        var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
+        var token = user?.UserPatToken ?? user?.AccessToken ?? _configuration["GitHub:PatToken"];
+        if (string.IsNullOrEmpty(token))
+            return Unauthorized(new { error = "No access token found" });
+
+        Console.WriteLine($"[UpdateBranch] Token: {(user?.UserPatToken != null ? "UserPatToken" : user?.AccessToken != null ? "AccessToken" : "SharedPat")}");
+
+        var request = new HttpRequestMessage(HttpMethod.Put,
+            $"https://api.github.com/repos/{repo}/pulls/{prNumber}/update-branch");
+        request.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        request.Content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
+
+        HttpResponseMessage response;
+        try { response = await _githubClient.SendAsync(request); }
+        catch (Exception ex) { return StatusCode(502, new { error = $"GitHub API error: {ex.Message}" }); }
+
+        var json = await response.Content.ReadAsStringAsync();
+        var data = JsonSerializer.Deserialize<JsonElement>(json);
+
+        Console.WriteLine($"[UpdateBranch] GitHub replied {response.StatusCode} for {repo} PR #{prNumber}: {json}");
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var msg = data.TryGetProperty("message", out var m) ? m.GetString() : "Unknown error";
+            return StatusCode((int)response.StatusCode, new { error = msg });
+        }
+
+        // Mark old workflow runs for this PR's branch as superseded so ciStatus
+        // does not stay "failed" while waiting for new workflow webhooks
+        var prEvent = await _db.PullRequestEvents
+            .Where(p => p.PrNumber == prNumber && p.RepoFullName == repo && p.Status == "open")
+            .OrderByDescending(p => p.OccurredAt)
+            .FirstOrDefaultAsync();
+        if (prEvent?.HeadBranch != null)
+        {
+            var stale = await _db.WorkflowRuns
+                .Where(w => w.Repo == repo && w.HeadBranch == prEvent.HeadBranch
+                    && w.Status == "failure")
+                .ToListAsync();
+            if (stale.Count > 0)
+            {
+                foreach (var s in stale) s.Status = "superseded";
+                await _db.SaveChangesAsync();
+                Console.WriteLine($"[UpdateBranch] Superseded {stale.Count} old failure runs for {repo} #{prNumber} branch={prEvent.HeadBranch}");
+            }
+        }
+
+        // Resync PRs after update
+        await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
+
+        return Ok(new
+        {
+            message = data.TryGetProperty("message", out var msg2) ? msg2.GetString() : "Branch updated"
+        });
+    }
+
+    private async Task<(bool? draft, string? mergeableState, string? headSha)> FetchPullRequestData(long prNumber, string repoFullName, string? token)
     {
         try
         {
@@ -280,7 +413,7 @@ public class PullRequestsController : ControllerBase
                 request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
             var response = await _githubClient.SendAsync(request);
-            if (!response.IsSuccessStatusCode) return (null, null);
+            if (!response.IsSuccessStatusCode) return (null, null, null);
 
             var content = await response.Content.ReadAsStringAsync();
             var data = JsonSerializer.Deserialize<JsonElement>(content);
@@ -293,11 +426,92 @@ public class PullRequestsController : ControllerBase
             if (data.TryGetProperty("mergeable_state", out var state))
                 mergeableState = state.GetString();
 
-            return (draft, mergeableState);
+            string? headSha = null;
+            if (data.TryGetProperty("head", out var head) && head.TryGetProperty("sha", out var sha))
+                headSha = sha.GetString();
+
+            return (draft, mergeableState, headSha);
         }
         catch
         {
-            return (null, null);
+            return (null, null, null);
+        }
+    }
+
+    private async Task SyncCheckRunsForCommit(string repo, string sha, string? token)
+    {
+        if (string.IsNullOrEmpty(token)) return;
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get,
+                $"https://api.github.com/repos/{repo}/commits/{sha}/check-runs?per_page=100");
+            request.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await _githubClient.SendAsync(request);
+            if (!response.IsSuccessStatusCode) return;
+
+            var content = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(content);
+            var checkRuns = doc.RootElement.GetProperty("check_runs").EnumerateArray();
+
+            foreach (var cr in checkRuns)
+            {
+                var name = cr.GetProperty("name").GetString();
+                var status = cr.GetProperty("status").GetString();
+                var conclusion = cr.TryGetProperty("conclusion", out var c) ? c.GetString() : null;
+                var runId = cr.GetProperty("id").GetInt64();
+
+                if (string.IsNullOrEmpty(name)) continue;
+
+                var mappedStatus = status == "completed"
+                    ? conclusion == "success" ? "success"
+                    : conclusion == "failure" || conclusion == "timed_out" ? "failure"
+                    : "cancelled"
+                    : "in_progress";
+
+                // Find existing run for this (repo, sha, workflowName)
+                var existing = await _db.WorkflowRuns
+                    .Where(w => w.RunId == runId && w.Repo == repo)
+                    .FirstOrDefaultAsync();
+
+                if (existing != null)
+                {
+                    // Update status if changed
+                    if (existing.Status != mappedStatus || existing.HeadSha != sha)
+                    {
+                        existing.HeadSha ??= sha;
+                        existing.Status = mappedStatus;
+                    }
+                }
+                else
+                {
+                    // Run not in DB — create it (webhook was missed)
+                    var actor = cr.TryGetProperty("app", out var app)
+                        && app.TryGetProperty("slug", out var slug)
+                        ? slug.GetString() : "unknown";
+                    var workflowName = cr.TryGetProperty("name", out var wn) ? wn.GetString() : name;
+
+                    _db.WorkflowRuns.Add(new WorkflowRun
+                    {
+                        RunId = runId,
+                        WorkflowName = workflowName,
+                        Repo = repo,
+                        Actor = actor,
+                        HeadBranch = null,
+                        HeadSha = sha,
+                        Status = mappedStatus,
+                        StartedAt = DateTime.UtcNow,
+                        HtmlUrl = null
+                    });
+                }
+            }
+
+            await _db.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[SyncCheckRuns] Error for {repo} @ {sha}: {ex.Message}");
         }
     }
 }

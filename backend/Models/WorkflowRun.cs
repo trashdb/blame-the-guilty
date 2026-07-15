@@ -30,6 +30,9 @@ public class WorkflowRun
 
     public string? HtmlUrl { get; set; }
 
+    [MaxLength(40)]
+    public string? HeadSha { get; set; }
+
     [Required]
     [MaxLength(20)]
     public string Status { get; set; } = "in_progress";

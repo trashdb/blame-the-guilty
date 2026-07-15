@@ -8,12 +8,15 @@ struct SettingsView: View {
         NSHomeDirectory() + "/Desktop/dev"
     }()
     @AppStorage("jiraBoardUrl") private var jiraBoardUrl = "https://easyjet.atlassian.net/browse/"
+    @AppStorage("favoriteRepo") private var favoriteRepo = "dcp-loyalty-monorepo"
     @State private var pathDraft = ""
     @State private var jiraDraft = ""
     @State private var patDraft = ""
     @State private var patSaved = false
     @State private var patSaving = false
     @State private var patError: String?
+    @State private var discoveredRepos: [String] = []
+    @State private var scanning = true
 
     var body: some View {
         ZStack {
@@ -100,6 +103,59 @@ struct SettingsView: View {
 
                 Divider()
 
+                Group {
+                    Text("Favorite Repo")
+                        .font(.system(size: 13, weight: .medium))
+                    HStack(spacing: 6) {
+                        if scanning {
+                            ProgressView()
+                                .scaleEffect(0.6)
+                                .frame(width: 100)
+                        } else if discoveredRepos.isEmpty {
+                            Text("No repos found — check workspace path")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Picker(selection: $favoriteRepo) {
+                                ForEach(discoveredRepos, id: \.self) { repo in
+                                    HStack(spacing: 4) {
+                                        if repo == favoriteRepo {
+                                            Image(systemName: "star.fill")
+                                                .foregroundStyle(.yellow)
+                                        }
+                                        Text(repo)
+                                    }
+                                    .tag(repo)
+                                }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "star.fill")
+                                        .foregroundStyle(.yellow)
+                                        .font(.system(size: 9))
+                                    Text(favoriteRepo)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        Button("Refresh") {
+                            Task { await scanForRepos() }
+                        }
+                        .font(.system(size: 11, weight: .medium))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(.green.opacity(0.2), in: RoundedRectangle(cornerRadius: 5))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 5)
+                                .stroke(.green.opacity(0.3), lineWidth: 1)
+                        )
+                        .buttonStyle(.plain)
+                        .cursor(.pointingHand)
+                    }
+                }
+
+                Divider()
+
                 if gitHubId > 0 {
                     Group {
                         Text("Personal Access Token")
@@ -159,7 +215,21 @@ struct SettingsView: View {
             }
             .padding(24)
         }
-        .frame(width: 540, height: 560)
+        .frame(width: 540, height: 620)
+        .onAppear { Task { await scanForRepos() } }
+    }
+
+    private func scanForRepos() async {
+        scanning = true
+        let expanded = (workspacePath as NSString).expandingTildeInPath
+        let paths = GitService.discoverRepos(workspacePath: expanded)
+        await MainActor.run {
+            discoveredRepos = paths.compactMap { GitService.repoName(from: $0) }.sorted()
+            if !discoveredRepos.contains(favoriteRepo), let first = discoveredRepos.first {
+                favoriteRepo = first
+            }
+            scanning = false
+        }
     }
 
     private func savePat() async {

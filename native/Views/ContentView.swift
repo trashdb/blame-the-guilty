@@ -53,6 +53,8 @@ struct ContentView: View {
             .padding(.vertical, 10)
             .padding(.horizontal, 16)
 
+            Spacer(minLength: 0)
+
             Divider()
 
             HStack {
@@ -77,7 +79,7 @@ struct ContentView: View {
                             .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
                     }
                     .buttonStyle(.plain)
-                    .help("Sync active workflows from GitHub API")
+                    .help("Full resync: workflows + PRs")
                     .cursor(.pointingHand)
                 }
 
@@ -126,6 +128,24 @@ struct ContentView: View {
                     }
                     .buttonStyle(.plain)
                     .help("Webhook Event Log (debug)")
+                    .cursor(.pointingHand)
+                }
+
+                if signalR.isLoggedIn {
+                    Button {
+                        let repo = UserDefaults.standard.string(forKey: "favoriteRepo") ?? "dcp-loyalty-monorepo"
+                        if let u = URL(string: "https://github.com/easyjet-dev/\(repo)/pulls") {
+                            NSWorkspace.shared.open(u)
+                        }
+                    } label: {
+                        Image(systemName: "tray.full")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .padding(6)
+                            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                    }
+                    .buttonStyle(.plain)
+                    .help("See All PRs")
                     .cursor(.pointingHand)
                 }
 

@@ -2,17 +2,31 @@ import SwiftUI
 
 struct BranchDetailView: View {
     let info: BranchInfo
+    let gitHubId: Int64
+    let backendUrl: String
     var onCheckout: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
 
     @State private var deleting = false
     @State private var checkingOut = false
     @State private var deleteError: String?
-
+    @State private var showCreatePR = false
     private let git = GitService()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        if showCreatePR {
+            CreatePRPreviewView(
+                repoPath: info.repoPath, branchName: info.name,
+                backendUrl: backendUrl, gitHubId: gitHubId,
+                onComplete: { url in
+                    dismiss()
+                    NSWorkspace.shared.open(url)
+                },
+                onCancel: { showCreatePR = false }
+            )
+            .frame(width: 460, height: 420)
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(info.name)
                     .font(.system(size: 13, weight: .semibold, design: .monospaced))
@@ -51,6 +65,7 @@ struct BranchDetailView: View {
                         .foregroundStyle(.blue)
                     if let url = info.jiraUrl {
                         Button("Open") {
+                            dismiss()
                             NSWorkspace.shared.open(url)
                         }
                         .font(.system(size: 9))
@@ -72,6 +87,12 @@ struct BranchDetailView: View {
             Divider()
 
             HStack(spacing: 8) {
+                if info.isLocal {
+                    actionButton("Create PR", color: .green) {
+                        showCreatePR = true
+                    }
+                }
+
                 if info.isLocal && !info.isCurrent {
                     actionButton("Checkout", color: .blue) {
                         Task { await doCheckout() }
@@ -104,6 +125,7 @@ struct BranchDetailView: View {
         }
         .padding(16)
         .frame(width: 300, height: 220)
+        }
     }
 
     private func actionButton(_ label: String, color: Color, action: @escaping () -> Void) -> some View {
@@ -127,11 +149,10 @@ struct BranchDetailView: View {
         checkingOut = true
         do {
             try await git.checkoutBranch(repoPath: info.repoPath, name: info.name)
-            if case .conflict = await git.pullCurrentBranch(repoPath: info.repoPath) {
-                openRider()
-            }
-            await MainActor.run { onCheckout?() }
+            _ = await git.pullCurrentBranch(repoPath: info.repoPath)
+            openRider()
             dismiss()
+            await MainActor.run { onCheckout?() }
         } catch {}
         checkingOut = false
     }
@@ -160,13 +181,26 @@ struct BranchDetailView: View {
 
     private func openRider() {
         let repoURL = URL(fileURLWithPath: info.repoPath)
-        let file = findSolutionFile(in: repoURL, extension: "slnx")
+        let repoName = repoURL.lastPathComponent
+        let file = solutionFile(named: repoName, in: repoURL)
+            ?? findSolutionFile(in: repoURL, extension: "slnx")
             ?? findSolutionFile(in: repoURL, extension: "sln")
             ?? repoURL
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         task.arguments = ["open", "-a", "Rider", file.path]
         try? task.run()
+    }
+
+    private func solutionFile(named name: String, in dir: URL) -> URL? {
+        let candidates = ["\(name).slnx", "\(name).sln"]
+        for candidate in candidates {
+            let url = dir.appendingPathComponent(candidate)
+            if FileManager.default.fileExists(atPath: url.path) {
+                return url
+            }
+        }
+        return nil
     }
 
     private func findSolutionFile(in dir: URL, extension ext: String = "slnx") -> URL? {
@@ -183,3 +217,4 @@ struct BranchDetailView: View {
         return nil
     }
 }
+

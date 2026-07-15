@@ -1,7 +1,10 @@
 import Foundation
+import OSLog
+
+private let branchLog = OSLog(subsystem: "com.blametheguilty", category: "branches")
 
 struct ScannedRepo: Identifiable {
-    let id = UUID()
+    var id: String { path }
     let path: String
     var branches: [GitBranch]
     var remoteBranches: [RemoteBranch]
@@ -10,13 +13,13 @@ struct ScannedRepo: Identifiable {
 }
 
 struct GitBranch: Identifiable {
-    let id = UUID()
+    var id: String { name }
     let name: String
     let isCurrent: Bool
 }
 
 struct RemoteBranch: Identifiable {
-    let id = UUID()
+    var id: String { name }
     let name: String
     let isMerged: Bool
 }
@@ -171,10 +174,15 @@ actor GitService {
             let email = await currentUserEmail() ?? ""
             return await listMyRemoteBranches(repoPath: repoPath, email: email)
         }
-        var allowed = CharacterSet.urlQueryAllowed
-        allowed.remove("/")
-        guard let encoded = fullName.addingPercentEncoding(withAllowedCharacters: allowed),
-              let url = URL(string: "\(backendUrl)/api/github/my-branches?gitHubId=\(gitHubId)&repo=\(encoded)") else {
+        guard var components = URLComponents(string: "\(backendUrl)/api/github/my-branches") else {
+            let email = await currentUserEmail() ?? ""
+            return await listMyRemoteBranches(repoPath: repoPath, email: email)
+        }
+        components.queryItems = [
+            .init(name: "gitHubId", value: "\(gitHubId)"),
+            .init(name: "repo", value: fullName)
+        ]
+        guard let url = components.url else {
             let email = await currentUserEmail() ?? ""
             return await listMyRemoteBranches(repoPath: repoPath, email: email)
         }
@@ -212,6 +220,80 @@ actor GitService {
         try await runGit(repoPath: repoPath, args: ["push", "origin", "--delete", name])
     }
 
+    struct CreatePRResult {
+        let url: URL
+        let isExisting: Bool
+    }
+
+    func createPR(repoPath: String, branchName: String, backendUrl: String, gitHubId: Int64,
+                  overrideTitle: String? = nil, overrideBody: String? = nil) async throws -> CreatePRResult {
+        // Check if the specific branch exists on remote
+        let remoteRef = "origin/\(branchName)"
+        let hasRemote = (try? await runGit(repoPath: repoPath, args: ["rev-parse", "--verify", remoteRef])) != nil
+        if !hasRemote {
+            throw GitError.commandFailed("Branch '\(branchName)' has no remote tracking branch.\n\nPush it first with:\ngit push -u origin \(branchName)")
+        }
+
+        guard let fullName = await repoFullName(repoPath: repoPath) else {
+            throw GitError.commandFailed("Could not determine repo owner/name from git remote")
+        }
+        let base = await baseRefName(repoPath: repoPath) ?? "main"
+        let cleanBase = base.hasPrefix("origin/") ? String(base.dropFirst(7)) : base
+        let title = overrideTitle ?? generatePRTitle(from: branchName)
+
+        guard var components = URLComponents(string: "\(backendUrl)/api/github/create-pr") else {
+            throw GitError.commandFailed("Invalid URL")
+        }
+        components.queryItems = [
+            .init(name: "gitHubId", value: "\(gitHubId)"),
+            .init(name: "repo", value: fullName),
+            .init(name: "head", value: branchName),
+            .init(name: "baseBranch", value: cleanBase),
+            .init(name: "title", value: title)
+        ]
+        if let body = overrideBody, !body.isEmpty {
+            components.queryItems?.append(.init(name: "body", value: body))
+        }
+        guard let url = components.url else { throw GitError.commandFailed("Invalid URL") }
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else {
+            throw GitError.commandFailed("No response from server")
+        }
+
+        struct PRResponse: Decodable { let prNumber: Int64; let url: String; let existing: Bool? }
+        guard let result = try? JSONDecoder().decode(PRResponse.self, from: data) else {
+            // Try decoding as error
+            struct ErrResp: Decodable { let error: String }
+            if let err = try? JSONDecoder().decode(ErrResp.self, from: data) {
+                throw GitError.commandFailed(err.error)
+            }
+            throw GitError.commandFailed("HTTP \(http.statusCode)")
+        }
+
+        guard let prURL = URL(string: result.url) else {
+            throw GitError.commandFailed("Invalid PR URL from server")
+        }
+        return CreatePRResult(url: prURL, isExisting: result.existing ?? false)
+    }
+
+    private func generatePRTitle(from branchName: String) -> String {
+        let cleaned = branchName
+            .replacingOccurrences(of: #"^(feature|fix|hotfix|bugfix|chore|release)/"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
+            .split(separator: " ")
+            .enumerated()
+            .map { i, word in i == 0 ? String(word).capitalized : String(word) }
+            .joined(separator: " ")
+        if let ticket = extractTicketNumber(from: branchName) {
+            return "[\(ticket)] \(cleaned)"
+        }
+        return cleaned
+    }
+
     func defaultBranchRef(repoPath: String) async -> String {
         if let out = try? await runGit(repoPath: repoPath, args: ["rev-parse", "--abbrev-ref", "origin/HEAD"]),
            !out.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -231,31 +313,53 @@ actor GitService {
     }
 
     func currentUserEmail() async -> String? {
-        guard let output = try? await runGitSimple(args: ["config", "--global", "user.email"]) else { return nil }
-        let email = output.trimmingCharacters(in: .whitespacesAndNewlines)
-        return email.isEmpty ? nil : email
+        if let output = try? await runGitSimple(args: ["config", "--global", "user.email"]) {
+            let email = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !email.isEmpty { return email }
+        }
+        return nil
     }
 
     func listMyBranches(repoPath: String) async throws -> [(name: String, isCurrent: Bool)] {
-        let myEmail = await currentUserEmail()
         let allBranches = try await listBranches(repoPath: repoPath)
-        guard let email = myEmail else { return allBranches }
-        let baseRef = await baseRefName(repoPath: repoPath)
-        let currentBranch = (try? await runGit(repoPath: repoPath, args: ["rev-parse", "--abbrev-ref", "HEAD"]))
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+        var email = await currentUserEmail()
+        if email == nil {
+            if let out = try? await runGit(repoPath: repoPath, args: ["config", "user.email"]) {
+                let trimmed = out.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { email = trimmed }
+            }
+        }
+        let repoName = URL(fileURLWithPath: repoPath).lastPathComponent
+        os_log("[Branches] %{public}@: email=%{public}@, total=%d", log: branchLog, type: .debug,
+               repoName, email ?? "nil", allBranches.count)
+        let ws = CharacterSet.whitespacesAndNewlines
+        // Collect all remote branch names for fast lookup
+        var remoteBranches = Set<String>()
+        if let out = try? await runGit(repoPath: repoPath, args: ["branch", "-r"]) {
+            for line in out.split(separator: "\n") {
+                let trimmed = line.trimmingCharacters(in: ws)
+                if trimmed.hasPrefix("origin/") {
+                    remoteBranches.insert(String(trimmed.dropFirst(7)))
+                }
+            }
+        }
+        os_log("[Branches] %{public}@: remoteBranches=%d", log: branchLog, type: .debug,
+               repoName, remoteBranches.count)
         var filtered: [(name: String, isCurrent: Bool)] = []
         for b in allBranches {
             if b.isCurrent { filtered.append(b); continue }
-            if let baseRef {
-                if let out = try? await runGit(repoPath: repoPath, args: ["log", "--oneline", "\(baseRef)..\(b.name)", "--author=\(email)"]),
-                   !out.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    filtered.append(b)
-                } else if let out2 = try? await runGit(repoPath: repoPath, args: ["log", "--oneline", b.name, "--author=\(email)"]),
-                          !out2.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    filtered.append(b)
-                }
-            } else if let out2 = try? await runGit(repoPath: repoPath, args: ["log", "--oneline", b.name, "--author=\(email)"]),
-                      !out2.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if let email,
+               let out = try? await runGit(repoPath: repoPath, args: ["log", "--oneline", b.name, "--author=\(email)"]),
+               !out.trimmingCharacters(in: ws).isEmpty {
+                filtered.append(b)
+                continue
+            }
+            let onRemote = remoteBranches.contains(b.name)
+            os_log("[Branches] %{public}@: %{public}@ current=%d myCommit=%d onRemote=%d → %{public}@",
+                   log: branchLog, type: .debug,
+                   repoName, b.name, b.isCurrent, 0, onRemote ? 1 : 0,
+                   b.isCurrent || (email != nil) || !onRemote ? "INCLUDE" : "EXCLUDE")
+            if !onRemote {
                 filtered.append(b)
             }
         }
@@ -264,6 +368,47 @@ actor GitService {
 
     static func repoName(from path: String) -> String {
         URL(fileURLWithPath: path).lastPathComponent
+    }
+
+    func findRepoPath(ownerRepo: String, workspacePath: String) async -> String? {
+        let fm = FileManager.default
+        guard let enumerator = fm.enumerator(
+            at: URL(fileURLWithPath: workspacePath),
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        ) else { return nil }
+        var candidates: [String] = []
+        while let item = enumerator.nextObject() as? URL {
+            let depth = item.pathComponents.count - workspacePath.components(separatedBy: "/").count
+            if depth > 3 {
+                enumerator.skipDescendants()
+                continue
+            }
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: item.appendingPathComponent(".git").path, isDirectory: &isDir),
+                  isDir.boolValue else { continue }
+            candidates.append(item.path)
+        }
+        for path in candidates {
+            if let origin = try? await runGitSimple(args: ["-C", path, "remote", "get-url", "origin"]) {
+                let trimmed = origin.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.contains(ownerRepo) || trimmed.hasSuffix("/\(ownerRepo).git") {
+                    return path
+                }
+            }
+        }
+        // fallback: match by directory name
+        let repoName = ownerRepo.split(separator: "/").last.map(String.init) ?? ownerRepo
+        return candidates.first { Self.repoName(from: $0) == repoName }
+    }
+
+    func updateBranch(repoPath: String, branch: String, baseBranch: String, ownerRepo: String, token: String) async throws -> String {
+        try await runGit(repoPath: repoPath, args: ["fetch", "origin", "--prune", "--no-tags", "--quiet"])
+        try await runGit(repoPath: repoPath, args: ["checkout", branch])
+        try await runGit(repoPath: repoPath, args: ["pull", "--rebase", "origin", baseBranch])
+        // Push via HTTPS using token to avoid SSH key issues
+        let result = try await runGit(repoPath: repoPath, args: ["push", "https://x-access-token:\(token)@github.com/\(ownerRepo).git", branch])
+        return "Branch updated: rebased \(branch) onto \(baseBranch)"
     }
 
     private func runGitSimple(args: [String]) async throws -> String {

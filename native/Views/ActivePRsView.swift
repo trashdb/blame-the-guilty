@@ -28,7 +28,7 @@ struct ActivePRsView: View {
             ScrollView {
                 ForEach(prs) { pr in
                     let s = status(for: pr)
-                    return Button {
+                    Button {
                         selectedPR = pr
                     } label: {
                         HStack(spacing: 8) {
@@ -72,5 +72,11 @@ struct ActivePRsView: View {
         }
         .padding(.top, 2)
         .padding(.bottom, 4)
+        .onChange(of: prs) { newPRs in
+            guard let current = selectedPR else { return }
+            if let updated = newPRs.first(where: { $0.prNumber == current.prNumber && $0.repo == current.repo }) {
+                selectedPR = updated
+            }
+        }
     }
 }

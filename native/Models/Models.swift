@@ -43,7 +43,7 @@ struct WorkflowRun: Identifiable, Codable {
     }
 }
 
-struct PullRequest: Identifiable {
+struct PullRequest: Identifiable, Equatable {
     let id = UUID()
     let prNumber: Int64
     let title: String
@@ -62,8 +62,11 @@ struct PullRequest: Identifiable {
     let lastCommentAt: Date?
 
     var prUrl: URL { htmlUrl ?? URL(string: "https://github.com/\(repo)/pull/\(prNumber)")! }
-
     var isMerged: Bool { status == "merged" }
+
+    static func == (lhs: PullRequest, rhs: PullRequest) -> Bool {
+        lhs.prNumber == rhs.prNumber && lhs.repo == rhs.repo
+    }
 }
 
 struct WebhookLogEntry: Decodable, Identifiable {
