@@ -1,6 +1,6 @@
 # Blame the Guilty
 
-macOS menu bar app that tracks GitHub Actions workflows, notifies you on failures, lets you rerun workflows, assign targets, track open PRs with real‑time status, and manage local/remote git branches with checkout, delete, and Jira integration.
+macOS menu bar app that tracks GitHub Actions workflows, notifies you on failures, lets you rerun workflows, assign targets, track open PRs with real‑time status, and manage local/remote git branches with checkout, delete, Jira integration, and direct PR creation from the app.
 
 ## Requirements
 
@@ -18,17 +18,17 @@ bash install.sh
 
 A 🔥 icon appears in your menu bar.
 
-The install script picks the most recent build from DerivedData (by binary mtime) and copies it to `~/Applications/BlameTheGuilty.app`, then relaunches.
+The install script builds the project, copies it to `~/Applications/BlameTheGuilty.app`, and relaunches. If the build fails it falls back to the previous build.
 
 ## First‑time setup
 
 ### 1. Sign in with GitHub
 
-Click the 🔥 icon → **Sign in with GitHub**. Your browser opens to authorize the app. Once connected, you'll see your avatar and **Connected** in green.
+Click the 🔥 icon → **Sign in with GitHub**. Your browser opens to authorize the app (OAuth, scopes: `read:user,repo`). Once connected, you'll see your avatar and **Connected** in green.
 
 ### 2. Configure your Personal Access Token (PAT)
 
-The app uses GitHub's API for branch management and reruns. Each person **must** set up their own PAT:
+Some features (create PR, rerun workflows, update branch, draft/ready toggle) require a PAT:
 
 1. Go to [github.com/settings/tokens](https://github.com/settings/tokens) → **Generate new token (classic)**
 2. Scopes: **`repo`** (full control of private repos)
@@ -36,12 +36,9 @@ The app uses GitHub's API for branch management and reruns. Each person **must**
 4. Copy the token (starts with `github_pat_...`)
 5. Open the app → ⚙️ **Settings** → **Personal Access Token** → paste and **Save**
 
-The token is stored per‑user in the backend and takes priority over OAuth:
-`User PAT > OAuth token > Shared PAT`
-
 ### 3. Set your workspace path
 
-The app scans a directory recursively (max depth 3) to discover git repos for branch management.
+The app scans a directory recursively to discover git repos for branch management.
 
 Default: `~/Desktop/dev`. Change it in **Settings** → **Workspace Path** if your repos live elsewhere (e.g. `~/Desktop/ej`).
 
@@ -53,9 +50,7 @@ Default: `https://easyjet.atlassian.net/browse/`
 
 ### 5. Select your favorite repo
 
-**Settings** → **Favorite Repo** — pick the repo you work on most often.
-
-The **See All PRs** button in the toolbar opens `https://github.com/easyjet-dev/{repo}/pulls`.
+**Settings** → **Favorite Repo** — pick the repo you work on most often. The **See All PRs** button opens `https://github.com/easyjet-dev/{repo}/pulls`.
 
 ## Interface
 
@@ -68,8 +63,6 @@ The **See All PRs** button in the toolbar opens `https://github.com/easyjet-dev/
 | **Running workflows** | auto | Current in‑progress runs with rerun/target buttons |
 | **Toolbar** | auto | Settings, Workflow History, Webhook Log, See All PRs, avatar |
 
-The popover is **not** scrollable as a whole — each section has a fixed height with its own internal scroll.
-
 ### PR status badges
 
 | Badge | Meaning |
@@ -81,74 +74,48 @@ The popover is **not** scrollable as a whole — each section has a fixed height
 | **FAIL** | Checks are failing |
 | **MERGED** | PR was merged (briefly shown before disappearing) |
 
-Click a PR card to see a detail popover with:
-- Mergeable state (`behind`, `clean`, `dirty`, `blocked`)
-- CI badge per relevant workflow
-- Behind/ahead commit counts
-- Latest comment preview (non‑bot)
-- Links to GitHub Compare / Checks
-- **Merge PR** button (Squash / Rebase / Merge)
-
-PR status is computed server‑side from the **latest** run per workflow (`repo + headBranch + workflowName`). Historical failures from previous commits do NOT mark a PR as FAIL.
+Click a PR card to see a detail popover with mergeable state, CI badge per workflow, behind/ahead counts, latest comment preview, links to GitHub Compare/Checks, Convert to Draft / Mark as Ready, Update Branch, and Merge PR.
 
 ### Notifications
 
 - **Failures:** red accent, loud sound, dock bounce
-- **Approvals & comments:** blue accent, gentle `Ping.aiff`, no dock bounce
-- Notifications only for important workflows (CI, account‑api, lambdas, terraform) — CodeQL, Dependency Review, Label PR, ForgeRock Secrets are silently ignored.
+- **Approvals & comments:** blue accent, gentle sound
+- **Conflict alerts:** blue accent, gentle sound — when someone merges files you're also touching
+- Only for important workflows (CI, account‑api, lambdas, terraform) — CodeQL, Dependency Review, etc. are silently ignored.
 
 ### Workflow History
 
-Click the list icon (📋) to see recent workflow runs:
-
-| Icon | Meaning |
-|------|---------|
-| 🟢 | Success |
-| 🔴 | Failure |
-| 🟠 | In progress |
-| 🔄 | Rerun the workflow |
-| 👤 | Assign teammate(s) for completion notification |
-| ↗️ | Open the run in GitHub |
-
-Completed runs show duration; in‑progress runs show relative time.
-
-### Assigning targets
-
-1. Click 👤 on any in‑progress workflow
-2. Select one or more teammates
-3. Tap **Done** — they get a notification when the workflow finishes
-
-Targets are per individual run attempt (each retry has its own `dbId`).
+Recent workflow runs with success/failure/in-progress icons, rerun button, target assignment for completion notifications. Completed runs show duration; in‑progress runs show relative time.
 
 ### Branch management
 
-The **Branches** section has two tabs:
-
 #### Local Branches
 
-Shows local branches where you have ≥1 commit (or you're the tip author). The current branch is always shown with a `*` prefix.
-
-- **Click a branch** → detail popover with:
-  - Jira ticket link (auto‑detected from branch name via `[A-Z]+-\d+`)
-  - **Checkout** → runs `git checkout` + `git pull --rebase`, then opens **JetBrains Rider** with the repo's solution file (`.slnx`/`.sln`)
-  - **Delete** → runs `git branch -D` (protected: `main`/`master` cannot be deleted)
-- **Trash icon** → quick delete with in‑popover confirmation overlay (avoids closing the main popover)
+Shows branches where you have commits. Click a branch for:
+- Jira ticket link (auto‑detected from branch name)
+- **Checkout** → runs `git checkout` + `git pull --rebase` (if upstream exists), then opens **JetBrains Rider**
+- **Delete** → `git branch -D` (protected: `main`/`master` cannot be deleted)
+- **Create PR** → editable preview with template + Copilot-generated summary from commit messages
 
 #### Remote Branches
 
-GitHub API lists branches where `commit.author.login` matches your GitHub username. Merged branches are green and can be deleted; unmerged are orange and read‑only.
+Lists branches from GitHub API. Merged branches can be deleted; unmerged are read‑only.
 
-- Uses `GET /api/github/my-branches` (falls back to git‑based filtering if API fails)
-- Checks merged status via `git log origin/main..origin/<branch>`
-- Delete runs `git push origin --delete <branch>`
+### Predictive Conflict Detection
 
-#### Workspace scanning
+The app watches your workspace repos in real time. When someone merges a PR to `main`, you get a notification if:
+- You have **uncommitted changes** in the same files that were just merged
+- Your **current branch** touches the same files (potential merge conflict)
 
-The workspace path (configurable in Settings) is scanned recursively for git repos (max depth 3). This runs once when the tabs section first appears. A background `git fetch origin --prune --no-tags` runs after results are shown so it doesn't block the UI.
+Notifications arrive via SignalR (instant) with a 60‑second polling fallback. Deduplicated per file for 5 minutes.
 
-### Viewing PRs
+### Create PR flow
 
-Click the **tray.full icon** in the toolbar to open `https://github.com/easyjet-dev/{favoriteRepo}/pulls` in your browser.
+1. Ticket number auto‑extracted from branch name → prepended as `[LOY-XXX]`
+2. PR template loaded from `.github/pull_request_template.md`
+3. Backend calls Copilot API to generate a summary from commit messages
+4. Edit title and body before confirming
+5. PR is created via GitHub API
 
 ## For repo admins: webhook setup
 
@@ -157,95 +124,18 @@ Each repo needs a webhook pointing at the backend:
 1. **Repo Settings → Webhooks → Add webhook**
 2. **Payload URL:** `https://moonlike-silenced-sprung.ngrok-free.dev/api/webhook/github`
 3. **Content type:** `application/json`
-4. **Events:**
-   - ☑ **Workflow runs**
-   - ☑ **Pull requests**
-   - ☑ **Check suites**
+4. **Events:** ☑ Workflow runs, ☑ Pull requests, ☑ Check suites
 5. **Active:** ✅
-6. **Add webhook**
 
-Events used:
-- `workflow_run` — tracks runs and sends notifications
-- `pull_request` — keeps the Active PRs list in sync
-- `check_suite` — additional check tracking
-
-## Settings panel
-
-Opened via the ⚙️ button. A floating NSPanel window (not a sheet) that's recreated on each open to capture the current `gitHubId` and `backendUrl`.
+## Settings
 
 | Setting | Description |
 |---------|-------------|
 | **Workspace Path** | Directory to scan for git repos (default `~/Desktop/dev`) |
-| **Jira Board URL** | Base URL for Jira ticket links (default `https://easyjet.atlassian.net/browse/`) |
-| **Favorite Repo** | Picker of discovered repos — used by "See All PRs" button |
-| **Personal Access Token** | Per‑user PAT for API access, stored in backend |
+| **Jira Board URL** | Base URL for Jira ticket links |
+| **Favorite Repo** | Used by "See All PRs" button |
+| **Personal Access Token** | Per‑user PAT for API access |
 
 ## Architecture
 
-### Native app → Backend → GitHub
-
-```
-macOS App (menu bar)
-    ↕ SignalR (real‑time)
-    ↕ REST API
-Backend (VPS)
-    ↕ GitHub API
-    ↕ Webhooks (from repos)
-GitHub
-```
-
-### Key design decisions
-
-- PR status is computed **server‑side** from `WorkflowRuns` + approval state, sent via API and real‑time SignalR pushes
-- `ciStatus` only considers the **latest run per workflow** — historical failures ignored
-- Token resolution: `User PAT > OAuth token > shared PAT`
-- Session state lives in `SignalRService` (`@StateObject` at App level) — survives popover recreation
-- Polling fallback (30s) as belt‑and‑suspenders for PRs
-- Cancelled/superseded workflows get `"cancelled"` status — non‑punishment, no notification
-- `startup_failure` treated as cancelled (no punishment)
-
-### Backend
-
-Already running on a VPS (alias `underlayer`). Deploy:
-```bash
-docker run --rm -v /tmp/blame-build/backend:/src -w /src mcr.microsoft.com/dotnet/sdk:10.0 dotnet publish -c Release -r linux-x64 --self-contained -o /src/publish
-sudo rsync -az --delete /tmp/blame-build/backend/publish/ /opt/blame-the-guilty/
-sudo systemctl daemon-reload && sudo systemctl restart blame-the-guilty
-```
-
-Database: `/var/lib/blame-the-guilty/blame_the_guilty.db`
-
-## Structure
-
-```
-blame-the-guilty/
-├── backend/               # ASP.NET backend
-│   ├── Controllers/       # API endpoints (auth, workflows, PRs, GitHub, webhook)
-│   ├── Models/            # DB models
-│   ├── Services/          # GitHub API, webhook processing, SignalR hub
-│   └── Program.cs         # Startup + DB migrations
-├── native/
-│   ├── btg.xcodeproj/
-│   ├── install.sh         # Build + install + relaunch
-│   ├── Models/
-│   │   └── Models.swift   # Data types + helpers
-│   ├── Services/
-│   │   ├── SignalRService.swift      # Real-time connection
-│   │   ├── OAuthService.swift        # GitHub login
-│   │   ├── KeychainService.swift     # Session storage
-│   │   ├── NotificationService.swift # Local notifications
-│   │   └── GitService.swift          # Git operations (actor)
-│   └── Views/
-│       ├── ContentView.swift         # Main popover
-│       ├── ActivePRsView.swift       # PR cards + detail popover
-│       ├── PRDetailView.swift        # PR detail (merge, CI, etc.)
-│       ├── LocalBranchesView.swift   # Branch management
-│       ├── BranchDetailView.swift    # Branch popover (checkout, delete, Jira)
-│       ├── WorkflowHistoryView.swift # Workflow rows + target picker
-│       ├── SettingsView.swift        # Settings panel
-│       ├── SettingsPanelManager.swift # NSPanel wrapper
-│       ├── NotificationBannerView.swift
-│       ├── EmptyNotificationView.swift
-│       └── LoggedInCardView.swift    # Avatar + connected state
-└── README.md
-```
+See [ARQUITECTURA.md](./ARQUITECTURA.md) for the full architecture docs.

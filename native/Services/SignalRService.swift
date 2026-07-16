@@ -52,6 +52,8 @@ class SignalRService: ObservableObject {
     @Published var runningWorkflows: [WorkflowRun] = []
     @Published var recentWorkflows: [WorkflowRun] = []
     @Published var activePRs: [PullRequest] = []
+    @Published var mainBranchUpdate: (repo: String, prNumber: Int, mergedBy: String, headSha: String?)?
+    var onMainBranchUpdated: ((String, Int, String, String?) -> Void)?
 
     let baseUrl: String
     private var task: Task<Void, Never>?
@@ -329,6 +331,10 @@ class SignalRService: ObservableObject {
             guard let args = json["arguments"] as? [[String: Any]],
                   let data = args.first else { return }
             handlePrCommented(data)
+        case "MainBranchUpdated":
+            guard let args = json["arguments"] as? [[String: Any]],
+                  let data = args.first else { return }
+            handleMainBranchUpdated(data)
         default: break
         }
     }
@@ -480,6 +486,18 @@ class SignalRService: ObservableObject {
                 style: .info
             )
             await syncPRsFromApi(gitHubId: gitHubId)
+        }
+    }
+
+    private func handleMainBranchUpdated(_ data: [String: Any]) {
+        let repo = data["repo"] as? String ?? ""
+        let prNumber = data["prNumber"] as? Int ?? 0
+        let mergedBy = data["mergedBy"] as? String ?? ""
+        let headSha = data["headSha"] as? String
+
+        Task { @MainActor in
+            mainBranchUpdate = (repo, prNumber, mergedBy, headSha)
+            onMainBranchUpdated?(repo, prNumber, mergedBy, headSha)
         }
     }
 

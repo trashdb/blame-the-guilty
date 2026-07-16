@@ -402,6 +402,41 @@ actor GitService {
         return candidates.first { Self.repoName(from: $0) == repoName }
     }
 
+    // ─── Conflict detection helpers ────────────────────────────────────────
+
+    func fetchMainAndGetDiff(repoPath: String, lastKnownSha: String?) async -> (currentSha: String, changedFiles: [String])? {
+        let _ = try? await runGit(repoPath: repoPath, args: ["fetch", "origin", "main", "--no-tags", "--quiet"])
+        guard let currentSha = try? await runGit(repoPath: repoPath, args: ["rev-parse", "origin/main"]) else { return nil }
+        let trimmed = currentSha.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let last = lastKnownSha, last != trimmed {
+            let out = (try? await runGit(repoPath: repoPath, args: ["diff", "--name-only", last, "origin/main"])) ?? ""
+            let files = out.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
+            return (trimmed, files)
+        }
+        return (trimmed, [])
+    }
+
+    func getUncommittedFiles(repoPath: String) async -> [String] {
+        guard let out = try? await runGit(repoPath: repoPath, args: ["diff", "--name-only"]) else { return [] }
+        let files = out.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
+        // Also include untracked files
+        if let untracked = try? await runGit(repoPath: repoPath, args: ["ls-files", "--others", "--exclude-standard"]) {
+            let ut = untracked.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
+            return Array(Set(files + ut)).sorted()
+        }
+        return files
+    }
+
+    func getBranchFilesAgainstBase(repoPath: String, baseRef: String) async -> [String] {
+        guard let out = try? await runGit(repoPath: repoPath, args: ["diff", "--name-only", "\(baseRef)...HEAD"]) else { return [] }
+        return out.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
+    }
+
+    func currentBranchName(repoPath: String) async -> String? {
+        try? await runGit(repoPath: repoPath, args: ["rev-parse", "--abbrev-ref", "HEAD"])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     func updateBranch(repoPath: String, branch: String, baseBranch: String, ownerRepo: String, token: String) async throws -> String {
         try await runGit(repoPath: repoPath, args: ["fetch", "origin", "--prune", "--no-tags", "--quiet"])
         try await runGit(repoPath: repoPath, args: ["checkout", branch])

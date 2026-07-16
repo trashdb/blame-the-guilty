@@ -611,6 +611,24 @@ public class WebhookController : ControllerBase
         }
 
         _logger.LogInformation("PR #{PrNumber} {Status} by {Author}", prNumber, status, authorLogin);
+
+        if (merged)
+        {
+            var mergedByLogin = pr.TryGetProperty("merged_by", out var mb)
+                ? mb.TryGetProperty("login", out var ml) ? ml.GetString() : null
+                : null;
+            var headSha = pr.TryGetProperty("merge_commit_sha", out var mcs) ? mcs.GetString() : null;
+
+            await _hubContext.Clients.All.SendAsync("MainBranchUpdated", new
+            {
+                repo,
+                prNumber,
+                mergedBy = mergedByLogin ?? "unknown",
+                headSha
+            });
+            _logger.LogInformation("MainBranchUpdate sent for {Repo} PR #{PrNumber} by {MergedBy}", repo, prNumber, mergedByLogin);
+        }
+
         await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
         return Ok(new { prNumber, status });
     }
