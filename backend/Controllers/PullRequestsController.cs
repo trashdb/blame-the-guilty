@@ -99,7 +99,8 @@ public class PullRequestsController : ControllerBase
             if (headSha != null)
             {
                 var prRuns = allRuns
-                    .Where(r => r.Repo == pr.RepoFullName && r.HeadSha == headSha)
+                    .Where(r => r.Repo == pr.RepoFullName && r.HeadSha == headSha
+                        && r.Status != "superseded" && r.Status != "cancelled")
                     .ToList();
                 var latestByWorkflow = prRuns
                     .GroupBy(r => r.WorkflowName)
@@ -425,16 +426,16 @@ public class PullRequestsController : ControllerBase
             .FirstOrDefaultAsync();
         if (prEvent?.HeadBranch != null)
         {
-            var stale = await _db.WorkflowRuns
-                .Where(w => w.Repo == repo && w.HeadBranch == prEvent.HeadBranch
-                    && w.Status == "failure")
-                .ToListAsync();
-            if (stale.Count > 0)
-            {
-                foreach (var s in stale) s.Status = "superseded";
-                await _db.SaveChangesAsync();
-                Console.WriteLine($"[UpdateBranch] Superseded {stale.Count} old failure runs for {repo} #{prNumber} branch={prEvent.HeadBranch}");
-            }
+                var stale = await _db.WorkflowRuns
+                    .Where(w => w.Repo == repo && w.HeadBranch == prEvent.HeadBranch
+                        && (w.Status == "failure" || w.Status == "in_progress"))
+                    .ToListAsync();
+                if (stale.Count > 0)
+                {
+                    foreach (var s in stale) s.Status = "superseded";
+                    await _db.SaveChangesAsync();
+                    Console.WriteLine($"[UpdateBranch] Superseded {stale.Count} old runs for {repo} #{prNumber} branch={prEvent.HeadBranch}");
+                }
         }
 
         // Resync PRs after update
