@@ -57,11 +57,9 @@ struct QuickSearchView: View {
         let q = query.trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty, q.count >= 2 else { return [] }
         var results: [QuickSearchAction] = []
-        let lower = q.lowercased()
         let branches = MenuBarBadgeService.shared.currentBranches
         let jiraUrl = UserDefaults.standard.string(forKey: "jiraBoardUrl") ?? TeamDefaults.jiraBoardUrl
 
-        // "open 945" or just "945"
         if let match = try? NSRegularExpression(pattern: "^(?:open\\s+)?(\\d+)$", options: .caseInsensitive)
             .firstMatch(in: q, range: NSRange(q.startIndex..., in: q)),
            let range = Range(match.range(at: 1), in: q) {
@@ -74,7 +72,6 @@ struct QuickSearchView: View {
             })
         }
 
-        // "LOY-945" or "open LOY-945" (full ticket key)
         if let match = try? NSRegularExpression(pattern: "^(?:open\\s+)?([A-Z]+-\\d+)$", options: .caseInsensitive)
             .firstMatch(in: q, range: NSRange(q.startIndex..., in: q)),
            let range = Range(match.range(at: 1), in: q) {
@@ -87,7 +84,6 @@ struct QuickSearchView: View {
             })
         }
 
-        // "checkout <name>" — find matching branch
         if let match = try? NSRegularExpression(pattern: "^checkout\\s+(.+)", options: .caseInsensitive)
             .firstMatch(in: q, range: NSRange(q.startIndex..., in: q)),
            let range = Range(match.range(at: 1), in: q) {
@@ -109,7 +105,6 @@ struct QuickSearchView: View {
             }
         }
 
-        // "create pr from <name>" or "pr <name>"
         if let match = try? NSRegularExpression(pattern: "(?:create\\s+)?pr\\s+(?:from\\s+)?(.+)", options: .caseInsensitive)
             .firstMatch(in: q, range: NSRange(q.startIndex..., in: q)),
            let range = Range(match.range(at: 1), in: q) {
@@ -160,140 +155,111 @@ struct QuickSearchView: View {
                     .onTapGesture { isPresented = false }
 
                 VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
-                TextField("Search or ask anything…", text: $query)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 14))
-                    .foregroundStyle(Color(white: 0.95))
-                    .onSubmit { executeSelected() }
-            }
-            .padding(12)
-            .background(.white.opacity(0.06))
+                    HStack(spacing: DS.Spacing.lg) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 14))
+                            .foregroundStyle(DS.Color.textSecondary)
+                        TextField("Search or ask anything…", text: $query)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 14))
+                            .foregroundStyle(DS.Color.textPrimary)
+                            .onSubmit { executeSelected() }
+                    }
+                    .padding(DS.Spacing.xl)
+                    .background(DS.Color.fieldBackground.opacity(0.6))
 
-            if query.isEmpty {
-                ScrollViewReader { proxy in
-                    ScrollView(.vertical) {
-                        LazyVStack(spacing: 1, pinnedViews: .sectionHeaders) {
-                            let grouped = Dictionary(grouping: allResults) { $0.category }
-                            ForEach(QuickSearchCategory.allCases, id: \.rawValue) { cat in
-                                if let items = grouped[cat], !items.isEmpty {
-                                    Section {
-                                        ForEach(Array(items.enumerated()), id: \.element.id) { idx, action in
-                                            let globalIdx = allResults.firstIndex(where: { $0.id == action.id }) ?? 0
-                                            Button {
-                                                select(action)
-                                            } label: {
-                                                actionRow(action, globalIdx: globalIdx)
-                                            }
-                                            .buttonStyle(.plain)
-                                            .cursor(.pointingHand)
-                                            .id(action.id)
-                                        }
-                                    } header: {
-                                        sectionHeader(cat)
-                                    }
-                                }
-                            }
+                    if query.isEmpty {
+                        resultsList
+                    } else if !hasAnyResults {
+                        VStack(spacing: DS.Spacing.lg) {
+                            Spacer()
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 24))
+                                .foregroundStyle(DS.Color.textTertiary)
+                            Text("No matching commands")
+                                .font(DS.Font.body)
+                                .foregroundStyle(DS.Color.textSecondary)
+                            Spacer()
                         }
+                        .frame(height: 180)
+                    } else {
+                        resultsList
                     }
-                    .onChange(of: selectedIndex) { newVal in
-                        if newVal >= 0, newVal < allResults.count {
-                            withAnimation(.none) {
-                                proxy.scrollTo(allResults[newVal].id, anchor: .center)
-                            }
-                        }
-                    }
-                }
-                .frame(height: min(CGFloat(allResults.count) * 40 + CGFloat(QuickSearchCategory.allCases.count) * 20, 400))
-            } else if !hasAnyResults {
-                VStack(spacing: 8) {
-                    Spacer()
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 24))
-                        .foregroundStyle(.secondary.opacity(0.4))
-                    Text("No matching commands")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                }
-                .frame(height: 180)
-            } else {
-                ScrollViewReader { proxy in
-                    ScrollView(.vertical) {
-                        LazyVStack(spacing: 1, pinnedViews: .sectionHeaders) {
-                            let grouped = Dictionary(grouping: allResults) { $0.category }
-                            ForEach(QuickSearchCategory.allCases, id: \.rawValue) { cat in
-                                if let items = grouped[cat], !items.isEmpty {
-                                    Section {
-                                        ForEach(Array(items.enumerated()), id: \.element.id) { idx, action in
-                                            let globalIdx = allResults.firstIndex(where: { $0.id == action.id }) ?? 0
-                                            Button {
-                                                select(action)
-                                            } label: {
-                                                actionRow(action, globalIdx: globalIdx)
-                                            }
-                                            .buttonStyle(.plain)
-                                            .cursor(.pointingHand)
-                                            .id(action.id)
-                                        }
-                                    } header: {
-                                        sectionHeader(cat)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    .onChange(of: selectedIndex) { newVal in
-                        if newVal >= 0, newVal < allResults.count {
-                            withAnimation(.none) {
-                                proxy.scrollTo(allResults[newVal].id, anchor: .center)
-                            }
-                        }
-                    }
-                }
-                .frame(height: min(CGFloat(allResults.count) * 40 + CGFloat(QuickSearchCategory.allCases.count) * 20, 400))
-            }
 
-            HStack(spacing: 12) {
-                Text("↵ execute")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.tertiary)
-                Text("⌘K close")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.tertiary)
-                Spacer()
-                Text("\(allResults.count) results")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.tertiary)
+                    HStack(spacing: DS.Spacing.xl) {
+                        Text("↵ execute")
+                            .font(DS.Font.caption)
+                            .foregroundStyle(DS.Color.textTertiary)
+                        Text("⌘K close")
+                            .font(DS.Font.caption)
+                            .foregroundStyle(DS.Color.textTertiary)
+                        Spacer()
+                        Text("\(allResults.count) results")
+                            .font(DS.Font.caption)
+                            .foregroundStyle(DS.Color.textTertiary)
+                    }
+                    .padding(.horizontal, DS.Spacing.xl)
+                    .padding(.vertical, DS.Spacing.md)
+                    .background(DS.Color.fieldBackground.opacity(0.4))
+                }
+                .frame(width: 360)
+                .background(.regularMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.xl))
+                .shadow(color: .black.opacity(0.4), radius: 20, y: 8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: DS.Radius.xl)
+                        .stroke(DS.Color.divider, lineWidth: 1)
+                )
+                .onAppear {
+                    selectedIndex = 0
+                    Task {
+                        let path = UserDefaults.standard.string(forKey: "workspacePath") ?? TeamDefaults.workspacePath
+                        let branches = await GitService.scanCurrentBranches(workspacePath: path)
+                        await MainActor.run { MenuBarBadgeService.shared.currentBranches = branches }
+                    }
+                }
+                .onChange(of: query) { _ in selectedIndex = 0 }
+                .onChange(of: isPresented) { shown in if shown { query = ""; selectedIndex = 0 } }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(.white.opacity(0.04))
-        }
-        .frame(width: 360)
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.4), radius: 20, y: 8)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(.white.opacity(0.1), lineWidth: 1)
-        )
-        .onAppear {
-            selectedIndex = 0
-            Task {
-                let path = UserDefaults.standard.string(forKey: "workspacePath") ?? TeamDefaults.workspacePath
-                let branches = await GitService.scanCurrentBranches(workspacePath: path)
-                await MainActor.run { MenuBarBadgeService.shared.currentBranches = branches }
-            }
-        }
-        .onChange(of: query) { _ in selectedIndex = 0 }
-        .onChange(of: isPresented) { shown in if shown { query = ""; selectedIndex = 0 } }
         }
     }
-}
+
+    private var resultsList: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.vertical) {
+                LazyVStack(spacing: 1, pinnedViews: .sectionHeaders) {
+                    let grouped = Dictionary(grouping: allResults) { $0.category }
+                    ForEach(QuickSearchCategory.allCases, id: \.rawValue) { cat in
+                        if let items = grouped[cat], !items.isEmpty {
+                            Section {
+                                ForEach(Array(items.enumerated()), id: \.element.id) { idx, action in
+                                    let globalIdx = allResults.firstIndex(where: { $0.id == action.id }) ?? 0
+                                    Button {
+                                        select(action)
+                                    } label: {
+                                        actionRow(action, globalIdx: globalIdx)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .cursor(.pointingHand)
+                                    .id(action.id)
+                                }
+                            } header: {
+                                sectionHeader(cat)
+                            }
+                        }
+                    }
+                }
+            }
+            .onChange(of: selectedIndex) { newVal in
+                if newVal >= 0, newVal < allResults.count {
+                    withAnimation(.none) {
+                        proxy.scrollTo(allResults[newVal].id, anchor: .center)
+                    }
+                }
+            }
+        }
+        .frame(height: min(CGFloat(allResults.count) * 40 + CGFloat(QuickSearchCategory.allCases.count) * 20, 400))
+    }
 
     private func select(_ action: QuickSearchAction) {
         query = ""
@@ -318,47 +284,47 @@ struct QuickSearchView: View {
 
     @ViewBuilder
     private func actionRow(_ action: QuickSearchAction, globalIdx: Int) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: DS.Spacing.xl) {
             Image(systemName: action.icon)
-                .font(.system(size: 12))
-                .foregroundStyle(.blue)
+                .font(DS.Font.body)
+                .foregroundStyle(DS.Color.accent)
                 .frame(width: 20)
             VStack(alignment: .leading, spacing: 1) {
                 Text(action.title)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color(white: 0.9))
+                    .font(DS.Font.body.medium())
+                    .foregroundStyle(DS.Color.textPrimary)
                 Text(action.subtitle)
-                    .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
+                    .font(DS.Font.caption)
+                    .foregroundStyle(DS.Color.textSecondary)
             }
             Spacer()
             if globalIdx == selectedIndex {
                 Image(systemName: "arrow.left")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.blue)
+                    .font(DS.Font.small)
+                    .foregroundStyle(DS.Color.accent)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, DS.Spacing.xl)
+        .padding(.vertical, DS.Spacing.lg)
         .background(
             globalIdx == selectedIndex
-                ? .blue.opacity(0.15)
+                ? DS.Color.accent.opacity(0.15)
                 : Color.clear,
-            in: RoundedRectangle(cornerRadius: 5)
+            in: RoundedRectangle(cornerRadius: DS.Radius.sm)
         )
     }
 
     @ViewBuilder
     private func sectionHeader(_ cat: QuickSearchCategory) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: DS.Spacing.sm) {
             Image(systemName: cat.icon)
-                .font(.system(size: 9))
+                .font(DS.Font.caption)
             Text(cat.rawValue)
-                .font(.system(size: 9, weight: .semibold))
+                .font(DS.Font.caption.semibold())
         }
-        .foregroundStyle(.tertiary)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 4)
+        .foregroundStyle(DS.Color.textTertiary)
+        .padding(.horizontal, DS.Spacing.xl)
+        .padding(.vertical, DS.Spacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.regularMaterial)
     }

@@ -27,129 +27,106 @@ struct BranchDetailView: View {
             )
             .frame(width: 440, height: 420)
         } else {
-            VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(info.name)
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(Color(white: 0.9))
-                    .lineLimit(2)
-                    .textSelection(.enabled)
+            VStack(alignment: .leading, spacing: DS.Spacing.xl) {
+                VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+                    Text(info.name)
+                        .font(DS.Font.mono(13))
+                        .foregroundStyle(DS.Color.textPrimary)
+                        .lineLimit(2)
+                        .textSelection(.enabled)
 
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(info.isLocal ? .green : (info.isMerged ? .green : .orange))
-                        .frame(width: 6, height: 6)
-                    Text(info.isLocal
-                         ? (info.isCurrent ? "current branch" : "local branch")
-                         : (info.isMerged ? "merged" : "unmerged"))
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: DS.Spacing.sm) {
+                        Circle()
+                            .fill(info.isLocal ? .green : (info.isMerged ? .green : .orange))
+                            .frame(width: 6, height: 6)
+                        Text(info.isLocal
+                             ? (info.isCurrent ? "current branch" : "local branch")
+                             : (info.isMerged ? "merged" : "unmerged"))
+                            .font(DS.Font.small)
+                            .foregroundStyle(DS.Color.textSecondary)
+                    }
                 }
-            }
 
-            HStack(spacing: 4) {
-                Image(systemName: "folder")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
-                Text(info.repoName)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.secondary)
-            }
+                HStack(spacing: DS.Spacing.sm) {
+                    Image(systemName: "folder")
+                        .font(DS.Font.caption)
+                        .foregroundStyle(DS.Color.textSecondary)
+                    Text(info.repoName)
+                        .font(DS.Font.mono(11))
+                        .foregroundStyle(DS.Color.textSecondary)
+                }
 
-            if let ticket = info.ticketNumber {
-                HStack(spacing: 4) {
-                    Image(systemName: "link")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.blue)
-                    Text(ticket)
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.blue)
-                    if let url = info.jiraUrl {
-                        Button("Open") {
-                            dismiss()
-                            NSWorkspace.shared.open(url)
+                if let ticket = info.ticketNumber {
+                    HStack(spacing: DS.Spacing.sm) {
+                        Image(systemName: "link")
+                            .font(DS.Font.caption)
+                            .foregroundStyle(DS.Color.accent)
+                        Text(ticket)
+                            .font(DS.Font.mono(11).medium())
+                            .foregroundStyle(DS.Color.accent)
+                        if let url = info.jiraUrl {
+                            actionButton("Open", color: .blue) {
+                                dismiss()
+                                NSWorkspace.shared.open(url)
+                            }
                         }
-                        .font(.system(size: 9))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(.blue.opacity(0.15), in: RoundedRectangle(cornerRadius: 4))
-                        .buttonStyle(.plain)
-                        .cursor(.pointingHand)
                     }
                 }
+
+                if let error = deleteError {
+                    Text(error)
+                        .font(DS.Font.caption)
+                        .foregroundStyle(DS.Color.destructive)
+                }
+
+                Divider()
+
+                HStack(spacing: DS.Spacing.lg) {
+                    if info.isLocal {
+                        actionButton("Create PR", color: .green) {
+                            showCreatePR = true
+                        }
+                    }
+
+                    if info.isLocal && !info.isCurrent && !checkoutSuccess {
+                        actionButton(checkingOut ? "Checking out…" : "Checkout", color: .blue) {
+                            Task { await doCheckout() }
+                        }
+                        .disabled(checkingOut)
+                    }
+
+                    if checkoutSuccess {
+                        Text("✓ Checked out")
+                            .font(DS.Font.small.medium())
+                            .foregroundStyle(DS.Color.success)
+                    }
+
+                    if info.isLocal && !info.isCurrent && !info.isDefault {
+                        actionButton("Delete", color: .red) {
+                            Task { await doDelete() }
+                        }
+                        .disabled(deleting)
+                    }
+
+                    if !info.isLocal && !info.isDefault && info.isMerged {
+                        actionButton("Delete Remote", color: .red) {
+                            Task { await doDeleteRemote() }
+                        }
+                        .disabled(deleting)
+                    }
+
+                    if checkingOut || deleting {
+                        ProgressView()
+                            .scaleEffect(0.5)
+                            .frame(width: 12)
+                    }
+                }
+
+                Spacer()
             }
-
-            if let error = deleteError {
-                Text(error)
-                    .font(.system(size: 9))
-                    .foregroundStyle(.red)
-            }
-
-            Divider()
-
-            HStack(spacing: 8) {
-                if info.isLocal {
-                    actionButton("Create PR", color: .green) {
-                        showCreatePR = true
-                    }
-                }
-
-                if info.isLocal && !info.isCurrent && !checkoutSuccess {
-                    actionButton(checkingOut ? "Checking out…" : "Checkout", color: .blue) {
-                        Task { await doCheckout() }
-                    }
-                    .disabled(checkingOut)
-                }
-
-                if checkoutSuccess {
-                    Text("✓ Checked out")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.green)
-                }
-
-                if info.isLocal && !info.isCurrent && !info.isDefault {
-                    actionButton("Delete", color: .red) {
-                        Task { await doDelete() }
-                    }
-                    .disabled(deleting)
-                }
-
-                if !info.isLocal && !info.isDefault && info.isMerged {
-                    actionButton("Delete Remote", color: .red) {
-                        Task { await doDeleteRemote() }
-                    }
-                    .disabled(deleting)
-                }
-
-                if checkingOut || deleting {
-                    ProgressView()
-                        .scaleEffect(0.5)
-                        .frame(width: 12)
-                }
-            }
-
-            Spacer()
+            .padding(DS.Spacing.xxl)
+            .frame(width: 300, height: 220)
         }
-        .padding(16)
-        .frame(width: 300, height: 220)
-        }
-    }
-
-    private func actionButton(_ label: String, color: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(label)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(color)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(color.opacity(0.15), in: RoundedRectangle(cornerRadius: 5))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 5)
-                        .stroke(color.opacity(0.3), lineWidth: 1)
-                )
-        }
-        .buttonStyle(.plain)
-        .cursor(.pointingHand)
     }
 
     private func doCheckout() async {
@@ -220,4 +197,3 @@ struct BranchDetailView: View {
         return nil
     }
 }
-

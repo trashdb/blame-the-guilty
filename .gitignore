@@ -26,3 +26,7 @@ backend/appsettings.Development.json
 *.db-shm
 *.db-wal
 *.db-journal
+logs/
+
+# Planning / roadmap (local only, never committed)
+PROFESIONALIZACION.md

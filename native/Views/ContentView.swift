@@ -12,8 +12,9 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: DS.Spacing.xl) {
+                // Header
+                HStack(spacing: DS.Spacing.md) {
                     Image(systemName: "flame.fill")
                         .font(.system(size: 13)).padding(.bottom, 2)
                     Text("Blame the Guilty")
@@ -21,9 +22,10 @@ struct ContentView: View {
                 }
 
                 Text("CI/CD notifications when a merged PR breaks the build.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .font(DS.Font.body)
+                    .foregroundStyle(DS.Color.textSecondary)
                     .lineLimit(2)
+
                 Divider()
 
                 if signalR.isLoggedIn {
@@ -37,7 +39,7 @@ struct ContentView: View {
                     ActivePRsView(prs: signalR.activePRs, gitHubId: signalR.userGitHubId)
                     Divider()
                 }
-                
+
                 if signalR.isLoggedIn {
                     if let event = signalR.lastEvent {
                         LastNotificationCardView(event: event)
@@ -51,18 +53,19 @@ struct ContentView: View {
                     LocalBranchesView(gitHubId: signalR.userGitHubId, backendUrl: signalR.baseUrl)
                 }
             }
-            .foregroundStyle(Color(white: 0.7))
+            .foregroundStyle(DS.Color.textSecondary)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 10)
-            .padding(.horizontal, 16)
+            .padding(.vertical, DS.Spacing.xl)
+            .padding(.horizontal, DS.Spacing.xxl)
 
             Spacer(minLength: 0)
 
             Divider()
 
+            // Toolbar
             HStack {
                 if signalR.isLoggedIn {
-                    Button {
+                    toolbarButton(icon: "arrow.triangle.2.circlepath", help: "Full resync: workflows + PRs") {
                         Task {
                             let n = await signalR.syncActiveWorkflows(gitHubId: signalR.userGitHubId)
                             if n > 0 {
@@ -74,119 +77,59 @@ struct ContentView: View {
                                 )
                             }
                         }
-                    } label: {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                            .padding(6)
-                            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
                     }
-                    .buttonStyle(.plain)
-                    .help("Full resync: workflows + PRs")
-                    .cursor(.pointingHand)
                 }
 
-                Button {
+                toolbarButton(icon: "bell.fill", help: "Send Test Notification") {
                     showNotification(
                         title: "Blame the Guilty",
                         body: "Test notification from popover",
                         subtitle: "Works!",
                         actionURL: URL(string: "https://github.com")
                     )
-                } label: {
-                    Image(systemName: "bell.fill")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                        .padding(6)
-                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
                 }
-                .buttonStyle(.plain)
-                .help("Send Test Notification")
-                .cursor(.pointingHand)
 
                 if signalR.isLoggedIn {
-                    Button {
+                    toolbarButton(icon: "list.bullet.rectangle", help: "Workflow History") {
                         WorkflowHistoryPanelManager.shared.show(signalR: signalR, gitHubId: signalR.userGitHubId)
-                    } label: {
-                        Image(systemName: "list.bullet.rectangle")
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
-                            .padding(6)
-                            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
                     }
-                    .buttonStyle(.plain)
-                    .help("Workflow History")
-                    .cursor(.pointingHand)
-                }
 
-                if signalR.isLoggedIn {
-                    Button {
+                    toolbarButton(icon: "antenna.radiowaves.left.and.right", help: "Webhook Event Log (debug)") {
                         WebhookLogPanelManager.shared.show(gitHubId: signalR.userGitHubId)
-                    } label: {
-                        Image(systemName: "antenna.radiowaves.left.and.right")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                            .padding(6)
-                            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
                     }
-                    .buttonStyle(.plain)
-                    .help("Webhook Event Log (debug)")
-                    .cursor(.pointingHand)
-                }
 
-                if signalR.isLoggedIn {
-                    Button {
+                    toolbarButton(icon: "tray.full", help: "See All PRs") {
                         let repo = UserDefaults.standard.string(forKey: "favoriteRepo") ?? TeamDefaults.favoriteRepo
                         if let u = URL(string: "https://github.com/easyjet-dev/\(repo)/pulls") {
                             NSWorkspace.shared.open(u)
                         }
-                    } label: {
-                        Image(systemName: "tray.full")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                            .padding(6)
-                            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
                     }
-                    .buttonStyle(.plain)
-                    .help("See All PRs")
-                    .cursor(.pointingHand)
-                }
 
-                if signalR.isLoggedIn {
-                    Button {
+                    toolbarButton(icon: "gearshape.fill", help: "Settings") {
                         let m = SettingsPanelManager.shared
                         m.gitHubId = signalR.userGitHubId
                         m.backendUrl = signalR.baseUrl
                         m.show()
-                    } label: {
-                        Image(systemName: "gearshape.fill")
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
-                            .padding(6)
-                            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
                     }
-                    .buttonStyle(.plain)
-                    .help("Settings")
-                    .cursor(.pointingHand)
                 }
 
                 if signalR.isLoggedIn, signalR.runningWorkflows.count > 0 {
                     Button {
                         WorkflowHistoryPanelManager.shared.show(signalR: signalR, gitHubId: signalR.userGitHubId)
                     } label: {
-                        HStack(spacing: 4) {
+                        HStack(spacing: DS.Spacing.sm) {
                             Circle()
                                 .fill(.orange)
                                 .frame(width: 7, height: 7)
                             Text("\(signalR.runningWorkflows.count) \(signalR.runningWorkflows.count == 1 ? "workflow" : "workflows") running")
-                                .font(.system(size: 10, weight: .medium))
+                                .font(DS.Font.small.medium())
                                 .foregroundStyle(.orange)
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+                        .padding(.horizontal, DS.Spacing.lg)
+                        .padding(.vertical, DS.Spacing.sm)
+                        .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: DS.Radius.lg))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: DS.Radius.lg)
                                 .stroke(.orange.opacity(0.2), lineWidth: 1)
                         )
                     }
@@ -196,21 +139,12 @@ struct ContentView: View {
 
                 Spacer()
 
-                Button {
+                toolbarButton(icon: "trash.fill", help: "Quit") {
                     NSApplication.shared.terminate(nil)
-                } label: {
-                    Image(systemName: "trash.fill")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                        .padding(6)
-                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
                 }
-                .buttonStyle(.plain)
-                .help("Quit")
-                .cursor(.pointingHand)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            .padding(.horizontal, DS.Spacing.xxl)
+            .padding(.vertical, DS.Spacing.xl)
         }
         .frame(width: 400, height: 820, alignment: .top)
         .background(.regularMaterial)
@@ -243,7 +177,6 @@ struct ContentView: View {
             if let u = URL(string: url) { NSWorkspace.shared.open(u) }
         })
 
-        // Dynamic branch-context actions
         let branches = MenuBarBadgeService.shared.currentBranches
         for branch in branches {
             actions.append(QuickSearchAction(
@@ -287,7 +220,6 @@ struct ContentView: View {
                 })
             }
         }
-        // Always show checkout main action for favorite repo
         if let fav = branches.first(where: { $0.repoName == repo }) {
             actions.append(QuickSearchAction(
                 id: "checkout-main-\(fav.repoPath)",
@@ -356,7 +288,6 @@ struct ContentView: View {
         signalR.logout()
         loginError = nil
     }
-
 }
 
 #Preview {

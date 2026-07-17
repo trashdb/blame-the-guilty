@@ -59,38 +59,18 @@ struct SettingsView: View {
     @ViewBuilder
     private var workspaceSection: some View {
         Group {
-            Text("Workspace Path")
-                .font(.system(size: 13, weight: .medium))
+            sectionHeader("Workspace Path")
             Text("Local git repos are discovered recursively under this directory.")
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
+                .font(DS.Font.small)
+                .foregroundStyle(DS.Color.textSecondary)
                 .padding(.top, -8)
-            HStack(spacing: 6) {
-                TextField("e.g. ~/Desktop/dev", text: $pathDraft)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12, design: .monospaced))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(.white.opacity(0.1), lineWidth: 1)
-                    )
+            HStack(spacing: DS.Spacing.md) {
+                styledTextField("e.g. ~/Desktop/dev", text: $pathDraft)
                     .onAppear { pathDraft = workspacePath }
-                Button("Save") {
+                solidButton("Save", color: .green) {
                     workspacePath = pathDraft
                     SettingsPanelManager.shared.close()
                 }
-                .font(.system(size: 11, weight: .medium))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(.green.opacity(0.2), in: RoundedRectangle(cornerRadius: 5))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 5)
-                        .stroke(.green.opacity(0.3), lineWidth: 1)
-                )
-                .buttonStyle(.plain)
-                .cursor(.pointingHand)
             }
         }
     }
@@ -98,71 +78,31 @@ struct SettingsView: View {
     @ViewBuilder
     private var jiraSection: some View {
         Group {
-            Text("Jira Ticket Base URL")
-                .font(.system(size: 13, weight: .medium))
+            sectionHeader("Jira Ticket Base URL")
             Text("Used to build links to tickets extracted from branch names (e.g. LOY-1234 → https://.../browse/LOY-1234).")
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
+                .font(DS.Font.small)
+                .foregroundStyle(DS.Color.textSecondary)
                 .padding(.top, -8)
-            HStack(spacing: 6) {
-                TextField("https://your-domain.atlassian.net/browse/", text: $jiraDraft)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12, design: .monospaced))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(.white.opacity(0.1), lineWidth: 1)
-                    )
+            HStack(spacing: DS.Spacing.md) {
+                styledTextField("https://your-domain.atlassian.net/browse/", text: $jiraDraft)
                     .onAppear { jiraDraft = jiraBoardUrl }
-                Button("Save") {
+                solidButton("Save", color: .green) {
                     jiraBoardUrl = jiraDraft
                 }
-                .font(.system(size: 11, weight: .medium))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(.green.opacity(0.2), in: RoundedRectangle(cornerRadius: 5))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 5)
-                        .stroke(.green.opacity(0.3), lineWidth: 1)
-                )
-                .buttonStyle(.plain)
-                .cursor(.pointingHand)
             }
 
-            Text("Jira Board URL")
-                .font(.system(size: 13, weight: .medium))
+            sectionHeader("Jira Board URL")
                 .padding(.top, 12)
             Text("Opened by the \"Open Jira Board\" spotlight command.")
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
+                .font(DS.Font.small)
+                .foregroundStyle(DS.Color.textSecondary)
                 .padding(.top, -8)
-            HStack(spacing: 6) {
-                TextField("https://your-domain.atlassian.net/jira/...", text: $jiraViewDraft)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12, design: .monospaced))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(.white.opacity(0.1), lineWidth: 1)
-                    )
+            HStack(spacing: DS.Spacing.md) {
+                styledTextField("https://your-domain.atlassian.net/jira/...", text: $jiraViewDraft)
                     .onAppear { jiraViewDraft = jiraBoardViewUrl }
-                Button("Save") {
+                solidButton("Save", color: .green) {
                     jiraBoardViewUrl = jiraViewDraft
                 }
-                .font(.system(size: 11, weight: .medium))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(.green.opacity(0.2), in: RoundedRectangle(cornerRadius: 5))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 5)
-                        .stroke(.green.opacity(0.3), lineWidth: 1)
-                )
-                .buttonStyle(.plain)
-                .cursor(.pointingHand)
             }
         }
     }
@@ -170,21 +110,20 @@ struct SettingsView: View {
     @ViewBuilder
     private var favoriteRepoSection: some View {
         Group {
-            Text("Favorite Repo")
-                .font(.system(size: 13, weight: .medium))
-            HStack(spacing: 6) {
+            sectionHeader("Favorite Repo")
+            HStack(spacing: DS.Spacing.md) {
                 if scanning {
                     ProgressView()
                         .scaleEffect(0.6)
                         .frame(width: 100)
                 } else if discoveredRepos.isEmpty {
                     Text("No repos found — check workspace path")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        .font(DS.Font.body)
+                        .foregroundStyle(DS.Color.textSecondary)
                 } else {
                     Picker(selection: $favoriteRepo) {
                         ForEach(discoveredRepos, id: \.self) { repo in
-                            HStack(spacing: 4) {
+                            HStack(spacing: DS.Spacing.sm) {
                                 if repo == favoriteRepo {
                                     Image(systemName: "star.fill")
                                         .foregroundStyle(.yellow)
@@ -194,29 +133,19 @@ struct SettingsView: View {
                             .tag(repo)
                         }
                     } label: {
-                        HStack(spacing: 4) {
+                        HStack(spacing: DS.Spacing.sm) {
                             Image(systemName: "star.fill")
                                 .foregroundStyle(.yellow)
-                                .font(.system(size: 9))
+                                .font(DS.Font.caption)
                             Text(favoriteRepo)
                         }
                     }
                     .pickerStyle(.menu)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                Button("Refresh") {
+                actionButton("Refresh", color: .green) {
                     Task { await scanForRepos() }
                 }
-                .font(.system(size: 11, weight: .medium))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(.green.opacity(0.2), in: RoundedRectangle(cornerRadius: 5))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 5)
-                        .stroke(.green.opacity(0.3), lineWidth: 1)
-                )
-                .buttonStyle(.plain)
-                .cursor(.pointingHand)
             }
         }
     }
@@ -224,42 +153,53 @@ struct SettingsView: View {
     @ViewBuilder
     private var menuBarSection: some View {
         Group {
-            Text("Menu Bar Widget")
-                .font(.system(size: 13, weight: .medium))
+            sectionHeader("Menu Bar Widget")
             Text("Show PR/CI status counts directly in the menu bar icon.")
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
+                .font(DS.Font.small)
+                .foregroundStyle(DS.Color.textSecondary)
                 .padding(.top, -8)
-            HStack(spacing: 8) {
+            HStack(spacing: DS.Spacing.lg) {
                 ForEach(MenuBarWidgetMode.allCases, id: \.rawValue) { mode in
-                    Button {
-                        menuBarWidgetMode = mode.rawValue
-                    } label: {
-                        VStack(spacing: 4) {
-                            Image(systemName: modeIcon(mode))
-                                .font(.system(size: 16))
-                            Text(mode.rawValue)
-                                .font(.system(size: 10, weight: .medium))
-                            Text(modeDescription(mode))
-                                .font(.system(size: 8))
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                                .lineLimit(2)
-                                .frame(height: 24)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(10)
-                        .background(menuBarWidgetMode == mode.rawValue ? .blue.opacity(0.2) : .white.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(menuBarWidgetMode == mode.rawValue ? .blue.opacity(0.5) : .white.opacity(0.08), lineWidth: 1)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .cursor(.pointingHand)
+                    menuBarCard(mode)
                 }
             }
         }
+    }
+
+    private func menuBarCard(_ mode: MenuBarWidgetMode) -> some View {
+        Button {
+            menuBarWidgetMode = mode.rawValue
+        } label: {
+            VStack(spacing: DS.Spacing.sm) {
+                Image(systemName: modeIcon(mode))
+                    .font(.system(size: 16))
+                Text(mode.rawValue)
+                    .font(DS.Font.small.medium())
+                Text(modeDescription(mode))
+                    .font(DS.Font.tiny)
+                    .foregroundStyle(DS.Color.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .frame(height: 24)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(DS.Spacing.xl)
+            .background(cardBackground(mode), in: RoundedRectangle(cornerRadius: DS.Radius.lg))
+            .overlay(
+                RoundedRectangle(cornerRadius: DS.Radius.lg)
+                    .stroke(cardBorder(mode), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .cursor(.pointingHand)
+    }
+
+    private func cardBackground(_ mode: MenuBarWidgetMode) -> SwiftUI.Color {
+        menuBarWidgetMode == mode.rawValue ? DS.Color.accent.opacity(0.2) : DS.Color.fieldBackground
+    }
+
+    private func cardBorder(_ mode: MenuBarWidgetMode) -> SwiftUI.Color {
+        menuBarWidgetMode == mode.rawValue ? DS.Color.accent.opacity(0.5) : DS.Color.divider
     }
 
     private func modeIcon(_ mode: MenuBarWidgetMode) -> String {
@@ -283,37 +223,17 @@ struct SettingsView: View {
     @ViewBuilder
     private var backendSection: some View {
         Group {
-            Text("Backend URL")
-                .font(.system(size: 13, weight: .medium))
+            sectionHeader("Backend URL")
             Text("The backend server URL. Only change if self-hosting the blame-the-guilty server.")
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
+                .font(DS.Font.small)
+                .foregroundStyle(DS.Color.textSecondary)
                 .padding(.top, -8)
-            HStack(spacing: 6) {
-                TextField("https://...", text: $backendUrlDraft)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12, design: .monospaced))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(.white.opacity(0.1), lineWidth: 1)
-                    )
+            HStack(spacing: DS.Spacing.md) {
+                styledTextField("https://...", text: $backendUrlDraft)
                     .onAppear { backendUrlDraft = settingsBackendUrl }
-                Button("Save") {
+                solidButton("Save", color: .green) {
                     settingsBackendUrl = backendUrlDraft
                 }
-                .font(.system(size: 11, weight: .medium))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(.green.opacity(0.2), in: RoundedRectangle(cornerRadius: 5))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 5)
-                        .stroke(.green.opacity(0.3), lineWidth: 1)
-                )
-                .buttonStyle(.plain)
-                .cursor(.pointingHand)
             }
         }
     }
@@ -321,22 +241,21 @@ struct SettingsView: View {
     @ViewBuilder
     private var patSection: some View {
         Group {
-            Text("Personal Access Token")
-                .font(.system(size: 13, weight: .medium))
+            sectionHeader("Personal Access Token")
             Text("Optional. Used to access org repos when OAuth is blocked. Create at github.com/settings/tokens with repo scope.")
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
+                .font(DS.Font.small)
+                .foregroundStyle(DS.Color.textSecondary)
                 .padding(.top, -8)
-            HStack(spacing: 6) {
+            HStack(spacing: DS.Spacing.md) {
                 SecureField("github_pat_...", text: $patDraft)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 12, design: .monospaced))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+                    .font(DS.Font.mono(12))
+                    .padding(.horizontal, DS.Spacing.lg)
+                    .padding(.vertical, DS.Spacing.md)
+                    .background(DS.Color.fieldBackground, in: RoundedRectangle(cornerRadius: DS.Radius.md))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(.white.opacity(0.1), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: DS.Radius.md)
+                            .stroke(DS.Color.divider, lineWidth: 1)
                     )
                 Button {
                     Task { await savePat() }
@@ -347,13 +266,14 @@ struct SettingsView: View {
                             .frame(width: 40)
                     } else {
                         Text("Save")
-                            .font(.system(size: 11, weight: .medium))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(.green.opacity(0.2), in: RoundedRectangle(cornerRadius: 5))
+                            .font(DS.Font.caption.semibold())
+                            .foregroundStyle(.green)
+                            .padding(.horizontal, DS.Spacing.xl)
+                            .padding(.vertical, DS.Spacing.sm + 1)
+                            .background(DS.Color.badgeBackground(.green), in: RoundedRectangle(cornerRadius: DS.Radius.sm))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 5)
-                                    .stroke(.green.opacity(0.3), lineWidth: 1)
+                                RoundedRectangle(cornerRadius: DS.Radius.sm)
+                                    .stroke(DS.Color.badgeBorder(.green), lineWidth: 1)
                             )
                     }
                 }
@@ -363,13 +283,13 @@ struct SettingsView: View {
             }
             if patSaved {
                 Text("PAT saved successfully")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.green)
+                    .font(DS.Font.small)
+                    .foregroundStyle(DS.Color.success)
             }
             if let patError {
                 Text(patError)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.red)
+                    .font(DS.Font.small)
+                    .foregroundStyle(DS.Color.destructive)
             }
         }
     }
@@ -423,7 +343,6 @@ struct IDEListView: View {
     @State private var search = ""
 
     private var current: IDEDefinition { ideDefinition(for: defaultIDE) }
-
     private var filtered: [IDEDefinition] {
         search.isEmpty
             ? installedIDEs
@@ -431,50 +350,40 @@ struct IDEListView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Default IDE")
-                .font(.system(size: 13, weight: .medium))
+        VStack(alignment: .leading, spacing: DS.Spacing.lg) {
+            sectionHeader("Default IDE")
             Text("Select your favourite IDE from the dropdown.")
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
+                .font(DS.Font.small)
+                .foregroundStyle(DS.Color.textSecondary)
 
             Button {
                 showPicker = true
             } label: {
-                HStack(spacing: 8) {
+                HStack(spacing: DS.Spacing.lg) {
                     current.viewIcon(size: 22)
                     Text(current.displayName)
-                        .font(.system(size: 12))
+                        .font(DS.Font.body)
                     Spacer()
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
+                        .font(DS.Font.small)
+                        .foregroundStyle(DS.Color.textSecondary)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 9)
-                .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+                .padding(.horizontal, DS.Spacing.xl)
+                .padding(.vertical, DS.Spacing.lg - 1)
+                .background(DS.Color.fieldBackground, in: RoundedRectangle(cornerRadius: DS.Radius.md))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(.white.opacity(0.15), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: DS.Radius.md)
+                        .stroke(DS.Color.divider, lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)
             .cursor(.pointingHand)
             .popover(isPresented: $showPicker, arrowEdge: .bottom) {
-                VStack(spacing: 6) {
-                    TextField("Search IDE…", text: $search)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 12))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 6)
-                        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(.white.opacity(0.1), lineWidth: 1)
-                        )
+                VStack(spacing: DS.Spacing.md) {
+                    styledTextField("Search IDE…", text: $search)
 
                     ScrollView(.vertical) {
-                        LazyVStack(spacing: 2) {
+                        LazyVStack(spacing: DS.Spacing.xs) {
                             ForEach(filtered, id: \.id) { ide in
                                 IDERow(
                                     ide: ide,
@@ -491,21 +400,12 @@ struct IDEListView: View {
                     }
                     .frame(height: min(CGFloat(filtered.count) * 30 + 4, 300))
                 }
-                .padding(10)
+                .padding(DS.Spacing.xl)
                 .frame(width: 320)
             }
 
             if defaultIDE == "custom" {
-                TextField("e.g. myeditor://open?file={file}&line={line}", text: $customIDECommand)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 11, design: .monospaced))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(.white.opacity(0.1), lineWidth: 1)
-                    )
+                styledTextField("e.g. myeditor://open?file={file}&line={line}", text: $customIDECommand)
             }
         }
     }
@@ -518,26 +418,26 @@ private struct IDERow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
-                    ide.viewIcon(size: 26)
-                        .frame(width: 32)
+            HStack(spacing: DS.Spacing.xl) {
+                ide.viewIcon(size: 26)
+                    .frame(width: 32)
                 Text(ide.displayName)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.primary)
+                    .font(DS.Font.body)
+                    .foregroundStyle(DS.Color.textPrimary)
                 Spacer()
                 if isSelected {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(.blue)
+                        .font(DS.Font.body.bold())
+                        .foregroundStyle(DS.Color.accent)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(.horizontal, DS.Spacing.xl)
+            .padding(.vertical, DS.Spacing.lg)
             .background(
                 isSelected
-                    ? .white.opacity(0.1)
+                    ? DS.Color.fieldBackground
                     : Color.clear,
-                in: RoundedRectangle(cornerRadius: 5)
+                in: RoundedRectangle(cornerRadius: DS.Radius.sm)
             )
         }
         .buttonStyle(.plain)
