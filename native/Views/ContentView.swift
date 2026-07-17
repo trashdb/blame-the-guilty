@@ -243,17 +243,6 @@ struct ContentView: View {
             if let u = URL(string: url) { NSWorkspace.shared.open(u) }
         })
 
-        actions.append(QuickSearchAction(
-            id: "daily-notes", title: "Daily Notes",
-            subtitle: "Take notes during standup — AI extracts action items",
-            icon: "note.text", category: .app
-        ) {
-            DailyNoteManager.shared.show(
-                gitHubId: self.signalR.userGitHubId,
-                backendUrl: self.signalR.baseUrl
-            )
-        })
-
         // Dynamic branch-context actions
         let branches = MenuBarBadgeService.shared.currentBranches
         for branch in branches {

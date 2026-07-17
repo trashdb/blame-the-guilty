@@ -42,8 +42,6 @@ struct QuickSearchView: View {
 
     @State private var query = ""
     @State private var selectedIndex = 0
-    @State private var aiLoading = false
-    @State private var aiResult: String?
 
     private var projectKey: String {
         let url = UserDefaults.standard.string(forKey: "jiraBoardViewUrl") ?? TeamDefaults.jiraBoardViewUrl
@@ -213,41 +211,12 @@ struct QuickSearchView: View {
             } else if !hasAnyResults {
                 VStack(spacing: 8) {
                     Spacer()
-                    if aiLoading {
-                        ProgressView()
-                            .scaleEffect(0.7)
-                        Text("Asking AI…")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    } else if let result = aiResult {
-                        Image(systemName: "checkmark.circle")
-                            .font(.system(size: 20))
-                            .foregroundStyle(.green)
-                        Text(result)
-                            .font(.system(size: 11))
-                            .foregroundStyle(.green)
-                        Button("Close") { isPresented = false }
-                            .buttonStyle(.plain)
-                            .font(.system(size: 10))
-                            .padding(.horizontal, 10).padding(.vertical, 4)
-                            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
-                    } else {
-                        Image(systemName: "sparkle.magnifyingglass")
-                            .font(.system(size: 24))
-                            .foregroundStyle(.purple.opacity(0.6))
-                        Text("No matching commands")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                        Button("Ask AI to interpret: \"\(query)\"") {
-                            Task { await askAI() }
-                        }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.purple)
-                        .padding(.horizontal, 12).padding(.vertical, 6)
-                        .background(.purple.opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
-                        .cursor(.pointingHand)
-                    }
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 24))
+                        .foregroundStyle(.secondary.opacity(0.4))
+                    Text("No matching commands")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
                     Spacer()
                 }
                 .frame(height: 180)
@@ -320,52 +289,11 @@ struct QuickSearchView: View {
                 await MainActor.run { MenuBarBadgeService.shared.currentBranches = branches }
             }
         }
-        .onChange(of: query) { _ in selectedIndex = 0; aiResult = nil }
-        .onChange(of: isPresented) { shown in if shown { query = ""; selectedIndex = 0; aiResult = nil } }
+        .onChange(of: query) { _ in selectedIndex = 0 }
+        .onChange(of: isPresented) { shown in if shown { query = ""; selectedIndex = 0 } }
         }
     }
 }
-
-    private func askAI() async {
-        aiLoading = true
-        aiResult = nil
-        let url = URL(string: "\(backendUrl)/api/github/interpret")!
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let aiKey = UserDefaults.standard.string(forKey: "aiApiKey") ?? ""
-        let aiProvider = UserDefaults.standard.string(forKey: "aiProvider") ?? "openai"
-        let aiModel = UserDefaults.standard.string(forKey: "aiModel") ?? "gpt-4o"
-        var body: [String: Any] = ["query": query, "gitHubId": gitHubId]
-        if !aiKey.isEmpty {
-            body["apiKey"] = aiKey
-            body["aiProvider"] = aiProvider
-            body["model"] = aiModel
-        }
-        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        do {
-            let (data, resp) = try await URLSession.shared.data(for: req)
-            guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
-                aiResult = "AI endpoint not available yet. Deploy backend to enable."
-                aiLoading = false
-                return
-            }
-            struct AIResponse: Decodable { let action: String; let message: String? }
-            let ai = try JSONDecoder().decode(AIResponse.self, from: data)
-            aiResult = ai.message ?? "Done: \(ai.action)"
-            isPresented = false
-        } catch {
-            struct ErrResp: Decodable { let error: String? }
-            if let data = try? await URLSession.shared.data(for: req).0,
-               let err = try? JSONDecoder().decode(ErrResp.self, from: data),
-               let msg = err.error {
-                aiResult = msg
-            } else {
-                aiResult = "Could not reach AI. Deploy backend to enable."
-            }
-        }
-        aiLoading = false
-    }
 
     private func select(_ action: QuickSearchAction) {
         query = ""

@@ -308,33 +308,6 @@ Only respond with the JSON object, no other text.";
         public Dictionary<string, string>? Params { get; set; }
     }
 
-    public class AnalyzeNotesRequest
-    {
-        public string Content { get; set; } = "";
-        public long GitHubId { get; set; }
-        public string? ApiKey { get; set; }
-        public string? AiProvider { get; set; }
-        public string? Model { get; set; }
-    }
-
-    public class AnalyzeNotesResponse
-    {
-        public List<NoteItem> Items { get; set; } = [];
-        public string Summary { get; set; } = "";
-    }
-
-    public class NoteItem
-    {
-        public string Type { get; set; } = "note";
-        public string Title { get; set; } = "";
-        public string Description { get; set; } = "";
-        public string? JiraTicketTitle { get; set; }
-        public string? Person { get; set; }
-        public bool Actionable { get; set; }
-        public string? ActionUrl { get; set; }
-        public string? ActionLabel { get; set; }
-    }
-
     private async Task<string?> CallAI(string systemPrompt, string userPrompt, string? apiKey, string? provider, string? model, string? oauthToken, int maxTokens = 500, double temperature = 0.3)
     {
         var prov = (provider ?? "openai").ToLower();
@@ -521,63 +494,6 @@ Only respond with the JSON object, no other text.";
         }
     }
 
-    [HttpPost("analyze-notes")]
-    public async Task<IActionResult> AnalyzeNotes([FromBody] AnalyzeNotesRequest request)
-    {
-        if (string.IsNullOrWhiteSpace(request.Content))
-            return BadRequest(new { error = "Content is required" });
-
-        var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == request.GitHubId);
-        var oauthToken = user?.AccessToken;
-        if (string.IsNullOrEmpty(request.ApiKey) && string.IsNullOrEmpty(oauthToken))
-            return BadRequest(new { error = "No API key configured and no OAuth token available. Set an API key in Settings or login with GitHub." });
-
-        var userPrompt = $@"Analyze these developer daily notes and extract structured action items. Notes:
-
-""{request.Content}""
-
-Return ONLY a JSON object with this structure (no other text):
-{{
-  ""items"": [
-    {{
-      ""type"": ""createTicket"" | ""followUp"" | ""todo"" | ""note"",
-      ""title"": ""Short title of the item"",
-      ""description"": ""Detailed description"",
-      ""jiraTicketTitle"": ""Only if type is createTicket: the suggested ticket title"",
-      ""person"": ""Only if type is followUp: the person to follow up with (name or email)"",
-      ""actionable"": true or false,
-      ""actionUrl"": ""If applicable, a URL to directly execute this action. For createTicket, suggest a Jira create issue URL. For followUp, suggest a Teams chat deep link (msteams://). For other types, a relevant URL if one exists."",
-      ""actionLabel"": ""Short button label like 'Open Jira', 'Chat in Teams', 'Open', 'Mark done'""
-    }}
-  ],
-  ""summary"": ""One-line summary of today's notes in Spanish""
-}}
-
-IMPORTANT RULES:
-- For createTicket: actionUrl should be a Jira URL to create an issue with the title pre-filled. actionLabel = ""Open Jira"".
-- For followUp: actionUrl should be a Teams deep link (msteams://) to start a chat with that person. actionLabel = ""Chat in Teams"".
-- For todo: actionUrl should be a link to the relevant repo/tool if applicable. actionLabel = ""Open"".
-- For note: no action needed (actionable = false).
-
-If nothing actionable is found, return items as an empty array.
-Be specific and practical. Extract ticket creation suggestions, people to talk to, and tasks to do. The more specific the action URLs, the better.";
-
-        var systemPrompt = "You are an AI assistant integrated into a developer productivity tool. Your job is to analyze daily notes and extract structured, actionable items.";
-        var reply = await CallAI(systemPrompt, userPrompt, request.ApiKey, request.AiProvider, request.Model, oauthToken, maxTokens: 1000, temperature: 0.3);
-
-        if (string.IsNullOrEmpty(reply))
-            return Ok(new AnalyzeNotesResponse { Items = [], Summary = "Could not analyze notes." });
-
-        try
-        {
-            var parsed = JsonSerializer.Deserialize<AnalyzeNotesResponse>(reply);
-            return Ok(parsed ?? new AnalyzeNotesResponse { Items = [], Summary = reply });
-        }
-        catch
-        {
-            return Ok(new AnalyzeNotesResponse { Items = [], Summary = reply });
-        }
-    }
 
     private async Task<string?> FetchFileContent(string repo, string path, string token)
     {

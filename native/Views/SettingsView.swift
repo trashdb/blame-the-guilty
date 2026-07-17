@@ -12,14 +12,10 @@ struct SettingsView: View {
     @AppStorage("customIDECommand") private var customIDECommand = ""
     @AppStorage("menuBarWidgetMode") private var menuBarWidgetMode = MenuBarWidgetMode.minimal.rawValue
     @AppStorage("backendUrl") private var settingsBackendUrl = TeamDefaults.backendUrl
-    @AppStorage("aiApiKey") private var aiApiKey = TeamDefaults.aiApiKey
-    @AppStorage("aiProvider") private var aiProvider = TeamDefaults.aiProvider
-    @AppStorage("aiModel") private var aiModel = TeamDefaults.aiModel
     @State private var pathDraft = ""
     @State private var jiraDraft = ""
     @State private var jiraViewDraft = ""
     @State private var backendUrlDraft = ""
-    @State private var aiKeyDraft = ""
     @State private var patDraft = ""
     @State private var ideDraft = ""
     @State private var patSaved = false
@@ -48,8 +44,6 @@ struct SettingsView: View {
                     IDEListView(defaultIDE: $defaultIDE, customIDECommand: $customIDECommand)
                     Divider()
                     menuBarSection
-                    Divider()
-                    aiSection
                     Divider()
                     backendSection
                     Divider()
@@ -265,105 +259,6 @@ struct SettingsView: View {
                     .cursor(.pointingHand)
                 }
             }
-        }
-    }
-
-    @ViewBuilder
-    private var aiSection: some View {
-        Group {
-            Text("AI Provider")
-                .font(.system(size: 13, weight: .medium))
-            Text("Used for daily notes analysis and natural language interpretation in spotlight.")
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                .padding(.top, -8)
-
-            Picker("Provider", selection: $aiProvider) {
-                Text("OpenAI").tag("openai")
-                Text("Anthropic").tag("anthropic")
-                Text("Gemini").tag("gemini")
-                Text("GitHub Copilot (uses OAuth)").tag("copilot")
-            }
-            .pickerStyle(.menu)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 4)
-
-            if aiProvider != "copilot" {
-                Text("Model")
-                    .font(.system(size: 13, weight: .medium))
-                    .padding(.top, 4)
-                modelPicker
-                    .padding(.vertical, 2)
-
-                Text("API Key")
-                    .font(.system(size: 13, weight: .medium))
-                    .padding(.top, 8)
-                HStack(spacing: 6) {
-                    SecureField(aiProvider == "gemini" ? "AIza..." : "sk-...", text: $aiKeyDraft)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 12, design: .monospaced))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 6)
-                        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(.white.opacity(0.1), lineWidth: 1)
-                        )
-                        .onAppear { aiKeyDraft = aiApiKey }
-                    Button("Save") {
-                        aiApiKey = aiKeyDraft
-                    }
-                    .font(.system(size: 11, weight: .medium))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(.green.opacity(0.2), in: RoundedRectangle(cornerRadius: 5))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 5)
-                            .stroke(.green.opacity(0.3), lineWidth: 1)
-                    )
-                    .buttonStyle(.plain)
-                    .cursor(.pointingHand)
-                }
-            } else {
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle")
-                        .foregroundStyle(.green)
-                        .font(.system(size: 12))
-                    Text("Uses your GitHub OAuth token — no API key needed.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.vertical, 8)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var modelPicker: some View {
-        switch aiProvider {
-        case "anthropic":
-            Picker("Model", selection: $aiModel) {
-                Text("Claude Sonnet 4").tag("claude-sonnet-4-20250514")
-                Text("Claude Haiku 3.5").tag("claude-3-5-haiku-20250219")
-                Text("Claude Opus 4").tag("claude-opus-4-20250514")
-            }
-            .pickerStyle(.menu)
-        case "gemini":
-            Picker("Model", selection: $aiModel) {
-                Text("Gemini 2.5 Flash").tag("gemini-2.5-flash")
-                Text("Gemini 2.5 Pro").tag("gemini-2.5-pro")
-            }
-            .pickerStyle(.menu)
-        default:
-            Picker("Model", selection: $aiModel) {
-                Text("GPT-4o").tag("gpt-4o")
-                Text("GPT-4o Mini").tag("gpt-4o-mini")
-                Text("o3 Mini").tag("o3-mini")
-                Text("GPT-4.1").tag("gpt-4.1")
-                Text("GPT-4.1 Mini").tag("gpt-4.1-mini")
-                Text("GPT-4.1 Nano").tag("gpt-4.1-nano")
-            }
-            .pickerStyle(.menu)
         }
     }
 
