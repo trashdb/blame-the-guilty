@@ -1,20 +1,16 @@
 import SwiftUI
 
-// MARK: - Font Scale
+// MARK: - Design System
 enum DS {
+    // MARK: - Typography
     enum Font {
-        /// Section headers, card titles (e.g. "Active PRs")
-        static let section = SwiftUI.Font.system(size: 11, weight: .semibold)
-        /// Card title text
-        static let title = SwiftUI.Font.system(size: 12, weight: .semibold)
-        /// Card subtitle, body text
-        static let body = SwiftUI.Font.system(size: 11)
-        /// Small labels, branch names, secondary info
-        static let small = SwiftUI.Font.system(size: 10)
-        /// Captions, timestamps, tertiary info
-        static let caption = SwiftUI.Font.system(size: 9)
-        /// Tiny badges, line numbers
-        static let tiny = SwiftUI.Font.system(size: 8)
+        static let largeTitle = SwiftUI.Font.system(size: 20, weight: .bold)
+        static let title = SwiftUI.Font.system(size: 13, weight: .semibold)
+        static let body = SwiftUI.Font.system(size: 12)
+        static let small = SwiftUI.Font.system(size: 11)
+        static let caption = SwiftUI.Font.system(size: 10)
+        static let tiny = SwiftUI.Font.system(size: 9)
+        static let micro = SwiftUI.Font.system(size: 8)
 
         static func mono(_ size: CGFloat) -> SwiftUI.Font {
             SwiftUI.Font.system(size: size, design: .monospaced)
@@ -30,72 +26,88 @@ enum DS {
         }
     }
 
-    // MARK: - Semantic Colors
+    // MARK: - Professional Color Palette
     enum Color {
         // Text
-        static let textPrimary = SwiftUI.Color.primary
-        static let textSecondary = SwiftUI.Color.secondary
-        static let textTertiary = SwiftUI.Color.gray.opacity(0.6)
+        static let textPrimary = SwiftUI.Color(nsColor: .labelColor)
+        static let textSecondary = SwiftUI.Color(nsColor: .secondaryLabelColor)
+        static let textTertiary = SwiftUI.Color(nsColor: .tertiaryLabelColor)
 
         // Surfaces
-        static let cardBackground = SwiftUI.Color(nsColor: .controlBackgroundColor).opacity(0.5)
-        static let cardHover = SwiftUI.Color(nsColor: .controlBackgroundColor).opacity(0.7)
-        static let fieldBackground = SwiftUI.Color(nsColor: .controlBackgroundColor).opacity(0.3)
-        static let divider = SwiftUI.Color(nsColor: .separatorColor).opacity(0.3)
+        static let cardBackground = SwiftUI.Color(nsColor: .controlBackgroundColor).opacity(0.55)
+        static let cardHover = SwiftUI.Color(nsColor: .controlBackgroundColor).opacity(0.8)
+        static let fieldBackground = SwiftUI.Color(nsColor: .controlBackgroundColor).opacity(0.35)
+        static let divider = SwiftUI.Color(nsColor: .separatorColor).opacity(0.25)
 
-        // Badge semantic
-        static let badgeGreen = SwiftUI.Color.green
-        static let badgeRed = SwiftUI.Color.red
-        static let badgeOrange = SwiftUI.Color.orange
-        static let badgeBlue = SwiftUI.Color.blue
-        static let badgePurple = SwiftUI.Color.purple
-        static let badgeGray = SwiftUI.Color.gray
+        // Row backgrounds
+        static let rowBackground = SwiftUI.Color(nsColor: .controlBackgroundColor).opacity(0.2)
+        static let rowHover = SwiftUI.Color(nsColor: .controlBackgroundColor).opacity(0.35)
 
-        // Accent
-        static let accent = SwiftUI.Color.blue
-        static let destructive = SwiftUI.Color.red
-        static let success = SwiftUI.Color.green
+        // Accent — a refined blue
+        static let accent = SwiftUI.Color(red: 0.2, green: 0.45, blue: 0.95)
+        static let accentDim = SwiftUI.Color(red: 0.2, green: 0.45, blue: 0.95).opacity(0.12)
+        static let destructive = SwiftUI.Color(red: 0.85, green: 0.25, blue: 0.25)
+        static let success = SwiftUI.Color(red: 0.2, green: 0.7, blue: 0.35)
+        static let warning = SwiftUI.Color(red: 0.9, green: 0.55, blue: 0.1)
 
-        /// Background tint for a badge given its foreground color
+        // Status — refined
+        static let statusGreen = SwiftUI.Color(red: 0.2, green: 0.7, blue: 0.35)
+        static let statusRed = SwiftUI.Color(red: 0.85, green: 0.25, blue: 0.25)
+        static let statusOrange = SwiftUI.Color(red: 0.9, green: 0.55, blue: 0.1)
+        static let statusBlue = SwiftUI.Color(red: 0.2, green: 0.45, blue: 0.95)
+        static let statusPurple = SwiftUI.Color(red: 0.6, green: 0.35, blue: 0.85)
+        static let statusGray = SwiftUI.Color(red: 0.5, green: 0.5, blue: 0.5)
+        static let statusYellow = SwiftUI.Color(red: 0.85, green: 0.75, blue: 0.15)
+
+        // Badge helpers
         static func badgeBackground(_ color: SwiftUI.Color) -> SwiftUI.Color {
-            color.opacity(0.15)
+            color.opacity(0.12)
         }
         static func badgeBorder(_ color: SwiftUI.Color) -> SwiftUI.Color {
-            color.opacity(0.3)
+            color.opacity(0.25)
         }
+
+        // Semantic aliases
+        static let badgeGreen = statusGreen
+        static let badgeRed = statusRed
+        static let badgeOrange = statusOrange
+        static let badgeBlue = statusBlue
+        static let badgePurple = statusPurple
+        static let badgeGray = statusGray
     }
 
     // MARK: - Spacing
     enum Spacing {
-        static let xs: CGFloat = 2
-        static let sm: CGFloat = 4
-        static let md: CGFloat = 6
-        static let lg: CGFloat = 8
-        static let xl: CGFloat = 10
+        static let xs: CGFloat = 3
+        static let sm: CGFloat = 5
+        static let md: CGFloat = 7
+        static let lg: CGFloat = 9
+        static let xl: CGFloat = 11
         static let xxl: CGFloat = 16
-        static let section: CGFloat = 12
+        static let section: CGFloat = 14
     }
 
     // MARK: - Corner Radius
     enum Radius {
-        static let sm: CGFloat = 4
-        static let md: CGFloat = 6
-        static let lg: CGFloat = 8
-        static let xl: CGFloat = 12
+        static let sm: CGFloat = 5
+        static let md: CGFloat = 7
+        static let lg: CGFloat = 9
+        static let xl: CGFloat = 14
     }
 
     // MARK: - Animation
     enum Animation {
-        static let `default` = SwiftUI.Animation.spring(duration: 0.25)
+        static let `default` = SwiftUI.Animation.spring(duration: 0.28)
         static let fast = SwiftUI.Animation.easeInOut(duration: 0.15)
-        static let popover = SwiftUI.Animation.spring(duration: 0.35)
+        static let popover = SwiftUI.Animation.spring(duration: 0.38)
         static let hover = SwiftUI.Animation.easeInOut(duration: 0.12)
+        static let appear = SwiftUI.Animation.spring(duration: 0.35)
     }
 }
 
 // MARK: - Reusable Components
 extension View {
-    /// Standard badge: colored label on tinted background
+    /// Standard badge: compact colored label on tinted background
     @ViewBuilder
     func badge(_ label: String, color: SwiftUI.Color) -> some View {
         Text(label)
@@ -110,7 +122,7 @@ extension View {
             )
     }
 
-    /// Card-style container with background, overlay, and hover effect
+    /// Card container with background, border, shadow
     @ViewBuilder
     func card<Content: View>(
         color: SwiftUI.Color,
@@ -126,7 +138,7 @@ extension View {
             )
     }
 
-    /// Secondary action button (ghost style)
+    /// Ghost action button (outlined)
     @ViewBuilder
     func actionButton(_ label: String, color: SwiftUI.Color, action: @escaping () -> Void) -> some View {
         Button(action: action) {
@@ -143,9 +155,10 @@ extension View {
         }
         .buttonStyle(.plain)
         .cursor(.pointingHand)
+        .contentShape(Rectangle())
     }
 
-    /// Solid action button (filled style)
+    /// Solid filled button
     @ViewBuilder
     func solidButton(_ label: String, color: SwiftUI.Color, disabled: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
@@ -158,10 +171,11 @@ extension View {
         }
         .buttonStyle(.plain)
         .cursor(.pointingHand)
+        .contentShape(Rectangle())
         .disabled(disabled)
     }
 
-    /// Link-style button (opens URL)
+    /// Link button → opens URL
     @ViewBuilder
     func linkButton(_ label: String, url: URL) -> some View {
         actionButton(label, color: .blue) {
@@ -169,22 +183,23 @@ extension View {
         }
     }
 
-    /// Icon toolbar button with consistent sizing
+    /// Toolbar icon button with consistent sizing
     @ViewBuilder
     func toolbarButton(icon: String, help: String? = nil, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(DS.Font.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DS.Color.textSecondary)
                 .padding(DS.Spacing.md)
                 .background(DS.Color.fieldBackground, in: RoundedRectangle(cornerRadius: DS.Radius.md))
         }
         .buttonStyle(.plain)
         .ifLet(help) { $0.help($1) }
         .cursor(.pointingHand)
+        .contentShape(Rectangle())
     }
 
-    /// Standard text field in Settings / forms
+    /// Styled text field used in Settings/forms
     @ViewBuilder
     func styledTextField(_ placeholder: String, text: Binding<String>) -> some View {
         TextField(placeholder, text: text)
@@ -199,16 +214,44 @@ extension View {
             )
     }
 
-    /// Section header text
+    /// Section header label
     @ViewBuilder
     func sectionHeader(_ label: String, color: SwiftUI.Color = .blue) -> some View {
         Text(label)
             .font(DS.Font.section)
             .foregroundStyle(color)
     }
+
+    /// Add hover effect with scale + background
+    @ViewBuilder
+    func hoverEffect<S: ShapeStyle>(cornerRadius: CGFloat = DS.Radius.md, shapeStyle: S = DS.Color.rowHover) -> some View {
+        self.modifier(HoverEffectModifier(cornerRadius: cornerRadius, shapeStyle: shapeStyle))
+    }
+
 }
 
-// MARK: - Helpers
+// MARK: - Hover Effect Modifier
+struct HoverEffectModifier<S: ShapeStyle>: ViewModifier {
+    let cornerRadius: CGFloat
+    let shapeStyle: S
+    @State private var isHovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(isHovering ? 1.02 : 1.0)
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .fill(isHovering ? AnyShapeStyle(shapeStyle) : AnyShapeStyle(.clear))
+            )
+            .onHover { hovering in
+                withAnimation(DS.Animation.hover) {
+                    isHovering = hovering
+                }
+            }
+    }
+}
+
+// MARK: - IfLet Helper
 extension View {
     @ViewBuilder
     func ifLet<V>(_ value: V?, transform: (Self, V) -> some View) -> some View {
@@ -225,19 +268,23 @@ extension SwiftUI.Font {
     func bold() -> SwiftUI.Font { weight(.bold) }
     func semibold() -> SwiftUI.Font { weight(.semibold) }
     func medium() -> SwiftUI.Font { weight(.medium) }
+}
 
+// MARK: - Section Header Font
+extension DS.Font {
+    static let section = SwiftUI.Font.system(size: 11, weight: .semibold)
 }
 
 // MARK: - PR Status Colors
 extension DS.Color {
     static func statusColor(for pr: PullRequest, draft: Bool) -> SwiftUI.Color {
-        if pr.isMerged { return .purple }
-        if draft { return .gray }
+        if pr.isMerged { return statusPurple }
+        if draft { return statusGray }
         switch pr.ciStatus {
-        case "waiting": return .orange
-        case "failed":  return .red
-        case "review":  return .blue
-        default:        return .green
+        case "waiting": return statusOrange
+        case "failed":  return statusRed
+        case "review":  return statusBlue
+        default:        return statusGreen
         }
     }
 
@@ -253,18 +300,18 @@ extension DS.Color {
     }
 }
 
-// MARK: - PR Mergeable / CI Status Colors
+// MARK: - PR Mergeable / CI Status
 extension DS.Color {
     static func mergeableColor(_ state: String?) -> SwiftUI.Color {
-        guard let state else { return .gray }
+        guard let state else { return statusGray }
         switch state {
-        case "clean":        return .green
-        case "behind":       return .orange
-        case "dirty":        return .red
-        case "unstable":     return .yellow
-        case "has_hooks":    return .blue
-        case "unknown":      return .gray
-        default:             return .gray
+        case "clean":        return statusGreen
+        case "behind":       return statusOrange
+        case "dirty":        return statusRed
+        case "unstable":     return statusYellow
+        case "has_hooks":    return statusBlue
+        case "unknown":      return statusGray
+        default:             return statusGray
         }
     }
 
@@ -281,3 +328,5 @@ extension DS.Color {
         }
     }
 }
+
+

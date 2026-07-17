@@ -8,23 +8,23 @@ struct WorkflowHistoryView: View {
         ZStack {
             VisualEffectBackground(material: .sidebar)
 
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: DS.Spacing.section) {
                 Text("Workflow History")
-                    .font(.system(size: 20, weight: .bold))
+                    .font(DS.Font.largeTitle)
 
                 Divider()
 
                 if signalR.recentWorkflows.isEmpty {
                     Spacer()
                     Text("No workflows yet")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
+                        .font(DS.Font.body)
+                        .foregroundStyle(DS.Color.textSecondary)
                         .frame(maxWidth: .infinity)
                     Spacer()
                 } else {
                     GeometryReader { geo in
                         ScrollView {
-                            VStack(spacing: 4) {
+                            LazyVStack(spacing: DS.Spacing.xs) {
                                 ForEach(signalR.recentWorkflows) { run in
                                     WorkflowRunRow(run: run, gitHubId: gitHubId, signalR: signalR)
                                 }
@@ -35,7 +35,7 @@ struct WorkflowHistoryView: View {
 
                 Spacer()
             }
-            .padding(24)
+            .padding(DS.Spacing.xxl)
         }
         .frame(width: 600, height: 500)
     }
@@ -57,14 +57,14 @@ struct WorkflowRunRow: View {
         Dictionary(uniqueKeysWithValues: users.map { ($0.gitHubId, $0.login) })
     }
 
-    var statusColor: Color {
+    var statusColor: SwiftUI.Color {
         switch run.status {
-        case "in_progress":  return .orange
-        case "success":      return .green
-        case "failure":      return .red
-        case "cancelled":    return .secondary
-        case "superseded":   return .yellow
-        default:             return .secondary
+        case "in_progress":  return DS.Color.warning
+        case "success":      return DS.Color.success
+        case "failure":      return DS.Color.destructive
+        case "cancelled":    return DS.Color.textTertiary
+        case "superseded":   return DS.Color.statusYellow
+        default:             return DS.Color.textTertiary
         }
     }
 
@@ -80,73 +80,73 @@ struct WorkflowRunRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DS.Spacing.section) {
             Image(systemName: statusIcon)
                 .font(.system(size: 16))
                 .foregroundStyle(statusColor)
                 .frame(width: 20)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: DS.Spacing.xs) {
                 Text(run.workflowName)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color(white: 0.9))
+                    .font(DS.Font.title)
+                    .foregroundStyle(DS.Color.textPrimary)
 
                 if let prNumber = run.prNumber {
-                    HStack(spacing: 4) {
+                    HStack(spacing: DS.Spacing.xs) {
                         Text("PR #\(prNumber)")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.blue)
+                            .font(DS.Font.small.medium())
+                            .foregroundStyle(DS.Color.accent)
                         if let prTitle = run.prTitle {
                             Text(prTitle)
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
+                                .font(DS.Font.small)
+                                .foregroundStyle(DS.Color.textSecondary)
                                 .lineLimit(1)
                         }
                     }
                 }
 
-                HStack(spacing: 6) {
+                HStack(spacing: DS.Spacing.md) {
                     if let trigger = run.trigger {
                         Text(trigger.replacingOccurrences(of: "_", with: " "))
-                            .font(.system(size: 11))
-                            .foregroundStyle(.tertiary)
+                            .font(DS.Font.small)
+                            .foregroundStyle(DS.Color.textTertiary)
                         Text("·")
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(DS.Color.textTertiary)
                     }
                     Text(shortRepo(run.repo))
-                        .font(.system(size: 11))
-                        .foregroundStyle(.tertiary)
+                        .font(DS.Font.small)
+                        .foregroundStyle(DS.Color.textTertiary)
                     Text("·")
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(DS.Color.textTertiary)
                     Text("@\(run.actor)")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.tertiary)
+                        .font(DS.Font.small)
+                        .foregroundStyle(DS.Color.textTertiary)
                 }
 
-                HStack(spacing: 6) {
+                HStack(spacing: DS.Spacing.md) {
                     if !run.targetGitHubIds.isEmpty {
                         let names = run.targetGitHubIds.compactMap { userIdToLogin[$0] }
                         Text("→ \(names.joined(separator: ", "))")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.purple)
+                            .font(DS.Font.small)
+                            .foregroundStyle(DS.Color.statusPurple)
                         Text("·")
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(DS.Color.textTertiary)
                     }
                     if run.isRunning {
                         Text(run.startedAt, style: .relative)
-                            .font(.system(size: 11))
-                            .foregroundStyle(.tertiary)
+                            .font(DS.Font.small)
+                            .foregroundStyle(DS.Color.textTertiary)
                     } else if let duration = run.duration {
                         Text(durationString(from: duration))
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(.secondary)
+                            .font(DS.Font.mono(11))
+                            .foregroundStyle(DS.Color.textSecondary)
                     }
                 }
             }
 
             Spacer()
 
-            VStack(spacing: 4) {
+            VStack(spacing: DS.Spacing.xs) {
                 if run.isRunning {
                     Button {
                         loadUsers()
@@ -154,10 +154,10 @@ struct WorkflowRunRow: View {
                         showTargetPicker.toggle()
                     } label: {
                         Image(systemName: run.targetGitHubIds.isEmpty ? "person.badge.plus" : "person.fill.badge.plus")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.purple)
-                            .padding(6)
-                            .background(.purple.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                            .font(DS.Font.small)
+                            .foregroundStyle(DS.Color.statusPurple)
+                            .padding(DS.Spacing.md)
+                            .background(DS.Color.statusPurple.opacity(0.12), in: RoundedRectangle(cornerRadius: DS.Radius.md))
                     }
                     .buttonStyle(.plain)
                     .cursor(.pointingHand)
@@ -178,12 +178,12 @@ struct WorkflowRunRow: View {
                                     .frame(width: 11, height: 11)
                             } else {
                                 Image(systemName: "arrow.clockwise")
-                                    .font(.system(size: 11))
+                                    .font(DS.Font.small)
                             }
                         }
-                        .foregroundStyle(.blue)
-                        .padding(6)
-                        .background(.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                        .foregroundStyle(DS.Color.accent)
+                        .padding(DS.Spacing.md)
+                        .background(DS.Color.accentDim, in: RoundedRectangle(cornerRadius: DS.Radius.md))
                     }
                     .buttonStyle(.plain)
                     .cursor(.pointingHand)
@@ -196,22 +196,22 @@ struct WorkflowRunRow: View {
                         NSWorkspace.shared.open(url)
                     } label: {
                         Image(systemName: "arrow.up.right")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                            .padding(6)
-                            .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+                            .font(DS.Font.small)
+                            .foregroundStyle(DS.Color.textSecondary)
+                            .padding(DS.Spacing.md)
+                            .background(DS.Color.rowBackground, in: RoundedRectangle(cornerRadius: DS.Radius.md))
                     }
                     .buttonStyle(.plain)
                     .cursor(.pointingHand)
                 }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, DS.Spacing.xxl)
+        .padding(.vertical, DS.Spacing.xl)
+        .background(DS.Color.rowBackground, in: RoundedRectangle(cornerRadius: DS.Radius.md))
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(.white.opacity(0.06), lineWidth: 1)
+            RoundedRectangle(cornerRadius: DS.Radius.md)
+                .stroke(DS.Color.divider, lineWidth: 1)
         )
     }
 
@@ -219,88 +219,87 @@ struct WorkflowRunRow: View {
     private var targetPickerPopover: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Notify on completion")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
+                .font(DS.Font.title)
+                .foregroundStyle(DS.Color.textPrimary)
+                .padding(.horizontal, DS.Spacing.xxl)
+                .padding(.vertical, DS.Spacing.xl)
 
             if loadingUsers {
                 ProgressView()
                     .scaleEffect(0.8)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
+                    .padding(.vertical, DS.Spacing.xxl)
             } else {
                 if users.isEmpty {
                     Text("No other users registered")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.tertiary)
+                        .font(DS.Font.body)
+                        .foregroundStyle(DS.Color.textTertiary)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
+                        .padding(.vertical, DS.Spacing.xxl)
                 } else {
-                    ForEach(users) { user in
-                        Button {
-                            if selectedIds.contains(user.gitHubId) {
-                                selectedIds.remove(user.gitHubId)
-                            } else {
-                                selectedIds.insert(user.gitHubId)
+                    ScrollView {
+                        LazyVStack(spacing: DS.Spacing.xs) {
+                            ForEach(users) { user in
+                                userRow(user)
                             }
-                        } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: selectedIds.contains(user.gitHubId) ? "checkmark.square.fill" : "square")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(selectedIds.contains(user.gitHubId) ? Color.purple : Color.secondary)
-                                Text(user.login)
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(selectedIds.contains(user.gitHubId) ? .primary : Color(white: 0.85))
-                                Spacer()
-                            }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(
-                                selectedIds.contains(user.gitHubId)
-                                    ? .purple.opacity(0.1)
-                                    : .white.opacity(0.03),
-                                in: RoundedRectangle(cornerRadius: 4)
-                            )
-                            .padding(.horizontal, 8)
                         }
-                        .buttonStyle(.plain)
-                        .cursor(.pointingHand)
+                        .padding(.horizontal, DS.Spacing.lg)
                     }
+                    .frame(maxHeight: 200)
                 }
             }
 
             Divider()
-                .padding(.horizontal, 8)
+                .padding(.horizontal, DS.Spacing.lg)
 
             HStack(spacing: 0) {
-                Button("Clear") {
+                actionButton("Clear", color: DS.Color.textSecondary) {
                     selectedIds = []
                     saveTargets()
                     showTargetPicker = false
                 }
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .buttonStyle(.plain)
-                .cursor(.pointingHand)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
 
                 Spacer()
 
-                Button("Done") {
+                solidButton("Done", color: DS.Color.statusPurple) {
                     saveTargets()
                     showTargetPicker = false
                 }
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.purple)
-                .buttonStyle(.plain)
-                .cursor(.pointingHand)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
             }
+            .padding(.horizontal, DS.Spacing.xxl)
+            .padding(.vertical, DS.Spacing.xl)
         }
         .frame(width: 220)
+    }
+
+    private func userRow(_ user: GitHubUserInfo) -> some View {
+        Button {
+            if selectedIds.contains(user.gitHubId) {
+                selectedIds.remove(user.gitHubId)
+            } else {
+                selectedIds.insert(user.gitHubId)
+            }
+        } label: {
+            HStack(spacing: DS.Spacing.lg) {
+                Image(systemName: selectedIds.contains(user.gitHubId) ? "checkmark.square.fill" : "square")
+                    .font(DS.Font.small)
+                    .foregroundStyle(selectedIds.contains(user.gitHubId) ? DS.Color.statusPurple : DS.Color.textSecondary)
+                Text(user.login)
+                    .font(DS.Font.body)
+                    .foregroundStyle(selectedIds.contains(user.gitHubId) ? DS.Color.textPrimary : DS.Color.textSecondary)
+                Spacer()
+            }
+            .padding(.horizontal, DS.Spacing.xxl)
+            .padding(.vertical, DS.Spacing.lg)
+            .background(
+                selectedIds.contains(user.gitHubId)
+                    ? DS.Color.statusPurple.opacity(0.08)
+                    : Color.clear,
+                in: RoundedRectangle(cornerRadius: DS.Radius.sm)
+            )
+        }
+        .buttonStyle(.plain)
+        .cursor(.pointingHand)
     }
 
     private func loadUsers() {

@@ -16,9 +16,9 @@ struct ContentView: View {
                 // Header
                 HStack(spacing: DS.Spacing.md) {
                     Image(systemName: "flame.fill")
-                        .font(.system(size: 13)).padding(.bottom, 2)
+                        .font(DS.Font.title)
                     Text("Blame the Guilty")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(DS.Font.largeTitle)
                 }
 
                 Text("CI/CD notifications when a merged PR breaks the build.")

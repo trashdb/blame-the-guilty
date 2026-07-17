@@ -11,36 +11,39 @@ struct WebhookLogView: View {
         ZStack {
             VisualEffectBackground(material: .sidebar)
 
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: DS.Spacing.section) {
                 HStack {
                     Text("Webhook Event Log")
-                        .font(.system(size: 18, weight: .bold))
+                        .font(DS.Font.largeTitle)
                     Spacer()
-                    Button("Refresh") {
-                        loadLogs()
-                    }
-                    .font(.system(size: 11))
-                    .buttonStyle(.plain)
-                    .cursor(.pointingHand)
+                    actionButton("Refresh", color: .blue) { loadLogs() }
                 }
 
                 Divider()
 
                 if isLoading {
                     Spacer()
-                    ProgressView().scaleEffect(0.8).frame(maxWidth: .infinity)
+                    ProgressView()
+                        .scaleEffect(0.8)
+                        .frame(maxWidth: .infinity)
                     Spacer()
                 } else if let error {
                     Spacer()
-                    Text(error).font(.system(size: 12)).foregroundStyle(.red).frame(maxWidth: .infinity)
+                    Text(error)
+                        .font(DS.Font.body)
+                        .foregroundStyle(DS.Color.destructive)
+                        .frame(maxWidth: .infinity)
                     Spacer()
                 } else if logs.isEmpty {
                     Spacer()
-                    Text("No webhook events yet").font(.system(size: 12)).foregroundStyle(.secondary).frame(maxWidth: .infinity)
+                    Text("No webhook events yet")
+                        .font(DS.Font.body)
+                        .foregroundStyle(DS.Color.textSecondary)
+                        .frame(maxWidth: .infinity)
                     Spacer()
                 } else {
                     ScrollView {
-                        VStack(spacing: 3) {
+                        LazyVStack(spacing: DS.Spacing.xs) {
                             ForEach(logs) { entry in
                                 WebhookLogRow(entry: entry)
                             }
@@ -50,7 +53,7 @@ struct WebhookLogView: View {
 
                 Spacer()
             }
-            .padding(20)
+            .padding(DS.Spacing.xxl)
         }
         .frame(width: 560, height: 500)
         .onAppear(perform: loadLogs)
@@ -83,47 +86,47 @@ struct WebhookLogView: View {
 struct WebhookLogRow: View {
     let entry: WebhookLogEntry
 
-    var outcomeColor: Color {
+    var outcomeColor: SwiftUI.Color {
         switch entry.outcome {
-        case "processed": return .green
-        case "ignored":   return .orange
-        default:          return .secondary
+        case "processed": return DS.Color.success
+        case "ignored":   return DS.Color.warning
+        default:          return DS.Color.textTertiary
         }
     }
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DS.Spacing.lg) {
             Circle()
                 .fill(outcomeColor)
                 .frame(width: 6, height: 6)
 
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 4) {
+            VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                HStack(spacing: DS.Spacing.xs) {
                     Text(entry.eventType)
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Color(white: 0.85))
+                        .font(DS.Font.mono(10).semibold())
+                        .foregroundStyle(DS.Color.textPrimary)
                     if let action = entry.action {
                         Text(action)
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(.secondary)
+                            .font(DS.Font.mono(10))
+                            .foregroundStyle(DS.Color.textSecondary)
                     }
                     if let repo = entry.repo {
                         Text(shortRepo(repo))
-                            .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
+                            .font(DS.Font.caption)
+                            .foregroundStyle(DS.Color.textTertiary)
                     }
                 }
-                HStack(spacing: 4) {
+                HStack(spacing: DS.Spacing.xs) {
                     if let name = entry.workflowName {
                         Text(name)
-                            .font(.system(size: 10))
-                            .foregroundStyle(Color(white: 0.7))
+                            .font(DS.Font.caption)
+                            .foregroundStyle(DS.Color.textSecondary)
                             .lineLimit(1)
                     }
                     if let msg = entry.message {
                         Text(msg)
-                            .font(.system(size: 9, design: .monospaced))
-                            .foregroundStyle(.tertiary)
+                            .font(DS.Font.mono(9))
+                            .foregroundStyle(DS.Color.textTertiary)
                     }
                 }
             }
@@ -131,14 +134,14 @@ struct WebhookLogRow: View {
             Spacer()
 
             Text(entry.outcome)
-                .font(.system(size: 9, weight: .bold))
+                .font(DS.Font.tiny.bold())
                 .foregroundStyle(outcomeColor)
-                .padding(.horizontal, 4)
+                .padding(.horizontal, DS.Spacing.xs)
                 .padding(.vertical, 2)
-                .background(outcomeColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 3))
+                .background(outcomeColor.opacity(0.12), in: RoundedRectangle(cornerRadius: DS.Radius.sm))
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(.white.opacity(0.03), in: RoundedRectangle(cornerRadius: 4))
+        .padding(.horizontal, DS.Spacing.lg)
+        .padding(.vertical, DS.Spacing.sm)
+        .background(DS.Color.rowBackground, in: RoundedRectangle(cornerRadius: DS.Radius.sm))
     }
 }

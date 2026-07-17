@@ -19,14 +19,15 @@ struct LocalBranchesView: View {
     private let git = GitService()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 5) {
+        VStack(alignment: .leading, spacing: DS.Spacing.md) {
+            // Header
+            HStack(spacing: DS.Spacing.sm) {
                 Image(systemName: "arrow.triangle.branch")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.green)
+                    .font(DS.Font.small)
+                    .foregroundStyle(DS.Color.success)
                 Text("Branches")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.green)
+                    .font(DS.Font.section)
+                    .foregroundStyle(DS.Color.success)
                 Spacer()
                 Picker("", selection: $selectedTab) {
                     Text("Local").tag(0)
@@ -43,7 +44,7 @@ struct LocalBranchesView: View {
                             Task { await scan() }
                         } label: {
                             Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 10))
+                                .font(DS.Font.caption)
                         }
                         .buttonStyle(.plain)
                         .help("Refresh branches")
@@ -55,24 +56,24 @@ struct LocalBranchesView: View {
 
             if let error {
                 Text(error)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.red)
+                    .font(DS.Font.caption)
+                    .foregroundStyle(DS.Color.destructive)
             }
 
             if repos.isEmpty && !isLoading {
-                VStack(spacing: 4) {
+                VStack(spacing: DS.Spacing.sm) {
                     Text("No git repos found in workspace")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
+                        .font(DS.Font.small)
+                        .foregroundStyle(DS.Color.textSecondary)
                     Text("Change the workspace path in Settings")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.secondary)
+                        .font(DS.Font.caption)
+                        .foregroundStyle(DS.Color.textTertiary)
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, DS.Spacing.sm)
             }
 
             ScrollView {
-                VStack(spacing: 3) {
+                LazyVStack(spacing: DS.Spacing.xs) {
                     ForEach(repos) { repo in
                         repoRow(repo)
                     }
@@ -82,65 +83,63 @@ struct LocalBranchesView: View {
         }
         .overlay(alignment: .center) {
             if showDeleteConfirmation {
-                ZStack {
-                    Color.black.opacity(0.3)
-                        .ignoresSafeArea()
-                    VStack(spacing: 12) {
-                        let isRemote = remoteBranchToDelete != nil
-                        Text(isRemote
-                             ? "Delete remote branch \"\(remoteBranchToDelete!.branch.name)\"?"
-                             : "Delete branch \"\(branchToDelete!.branch.name)\"?")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Color(white: 0.85))
-                        Text(isRemote
-                             ? "This will run `git push origin --delete` on the remote."
-                             : "This will run `git branch -D` locally. Unmerged changes will be lost.")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                        HStack(spacing: 12) {
-                            Button("Cancel", role: .cancel) {
-                                branchToDelete = nil
-                                remoteBranchToDelete = nil
-                                showDeleteConfirmation = false
-                            }
-                            .buttonStyle(.plain)
-                            .font(.system(size: 11))
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 6)
-                            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
-                            Button("Delete", role: .destructive) {
-                                if let r = branchToDelete?.repo, let b = branchToDelete?.branch {
-                                    Task { await deleteBranch(repo: r, branch: b) }
-                                } else if let r = remoteBranchToDelete?.repo, let b = remoteBranchToDelete?.branch {
-                                    Task { await deleteRemoteBranch(repo: r, branch: b) }
-                                }
-                                branchToDelete = nil
-                                remoteBranchToDelete = nil
-                                showDeleteConfirmation = false
-                            }
-                            .buttonStyle(.plain)
-                            .font(.system(size: 11, weight: .medium))
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 6)
-                            .background(.red.opacity(0.2), in: RoundedRectangle(cornerRadius: 6))
-                            .foregroundStyle(.red)
-                        }
-                    }
-                    .padding(16)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(.white.opacity(0.1), lineWidth: 1))
-                    .padding(.horizontal, 20)
+                deleteConfirmationOverlay
+            }
+        }
+        .background {
+            Color.clear
+                .popover(item: $selectedBranchInfo) { info in
+                    BranchDetailView(info: info, gitHubId: gitHubId, backendUrl: backendUrl, onCheckout: { Task { await scan() } })
                 }
         }
+        .onAppear { if repos.isEmpty { Task { await scan() } } }
     }
-    .background {
-        Color.clear
-            .popover(item: $selectedBranchInfo) { info in
-                BranchDetailView(info: info, gitHubId: gitHubId, backendUrl: backendUrl, onCheckout: { Task { await scan() } })
+
+    @ViewBuilder
+    private var deleteConfirmationOverlay: some View {
+        ZStack {
+            DS.Color.textPrimary.opacity(0.3)
+                .ignoresSafeArea()
+            VStack(spacing: DS.Spacing.xl) {
+                let isRemote = remoteBranchToDelete != nil
+                Text(isRemote
+                     ? "Delete remote branch \"\(remoteBranchToDelete!.branch.name)\"?"
+                     : "Delete branch \"\(branchToDelete!.branch.name)\"?")
+                    .font(DS.Font.title)
+                    .foregroundStyle(DS.Color.textPrimary)
+                Text(isRemote
+                     ? "This will run `git push origin --delete` on the remote."
+                     : "This will run `git branch -D` locally. Unmerged changes will be lost.")
+                    .font(DS.Font.caption)
+                    .foregroundStyle(DS.Color.textSecondary)
+                    .multilineTextAlignment(.center)
+                HStack(spacing: DS.Spacing.xl) {
+                    actionButton("Cancel", color: DS.Color.textSecondary) {
+                        branchToDelete = nil
+                        remoteBranchToDelete = nil
+                        showDeleteConfirmation = false
+                    }
+                    solidButton("Delete", color: DS.Color.destructive) {
+                        if let r = branchToDelete?.repo, let b = branchToDelete?.branch {
+                            Task { await deleteBranch(repo: r, branch: b) }
+                        } else if let r = remoteBranchToDelete?.repo, let b = remoteBranchToDelete?.branch {
+                            Task { await deleteRemoteBranch(repo: r, branch: b) }
+                        }
+                        branchToDelete = nil
+                        remoteBranchToDelete = nil
+                        showDeleteConfirmation = false
+                    }
+                }
             }
-    }
-    .onAppear { if repos.isEmpty { Task { await scan() } } }
+            .padding(DS.Spacing.xxl)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: DS.Radius.xl))
+            .shadow(color: .black.opacity(0.3), radius: 16, y: 8)
+            .overlay(
+                RoundedRectangle(cornerRadius: DS.Radius.xl)
+                    .stroke(DS.Color.divider, lineWidth: 1)
+            )
+            .padding(.horizontal, DS.Spacing.xxl)
+        }
     }
 
     @ViewBuilder
@@ -152,29 +151,29 @@ struct LocalBranchesView: View {
                     repos[idx].isExpanded.toggle()
                 }
             } label: {
-                HStack(spacing: 5) {
+                HStack(spacing: DS.Spacing.sm) {
                     Image(systemName: repo.isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 8))
-                        .foregroundStyle(.secondary)
+                        .font(DS.Font.micro)
+                        .foregroundStyle(DS.Color.textTertiary)
                     Image(systemName: "folder")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.green)
+                        .font(DS.Font.caption)
+                        .foregroundStyle(DS.Color.success)
                     if GitService.repoName(from: repo.path) == favoriteRepo {
                         Image(systemName: "star.fill")
-                            .font(.system(size: 8))
-                            .foregroundStyle(.yellow)
+                            .font(DS.Font.micro)
+                            .foregroundStyle(DS.Color.statusYellow)
                     }
                     Text(GitService.repoName(from: repo.path))
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Color(white: 0.85))
+                        .font(DS.Font.caption.medium())
+                        .foregroundStyle(DS.Color.textPrimary)
                     Spacer()
                     Text("\(count)")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.secondary)
+                        .font(DS.Font.tiny)
+                        .foregroundStyle(DS.Color.textTertiary)
                 }
-                .padding(.horizontal, 6)
-                .padding(.vertical, 5)
-                .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 5))
+                .padding(.horizontal, DS.Spacing.md)
+                .padding(.vertical, DS.Spacing.sm)
+                .background(DS.Color.rowBackground, in: RoundedRectangle(cornerRadius: DS.Radius.sm))
             }
             .buttonStyle(.plain)
             .cursor(.pointingHand)
@@ -182,9 +181,9 @@ struct LocalBranchesView: View {
             if repo.isExpanded {
                 if let err = repo.error {
                     Text(err)
-                        .font(.system(size: 9))
-                        .foregroundStyle(.red)
-                        .padding(.leading, 16)
+                        .font(DS.Font.tiny)
+                        .foregroundStyle(DS.Color.destructive)
+                        .padding(.leading, 18)
                 }
 
                 if selectedTab == 0 {
@@ -199,7 +198,7 @@ struct LocalBranchesView: View {
     @ViewBuilder
     private func localBranchList(_ repo: ScannedRepo) -> some View {
         ForEach(repo.branches) { branch in
-            HStack(spacing: 5) {
+            HStack(spacing: DS.Spacing.sm) {
                 Button {
                     selectedBranchInfo = BranchInfo(
                         name: branch.name, repoPath: repo.path,
@@ -208,19 +207,19 @@ struct LocalBranchesView: View {
                         isMerged: false,
                         isDefault: isDefaultBranch(branch.name))
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: DS.Spacing.xs) {
                         Text(branch.isCurrent ? "*" : " ")
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            .foregroundStyle(.green)
+                            .font(DS.Font.mono(10).bold())
+                            .foregroundStyle(DS.Color.success)
                             .frame(width: 8)
                         Text(branch.name)
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(branch.isCurrent ? .green : Color(white: 0.75))
+                            .font(DS.Font.mono(10))
+                            .foregroundStyle(branch.isCurrent ? DS.Color.success : DS.Color.textSecondary)
                             .lineLimit(1)
                         if branch.isCurrent {
                             Text("(current)")
-                                .font(.system(size: 8))
-                                .foregroundStyle(.secondary)
+                                .font(DS.Font.micro)
+                                .foregroundStyle(DS.Color.textTertiary)
                         }
                     }
                 }
@@ -234,28 +233,28 @@ struct LocalBranchesView: View {
                         showDeleteConfirmation = true
                     } label: {
                         Image(systemName: "trash")
-                            .font(.system(size: 8))
-                            .foregroundStyle(.red.opacity(0.7))
+                            .font(DS.Font.micro)
+                            .foregroundStyle(DS.Color.destructive.opacity(0.7))
                             .padding(3)
-                            .background(.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 3))
+                            .background(DS.Color.destructive.opacity(0.08), in: RoundedRectangle(cornerRadius: DS.Radius.sm))
                     }
                     .buttonStyle(.plain)
                     .help("Delete \"\(branch.name)\"")
                     .cursor(.pointingHand)
                 }
             }
-            .padding(.leading, 16)
-            .padding(.trailing, 6)
-            .padding(.vertical, 2)
+            .padding(.leading, 18)
+            .padding(.trailing, DS.Spacing.md)
+            .padding(.vertical, DS.Spacing.xs)
         }
     }
 
     @ViewBuilder
     private func remoteBranchList(_ repo: ScannedRepo) -> some View {
         ForEach(repo.remoteBranches) { branch in
-            HStack(spacing: 5) {
+            HStack(spacing: DS.Spacing.sm) {
                 Circle()
-                    .fill(branch.isMerged ? .green : .orange)
+                    .fill(branch.isMerged ? DS.Color.success : DS.Color.warning)
                     .frame(width: 6, height: 6)
 
                 Button {
@@ -270,14 +269,14 @@ struct LocalBranchesView: View {
                         selectedBranchInfo = info
                     }
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: DS.Spacing.xs) {
                         Text(branch.name)
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(Color(white: 0.75))
+                            .font(DS.Font.mono(10))
+                            .foregroundStyle(DS.Color.textSecondary)
                             .lineLimit(1)
                         Text(branch.isMerged ? "merged" : "unmerged")
-                            .font(.system(size: 8))
-                    .foregroundStyle(branch.isMerged ? .green : .orange)
+                            .font(DS.Font.micro)
+                            .foregroundStyle(branch.isMerged ? DS.Color.success : DS.Color.warning)
                     }
                 }
                 .buttonStyle(.plain)
@@ -286,18 +285,18 @@ struct LocalBranchesView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 if isDefaultBranch(branch.name) {
                     Text("protected")
-                        .font(.system(size: 8))
-                        .foregroundStyle(.secondary)
+                        .font(DS.Font.micro)
+                        .foregroundStyle(DS.Color.textTertiary)
                 } else {
                     Button {
                         remoteBranchToDelete = (repo, branch)
                         showDeleteConfirmation = true
                     } label: {
                         Image(systemName: "trash")
-                            .font(.system(size: 8))
-                            .foregroundStyle(branch.isMerged ? .red.opacity(0.7) : .gray.opacity(0.3))
+                            .font(DS.Font.micro)
+                            .foregroundStyle(branch.isMerged ? DS.Color.destructive.opacity(0.7) : DS.Color.textTertiary.opacity(0.3))
                             .padding(3)
-                            .background((branch.isMerged ? Color.red : Color.gray).opacity(0.1), in: RoundedRectangle(cornerRadius: 3))
+                            .background((branch.isMerged ? DS.Color.destructive : DS.Color.textTertiary).opacity(0.08), in: RoundedRectangle(cornerRadius: DS.Radius.sm))
                     }
                     .buttonStyle(.plain)
                     .help(branch.isMerged ? "Delete \"\(branch.name)\" (safe — merged)" : "Not merged yet — cannot delete")
@@ -305,9 +304,9 @@ struct LocalBranchesView: View {
                     .disabled(!branch.isMerged)
                 }
             }
-            .padding(.leading, 16)
-            .padding(.trailing, 6)
-            .padding(.vertical, 2)
+            .padding(.leading, 18)
+            .padding(.trailing, DS.Spacing.md)
+            .padding(.vertical, DS.Spacing.xs)
         }
     }
 

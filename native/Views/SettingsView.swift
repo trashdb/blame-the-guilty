@@ -31,7 +31,7 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     Text("Settings")
-                        .font(.system(size: 20, weight: .bold))
+                        .font(DS.Font.largeTitle)
 
                     Divider()
 

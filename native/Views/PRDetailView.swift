@@ -83,10 +83,10 @@ struct PRDetailView: View {
                     Text(DS.Color.mergeableLabel(pr.mergeableState))
                         .badge(DS.Color.mergeableLabel(pr.mergeableState), color: mergeColor)
 
-                    let ciColor: Color = pr.ciStatus == "failed" ? .red
-                        : pr.ciStatus == "waiting" ? .orange
-                        : pr.ciStatus == "review" ? .blue
-                        : .green
+                    let ciColor: SwiftUI.Color = pr.ciStatus == "failed" ? DS.Color.statusRed
+                        : pr.ciStatus == "waiting" ? DS.Color.statusOrange
+                        : pr.ciStatus == "review" ? DS.Color.statusBlue
+                        : DS.Color.statusGreen
                     let ciLabel: String = pr.ciStatus == "waiting" ? "CI WAITING"
                         : pr.ciStatus == "failed" ? "CI FAIL"
                         : pr.ciStatus == "review" ? "CI READY"
@@ -95,7 +95,7 @@ struct PRDetailView: View {
                         .badge(ciLabel, color: ciColor)
 
                     if let c = pr.conclusion {
-                        let clColor: Color = c == "success" ? .green : c == "failure" ? .red : .gray
+                        let clColor: SwiftUI.Color = c == "success" ? DS.Color.statusGreen : c == "failure" ? DS.Color.statusRed : DS.Color.statusGray
                         let clLabel: String = c == "success" ? "CHECKS PASS"
                             : c == "failure" ? "CHECKS FAIL"
                             : c == "neutral" ? "CHECKS NEUTRAL"
@@ -106,7 +106,7 @@ struct PRDetailView: View {
 
                     if pr.reviewApproved {
                         Text("APPROVED")
-                            .badge("APPROVED", color: .green)
+                            .badge("APPROVED", color: DS.Color.statusGreen)
                     }
 
                     Spacer()
