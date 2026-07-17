@@ -205,8 +205,10 @@ class SignalRService: ObservableObject {
                 let lastCommentAt: Date?
             }
             if let prs = try? JSONDecoder().decode([ApiPR].self, from: data) {
+                var seen = Set<String>()
+                let unique = prs.filter { seen.insert("\($0.repo)#\($0.prNumber)").inserted }
                 await MainActor.run {
-                    activePRs = prs.map { pr in
+                    activePRs = unique.map { pr in
                         PullRequest(
                             prNumber: pr.prNumber, title: pr.title,
                             repo: pr.repo,

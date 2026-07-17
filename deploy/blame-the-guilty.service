@@ -10,6 +10,9 @@ Restart=always
 RestartSec=5
 Environment=ASPNETCORE_ENVIRONMENT=Production
 Environment=ASPNETCORE_URLS=http://localhost:5000
+Environment=WebhookSecret=233134ce240e8a9f34284cf10074a29bc6043814af145ce929683d5f9aefe934
+Environment=GitHubOAuth__ClientId=Ov23liSn2Q0DA4XlLs2m
+Environment=GitHubOAuth__ClientSecret=bbe8fe341b554a77aa251f7d7116430e964e1bed
 
 [Install]
 WantedBy=multi-user.target

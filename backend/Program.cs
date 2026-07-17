@@ -1,57 +1,125 @@
 using Microsoft.EntityFrameworkCore;
+using Serilog;
 using BlameTheGuilty.Api.Data;
 using BlameTheGuilty.Api.Hubs;
 using BlameTheGuilty.Api.Services;
 
-var builder = WebApplication.CreateBuilder(args);
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .WriteTo.File("logs/blame-api-.log", rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 30, restrictedToMinimumLevel: Serilog.Events.LogEventLevel.Warning)
+    .CreateBootstrapLogger();
 
-// Database
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
-
-// SignalR
-builder.Services.AddSignalR();
-
-// HttpClient for GitHub OAuth
-builder.Services.AddHttpClient<GitHubOAuthService>();
-
-// GitHub OAuth config
-builder.Services.Configure<GitHubOAuthOptions>(
-    builder.Configuration.GetSection("GitHubOAuth"));
-
-// Controllers + JSON serialization
-builder.Services.AddControllers()
-    .AddJsonOptions(options =>
-    {
-        options.JsonSerializerOptions.Converters.Add(new UtcDateTimeConverter());
-    });
-
-// CORS (for ngrok + WPF dev)
-builder.Services.AddCors(options =>
+try
 {
-    options.AddDefaultPolicy(policy =>
+    var builder = WebApplication.CreateBuilder(args);
+
+    builder.Host.UseSerilog((context, config) =>
     {
-        policy.AllowAnyOrigin()
-              .AllowAnyHeader()
-              .AllowAnyMethod();
+        config.ReadFrom.Configuration(context.Configuration)
+            .Enrich.FromLogContext()
+            .WriteTo.Console()
+            .WriteTo.File("logs/blame-api-.log", rollingInterval: RollingInterval.Day,
+                retainedFileCountLimit: 30);
     });
 
-    options.AddPolicy("SignalR", policy =>
+    // Database
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+    // SignalR
+    builder.Services.AddSignalR();
+
+    // HttpClient for GitHub OAuth
+    builder.Services.AddHttpClient<GitHubOAuthService>();
+
+    // GitHub OAuth config
+    builder.Services.Configure<GitHubOAuthOptions>(
+        builder.Configuration.GetSection("GitHubOAuth"));
+
+    // Controllers + JSON serialization
+    builder.Services.AddControllers()
+        .AddJsonOptions(options =>
+        {
+            options.JsonSerializerOptions.Converters.Add(new UtcDateTimeConverter());
+        });
+
+    // CORS (for ngrok + WPF dev)
+    builder.Services.AddCors(options =>
     {
-        policy.SetIsOriginAllowed(_ => true)
-              .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials();
+        options.AddDefaultPolicy(policy =>
+        {
+            policy.AllowAnyOrigin()
+                  .AllowAnyHeader()
+                  .AllowAnyMethod();
+        });
+
+        options.AddPolicy("SignalR", policy =>
+        {
+            policy.SetIsOriginAllowed(_ => true)
+                  .AllowAnyHeader()
+                  .AllowAnyMethod()
+                  .AllowCredentials();
+        });
     });
-});
 
-var app = builder.Build();
+    var app = builder.Build();
 
-// Auto-migrate database
-using (var scope = app.Services.CreateScope())
+    // Auto-migrate database
+    using (var scope = app.Services.CreateScope())
+    {
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        ApplyMigrations(db);
+    }
+
+    app.UseCors("SignalR");
+
+    // Health check
+    app.MapGet("/health", async (AppDbContext db) =>
+    {
+        try
+        {
+            var canConnect = await db.Database.CanConnectAsync();
+            return Results.Ok(new
+            {
+                status = canConnect ? "healthy" : "degraded",
+                database = canConnect,
+                timestamp = DateTime.UtcNow
+            });
+        }
+        catch (Exception ex)
+        {
+            return Results.Ok(new
+            {
+                status = "unhealthy",
+                database = false,
+                error = ex.Message,
+                timestamp = DateTime.UtcNow
+            });
+        }
+    });
+
+    app.MapHub<PunishmentHub>("/hub/punishment");
+    app.MapControllers();
+
+    await app.RunAsync();
+
+    return 0;
+}
+catch (Exception ex)
 {
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    Log.Fatal(ex, "Application terminated unexpectedly");
+    return 1;
+}
+finally
+{
+    Log.CloseAndFlush();
+}
+
+void ApplyMigrations(AppDbContext db)
+{
     db.Database.EnsureCreated();
+
     // Ensure the PunishmentEvents table exists even on existing DBs
     db.Database.ExecuteSqlRaw("""
         CREATE TABLE IF NOT EXISTS "PunishmentEvents" (
@@ -84,11 +152,9 @@ using (var scope = app.Services.CreateScope())
     db.Database.ExecuteSqlRaw("""
         CREATE INDEX IF NOT EXISTS "IX_WorkflowRuns_GitHubId" ON "WorkflowRuns" ("GitHubId");
         """);
-
     db.Database.ExecuteSqlRaw("""
         CREATE INDEX IF NOT EXISTS "IX_WorkflowRuns_Status" ON "WorkflowRuns" ("Status");
         """);
-
     db.Database.ExecuteSqlRaw("""
         CREATE INDEX IF NOT EXISTS "IX_WorkflowRuns_RunId" ON "WorkflowRuns" ("RunId");
         """);
@@ -131,63 +197,35 @@ using (var scope = app.Services.CreateScope())
     db.Database.ExecuteSqlRaw("""
         CREATE INDEX IF NOT EXISTS "IX_PullRequestEvents_AuthorLogin" ON "PullRequestEvents" ("AuthorLogin");
         """);
-
     db.Database.ExecuteSqlRaw("""
         CREATE INDEX IF NOT EXISTS "IX_PullRequestEvents_Status" ON "PullRequestEvents" ("Status");
         """);
-
     db.Database.ExecuteSqlRaw("""
         CREATE INDEX IF NOT EXISTS "IX_PullRequestEvents_PrNumber" ON "PullRequestEvents" ("PrNumber");
         """);
 
-    // Add AccessToken column to existing GitHubUsers table if missing
+    // Add columns that may not exist on older DBs
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "GitHubUsers" ADD COLUMN "AccessToken" TEXT;"""); } catch { }
-
-    // Add TargetGitHubIds column to existing WorkflowRuns table if missing
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "WorkflowRuns" ADD COLUMN "TargetGitHubIds" TEXT;"""); } catch { }
-
-    // Add Draft column to existing PullRequestEvents table if missing
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "Draft" INTEGER NOT NULL DEFAULT 0;"""); } catch { }
-
-    // Add MergeableState column to existing PullRequestEvents table if missing
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "MergeableState" TEXT;"""); } catch { }
-
-    // Add HeadBranch column to existing WorkflowRuns table if missing
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "WorkflowRuns" ADD COLUMN "HeadBranch" TEXT;"""); } catch { }
-
-    // Add Trigger column to existing WorkflowRuns table if missing
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "WorkflowRuns" ADD COLUMN "Trigger" TEXT;"""); } catch { }
-
-    // Add ReviewApproved column to existing PullRequestEvents table if missing
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "ReviewApproved" INTEGER NOT NULL DEFAULT 0;"""); } catch { }
-
-    // Add ApprovedBy column to existing PullRequestEvents table if missing
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "ApprovedBy" TEXT;"""); } catch { }
-
-    // Add AvatarUrl column to existing GitHubUsers table if missing
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "GitHubUsers" ADD COLUMN "AvatarUrl" TEXT;"""); } catch { }
-
-    // Add UserPatToken column to existing GitHubUsers table if missing
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "GitHubUsers" ADD COLUMN "UserPatToken" TEXT;"""); } catch { }
-
-    // Add IsIgnored column to existing WorkflowRuns table if missing
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "WorkflowRuns" ADD COLUMN "IsIgnored" INTEGER NOT NULL DEFAULT 0;"""); } catch { }
-
-    // Add LastComment* columns to existing PullRequestEvents table if missing
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "LastCommentBy" TEXT;"""); } catch { }
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "LastCommentBody" TEXT;"""); } catch { }
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "LastCommentAt" TEXT;"""); } catch { }
-
-    // Add HeadSha columns for ciStatus matching by commit SHA
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "WorkflowRuns" ADD COLUMN "HeadSha" TEXT;"""); } catch { }
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "HeadSha" TEXT;"""); } catch { }
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "LastCommentUrl" TEXT;"""); } catch { }
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "LastReviewFilePath" TEXT;"""); } catch { }
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "LastReviewLine" INTEGER;"""); } catch { }
 
-    // Recover stuck runs: mark in_progress older than 24h as cancelled.
-    // Catches runs that were cancelled/superseded before the fix, or any
-    // future completions the webhook never delivered.
+    // Recover stuck runs: mark in_progress older than 24h as cancelled
     var cutoff = DateTime.UtcNow.AddHours(-24);
     var stuck = db.WorkflowRuns.Count(w => w.Status == "in_progress" && w.StartedAt < cutoff);
     if (stuck > 0)
@@ -196,14 +234,11 @@ using (var scope = app.Services.CreateScope())
             UPDATE "WorkflowRuns" SET "Status" = 'cancelled'
             WHERE "Status" = 'in_progress' AND "StartedAt" < {0}
             """, cutoff);
-        var log = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        log.LogInformation("Marked {Count} stale in_progress runs as cancelled", stuck);
+        Console.WriteLine("Marked {Count} stale in_progress runs as cancelled", stuck);
     }
 
     // Mark superseded runs: any in_progress run that is NOT the latest
-    // (by RunId) for its (Repo, WorkflowName, HeadBranch) combo.
-    // The older one was automatically cancelled by GitHub when a newer
-    // run started — whether that newer run completed or is still running.
+    // (by RunId) for its (Repo, WorkflowName, HeadBranch) combo
     var superseded = db.Database.ExecuteSqlRaw("""
         UPDATE "WorkflowRuns"
         SET "Status" = 'superseded'
@@ -223,15 +258,5 @@ using (var scope = app.Services.CreateScope())
         )
         """);
     if (superseded > 0)
-    {
-        var log = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        log.LogInformation("Marked {Count} superseded in_progress runs as superseded", superseded);
-    }
+        Console.WriteLine("Marked {Count} superseded in_progress runs as superseded", superseded);
 }
-
-app.UseCors("SignalR");
-
-app.MapHub<PunishmentHub>("/hub/punishment");
-app.MapControllers();
-
-app.Run();

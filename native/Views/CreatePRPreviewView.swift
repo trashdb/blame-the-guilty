@@ -1,12 +1,5 @@
 import SwiftUI
 
-struct PRPreviewData: Decodable {
-    let template: String
-    let commits: [String]
-    let summary: String
-    let suggestedBody: String
-}
-
 struct CreatePRPreviewView: View {
     let repoPath: String
     let branchName: String
@@ -19,7 +12,8 @@ struct CreatePRPreviewView: View {
     @State private var bodyText: String
     @State private var isLoading = true
     @State private var isCreating = false
-    @State private var preview: PRPreviewData?
+    @State private var suggestedBody: String?
+    @State private var summary: String?
     @State private var errorMessage: String?
 
     private let git = GitService()
@@ -48,113 +42,104 @@ struct CreatePRPreviewView: View {
     }
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Create Pull Request")
+                .font(.system(size: 13, weight: .semibold))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Title").font(.system(size: 10)).foregroundStyle(.secondary)
+                TextField("", text: $title)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 11, design: .monospaced))
+                    .padding(6)
+                    .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 5))
+                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(.white.opacity(0.1), lineWidth: 1))
+            }
+
             if isLoading {
-                VStack(spacing: 8) {
-                    ProgressView()
-                        .scaleEffect(0.7)
-                    Text("Loading PR preview...")
-                        .font(.system(size: 11))
+                HStack(spacing: 6) {
+                    ProgressView().scaleEffect(0.5)
+                    Text("Loading template…")
+                        .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                 }
-                .frame(width: 420, height: 350)
-            } else if let errorMessage {
-                VStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 20))
-                        .foregroundStyle(.red)
-                    Text(errorMessage)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.red)
-                        .multilineTextAlignment(.center)
-                    Button("Cancel") { onCancel?() }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 11))
-                        .padding(.horizontal, 12).padding(.vertical, 4)
-                        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
+            }
+
+            if let summary, !summary.isEmpty {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "sparkle")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.purple)
+                        Text("Copilot Summary")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.purple)
+                    }
+                    Text(summary)
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color(white: 0.8))
+                        .padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.purple.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
                 }
-                .frame(width: 420, height: 350)
-            } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Create Pull Request")
-                        .font(.system(size: 13, weight: .semibold))
+            }
 
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Title").font(.system(size: 10)).foregroundStyle(.secondary)
-                        TextField("", text: $title)
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 11, design: .monospaced))
-                            .padding(6)
-                            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 5))
-                            .overlay(RoundedRectangle(cornerRadius: 5).stroke(.white.opacity(0.1), lineWidth: 1))
-                    }
-
-                    if let summary = preview?.summary, !summary.isEmpty {
-                        VStack(alignment: .leading, spacing: 3) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "sparkle")
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(.purple)
-                                Text("Copilot Summary")
-                                    .font(.system(size: 9, weight: .semibold))
-                                    .foregroundStyle(.purple)
-                            }
-                            Text(summary)
-                                .font(.system(size: 10))
-                                .foregroundStyle(Color(white: 0.8))
-                                .padding(8)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(.purple.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Description").font(.system(size: 10)).foregroundStyle(.secondary)
-                        ScrollView {
-                            TextEditor(text: $bodyText)
-                                .font(.system(size: 10, design: .monospaced))
-                                .scrollContentBackground(.hidden)
-                                .frame(minHeight: 200)
-                        }
-                        .padding(6)
-                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 5))
-                        .overlay(RoundedRectangle(cornerRadius: 5).stroke(.white.opacity(0.1), lineWidth: 1))
-                    }
-
-                    HStack(spacing: 8) {
-                        if !(preview?.summary ?? "").isEmpty {
-                            HStack(spacing: 3) {
-                                Image(systemName: "sparkle")
-                                    .font(.system(size: 8))
-                                    .foregroundStyle(.purple)
-                                Text("Copilot summary included")
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(.purple)
-                            }
-                        }
-                        Spacer()
-                        if isCreating {
-                            ProgressView().scaleEffect(0.5).frame(width: 12)
-                        }
-                        Button("Cancel") { onCancel?() }
-                            .buttonStyle(.plain)
-                            .font(.system(size: 10))
-                            .padding(.horizontal, 10).padding(.vertical, 4)
-                            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
-                        Button("Create PR") { Task { await createPR() } }
-                            .buttonStyle(.plain)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.green)
-                            .padding(.horizontal, 10).padding(.vertical, 4)
-                            .background(.green.opacity(0.15), in: RoundedRectangle(cornerRadius: 5))
-                            .disabled(isCreating)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 4) {
+                    Text("Description").font(.system(size: 10)).foregroundStyle(.secondary)
+                    if isLoading {
+                        ProgressView().scaleEffect(0.4)
                     }
                 }
-                .padding(12)
-                .frame(width: 440, height: 380)
+                ScrollView {
+                    TextEditor(text: $bodyText)
+                        .font(.system(size: 10, design: .monospaced))
+                        .scrollContentBackground(.hidden)
+                        .frame(minHeight: 200)
+                }
+                .padding(6)
+                .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 5))
+                .overlay(RoundedRectangle(cornerRadius: 5).stroke(.white.opacity(0.1), lineWidth: 1))
+            }
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.system(size: 9))
+                    .foregroundStyle(.red)
+            }
+
+            HStack(spacing: 8) {
+                if let summary, !summary.isEmpty {
+                    HStack(spacing: 3) {
+                        Image(systemName: "sparkle")
+                            .font(.system(size: 8))
+                            .foregroundStyle(.purple)
+                        Text("Copilot summary included")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.purple)
+                    }
+                }
+                Spacer()
+                if isCreating {
+                    ProgressView().scaleEffect(0.5).frame(width: 12)
+                }
+                Button("Cancel") { onCancel?() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 10))
+                    .padding(.horizontal, 10).padding(.vertical, 4)
+                    .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
+                Button("Create PR") { Task { await createPR() } }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.green)
+                    .padding(.horizontal, 10).padding(.vertical, 4)
+                    .background(.green.opacity(0.15), in: RoundedRectangle(cornerRadius: 5))
+                    .disabled(isCreating)
             }
         }
-        .task { await loadPreview() }
+        .padding(12)
+        .frame(width: 440, height: 380)
+        .onAppear { Task { await loadPreview() } }
     }
 
     private func loadPreview() async {
@@ -176,6 +161,7 @@ struct CreatePRPreviewView: View {
 
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
+        req.timeoutInterval = 20
         do {
             let (data, resp) = try await URLSession.shared.data(for: req)
             guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
@@ -188,8 +174,13 @@ struct CreatePRPreviewView: View {
                 isLoading = false
                 return
             }
-            preview = try JSONDecoder().decode(PRPreviewData.self, from: data)
-            bodyText = preview?.suggestedBody ?? ""
+            struct PreviewData: Decodable { let summary: String; let suggestedBody: String }
+            let decoded = try JSONDecoder().decode(PreviewData.self, from: data)
+            summary = decoded.summary.isEmpty ? nil : decoded.summary
+            if !decoded.suggestedBody.isEmpty {
+                bodyText = decoded.suggestedBody
+                suggestedBody = decoded.suggestedBody
+            }
         } catch {
             errorMessage = error.localizedDescription
         }

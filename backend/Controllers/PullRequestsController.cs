@@ -12,7 +12,7 @@ namespace BlameTheGuilty.Api.Controllers;
 [Route("api/pullrequests")]
 public class PullRequestsController : ControllerBase
 {
-    private static readonly HttpClient _githubClient = new();
+    private static readonly HttpClient _githubClient = new() { Timeout = TimeSpan.FromSeconds(15) };
     private readonly AppDbContext _db;
     private readonly IConfiguration _configuration;
     private readonly IHubContext<PunishmentHub> _hubContext;

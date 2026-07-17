@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -26,15 +28,18 @@ public class WebhookController : ControllerBase
     private readonly IHubContext<PunishmentHub> _hubContext;
     private readonly AppDbContext _db;
     private readonly ILogger<WebhookController> _logger;
+    private readonly IConfiguration _configuration;
 
     public WebhookController(
         IHubContext<PunishmentHub> hubContext,
         AppDbContext db,
-        ILogger<WebhookController> logger)
+        ILogger<WebhookController> logger,
+        IConfiguration configuration)
     {
         _hubContext = hubContext;
         _db = db;
         _logger = logger;
+        _configuration = configuration;
     }
 
     [HttpGet("logs")]
@@ -60,8 +65,37 @@ public class WebhookController : ControllerBase
     }
 
     [HttpPost("github")]
-    public async Task<IActionResult> HandleGitHubWebhook([FromBody] JsonElement payload)
+    public async Task<IActionResult> HandleGitHubWebhook()
     {
+        // Verify HMAC signature if WebhookSecret is configured
+        var webhookSecret = _configuration["WebhookSecret"];
+        if (!string.IsNullOrEmpty(webhookSecret) && webhookSecret != "set-me-in-env-vars" && webhookSecret != "set-your-github-webhook-secret-here")
+        {
+            var signature = Request.Headers["X-Hub-Signature-256"].FirstOrDefault();
+            if (string.IsNullOrEmpty(signature))
+            {
+                LogWebhook("unknown", null, null, null, "rejected", "Missing X-Hub-Signature-256");
+                return Unauthorized("Missing X-Hub-Signature-256");
+            }
+
+            Request.EnableBuffering();
+            var rawBody = await new StreamReader(Request.Body).ReadToEndAsync();
+            Request.Body.Position = 0;
+
+            var key = Encoding.UTF8.GetBytes(webhookSecret);
+            var hash = HMACSHA256.HashData(key, Encoding.UTF8.GetBytes(rawBody));
+            var expected = "sha256=" + Convert.ToHexString(hash).ToLowerInvariant();
+
+            if (!CryptographicOperations.FixedTimeEquals(
+                    Encoding.UTF8.GetBytes(signature),
+                    Encoding.UTF8.GetBytes(expected)))
+            {
+                LogWebhook("unknown", null, null, null, "rejected", "Invalid webhook signature");
+                return Unauthorized("Invalid signature");
+            }
+        }
+
+        var payload = await JsonSerializer.DeserializeAsync<JsonElement>(Request.Body);
         var eventType = Request.Headers["X-GitHub-Event"].FirstOrDefault() ?? "";
 
         if (eventType == "workflow_run") return await HandleWorkflowRun(payload);

@@ -25,7 +25,7 @@ struct BranchDetailView: View {
                 },
                 onCancel: { showCreatePR = false }
             )
-            .frame(width: 460, height: 420)
+            .frame(width: 440, height: 420)
         } else {
             VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {

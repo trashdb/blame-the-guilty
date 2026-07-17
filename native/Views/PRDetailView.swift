@@ -549,7 +549,9 @@ struct PRDetailView: View {
     private func loadDetails() {
         let repoEscaped = pr.repo.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? pr.repo
         guard let url = URL(string: "\(backendUrl)/api/pullrequests/\(pr.prNumber)/detail?repo=\(repoEscaped)&gitHubId=\(gitHubId)") else { return }
-        URLSession.shared.dataTask(with: url) { data, resp, err in
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 15
+        URLSession.shared.dataTask(with: req) { data, resp, err in
             DispatchQueue.main.async {
                 if let err { self.detailError = err.localizedDescription; return }
                 guard let data else { return }

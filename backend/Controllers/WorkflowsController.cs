@@ -21,7 +21,7 @@ public class WorkflowsController : ControllerBase
         "Verify ForgeRock Secrets"
     };
 
-    private static readonly HttpClient _githubClient = new();
+    private static readonly HttpClient _githubClient = new() { Timeout = TimeSpan.FromSeconds(15) };
 
     private readonly IHubContext<PunishmentHub> _hubContext;
     private readonly AppDbContext _db;

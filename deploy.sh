@@ -23,6 +23,11 @@ else
   echo "WARNING: appsettings.Production.json not found"
 fi
 
+echo "=== REMINDER ==="
+echo "Make sure Environment=WebhookSecret is set in the systemd service file"
+echo "or add it to appsettings.Production.json before restarting."
+echo "Generate a secret with: openssl rand -hex 32"
+
 echo "=== Setting permissions ==="
 ssh "$VPS" "sudo chmod +x $REMOTE/BlameTheGuilty.Api"
 

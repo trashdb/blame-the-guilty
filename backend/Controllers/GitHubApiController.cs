@@ -2,8 +2,11 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using BlameTheGuilty.Api.Data;
+using BlameTheGuilty.Api.Hubs;
+using BlameTheGuilty.Api.Models;
 
 namespace BlameTheGuilty.Api.Controllers;
 
@@ -11,16 +14,18 @@ namespace BlameTheGuilty.Api.Controllers;
 [Route("api/github")]
 public class GitHubApiController : ControllerBase
 {
-    private static readonly HttpClient _client = new();
+    private static readonly HttpClient _client = new() { Timeout = TimeSpan.FromSeconds(30) };
     private readonly AppDbContext _db;
     private readonly IConfiguration _configuration;
     private readonly ILogger<GitHubApiController> _logger;
+    private readonly IHubContext<PunishmentHub> _hubContext;
 
-    public GitHubApiController(AppDbContext db, IConfiguration configuration, ILogger<GitHubApiController> logger)
+    public GitHubApiController(AppDbContext db, IConfiguration configuration, ILogger<GitHubApiController> logger, IHubContext<PunishmentHub> hubContext)
     {
         _db = db;
         _configuration = configuration;
         _logger = logger;
+        _hubContext = hubContext;
     }
 
     [HttpGet("my-branches")]
@@ -181,8 +186,42 @@ public class GitHubApiController : ControllerBase
         using var successDoc = JsonDocument.Parse(content);
         var prUrl = successDoc.RootElement.GetProperty("html_url").GetString() ?? "";
         var prNumber = successDoc.RootElement.GetProperty("number").GetInt64();
+        var prTitle = successDoc.RootElement.TryGetProperty("title", out var t) ? t.GetString() ?? title : title;
 
         _logger.LogInformation("CreatePr success: pr={PrNumber} url={Url}", prNumber, prUrl);
+
+        // Sync to DB so the PR appears immediately in the active PRs list
+        try
+        {
+            var existing = await _db.PullRequestEvents
+                .FirstOrDefaultAsync(e => e.RepoFullName == repo && e.PrNumber == prNumber);
+            if (existing == null)
+            {
+                var ev = new PullRequestEvent
+                {
+                    PrNumber = prNumber,
+                    Title = prTitle,
+                    AuthorLogin = user?.GitHubUsername ?? "",
+                    AuthorGitHubId = user?.GitHubId ?? gitHubId,
+                    RepoFullName = repo,
+                    HeadBranch = head,
+                    BaseBranch = baseBranch,
+                    PrUrl = prUrl,
+                    Status = "open",
+                    Draft = false,
+                    OccurredAt = DateTime.UtcNow
+                };
+                _db.PullRequestEvents.Add(ev);
+                await _db.SaveChangesAsync();
+                _logger.LogInformation("CreatePr: inserted PullRequestEvent for pr={PrNumber}", prNumber);
+            }
+            await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "CreatePr: failed to sync PR event to DB");
+        }
+
         return Ok(new { prNumber, url = prUrl });
     }
 
@@ -544,49 +583,58 @@ Only respond with the JSON object, no other text.";
 
     private async Task<string> GenerateSummary(List<string> commits, string oauthToken)
     {
-        var commitText = string.Join("\n", commits.Select(c => $"- {c}"));
-        var prompt = $"Write a detailed PR description summary in English based on these commit messages. Include what was changed and why:\n\n{commitText}\n\nDetailed description:";
-
-        var body = new
+        try
         {
-            messages = new[]
+            var commitText = string.Join("\n", commits.Select(c => $"- {c}"));
+            var prompt = $"Write a detailed PR description summary in English based on these commit messages. Include what was changed and why:\n\n{commitText}\n\nDetailed description:";
+
+            var body = new
             {
-                new { role = "system", content = "You are a senior developer writing clear, concise PR descriptions for a team codebase. Write in complete paragraphs, explain the context and reasoning behind changes." },
-                new { role = "user", content = prompt }
-            },
-            model = "gpt-4o",
-            max_tokens = 1000,
-            temperature = 0.7
-        };
-
-        var req = new HttpRequestMessage(HttpMethod.Post, "https://api.githubcopilot.com/chat/completions");
-        req.Headers.UserAgent.ParseAdd("BlameTheGuilty");
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", oauthToken);
-        req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
-
-        var resp = await _client.SendAsync(req);
-        if (!resp.IsSuccessStatusCode)
-        {
-            var errBody = await resp.Content.ReadAsStringAsync();
-            _logger.LogWarning("Copilot API error: status={Status} body={Body}",
-                (int)resp.StatusCode, errBody);
-            return "";
-        }
-
-        var content = await resp.Content.ReadAsStringAsync();
-        using var doc = JsonDocument.Parse(content);
-        if (doc.RootElement.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var choice in choices.EnumerateArray())
-            {
-                if (choice.TryGetProperty("message", out var msg) &&
-                    msg.TryGetProperty("content", out var text))
+                messages = new[]
                 {
-                    return text.GetString() ?? "";
+                    new { role = "system", content = "You are a senior developer writing clear, concise PR descriptions for a team codebase. Write in complete paragraphs, explain the context and reasoning behind changes." },
+                    new { role = "user", content = prompt }
+                },
+                model = "gpt-4o",
+                max_tokens = 1000,
+                temperature = 0.7
+            };
+
+            var req = new HttpRequestMessage(HttpMethod.Post, "https://api.githubcopilot.com/chat/completions");
+            req.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", oauthToken);
+            req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var resp = await _client.SendAsync(req, cts.Token);
+            if (!resp.IsSuccessStatusCode)
+            {
+                var errBody = await resp.Content.ReadAsStringAsync();
+                _logger.LogWarning("Copilot API error: status={Status} body={Body}",
+                    (int)resp.StatusCode, errBody);
+                return "";
+            }
+
+            var content = await resp.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(content);
+            if (doc.RootElement.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var choice in choices.EnumerateArray())
+                {
+                    if (choice.TryGetProperty("message", out var msg) &&
+                        msg.TryGetProperty("content", out var text))
+                    {
+                        return text.GetString() ?? "";
+                    }
                 }
             }
+            return "";
         }
-        return "";
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Copilot summary generation failed (timeout or error)");
+            return "";
+        }
     }
 
     private static string BuildBody(string? template, string ticketNumber, string summary, List<string> commits)

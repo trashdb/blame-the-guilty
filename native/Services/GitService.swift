@@ -28,6 +28,17 @@ struct APIBranch: Codable {
     let name: String
 }
 
+private final class RunGitDone: @unchecked Sendable {
+    private var _done = false
+    private let lock = NSLock()
+    func exchange(_ value: Bool) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        let prev = _done
+        _done = value
+        return prev
+    }
+}
+
 actor GitService {
     enum GitError: LocalizedError {
         case gitNotFound
@@ -483,27 +494,36 @@ actor GitService {
     }
 
     @discardableResult
-    private func runGit(repoPath: String, args: [String]) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = ["git"] + args
-            process.currentDirectoryURL = URL(fileURLWithPath: repoPath)
-            let out = Pipe(), err = Pipe()
-            process.standardOutput = out
-            process.standardError = err
-            process.terminationHandler = { process in
+    private func runGit(repoPath: String, args: [String], timeout: TimeInterval = 15) async throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["git"] + args
+        process.currentDirectoryURL = URL(fileURLWithPath: repoPath)
+        let out = Pipe(), err = Pipe()
+        process.standardOutput = out
+        process.standardError = err
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let done = RunGitDone()
+            process.terminationHandler = { p in
+                if done.exchange(true) { return }
                 let output = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-                let errorOutput = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-                guard process.terminationStatus == 0 else {
-                    continuation.resume(throwing: GitError.commandFailed(errorOutput.trimmingCharacters(in: .whitespacesAndNewlines)))
-                    return
+                let errOutput = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+                if p.terminationStatus == 0 {
+                    continuation.resume(returning: output)
+                } else {
+                    continuation.resume(throwing: GitError.commandFailed(errOutput.trimmingCharacters(in: .whitespacesAndNewlines)))
                 }
-                continuation.resume(returning: output)
             }
             do {
                 try process.run()
+                DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { [process] in
+                    if done.exchange(true) { return }
+                    process.terminate()
+                    continuation.resume(throwing: GitError.commandFailed("Git command timed out after \(Int(timeout))s"))
+                }
             } catch {
+                if done.exchange(true) { return }
                 continuation.resume(throwing: error)
             }
         }

@@ -65,11 +65,12 @@ struct ActivePRsView: View {
                         }
                         .buttonStyle(.plain)
                         .cursor(.pointingHand)
-                        .popover(item: $selectedPR) { selected in
-                            if selected.id == pr.id {
-                                PRDetailView(pr: pr, gitHubId: gitHubId, optimisticDraft: optimisticDrafts[pr.id]) { newDraft in
-                                    optimisticDrafts[pr.id] = newDraft
-                                }
+                        .popover(isPresented: Binding(
+                            get: { selectedPR?.id == pr.id },
+                            set: { if !$0 { selectedPR = nil } }
+                        )) {
+                            PRDetailView(pr: pr, gitHubId: gitHubId, optimisticDraft: optimisticDrafts[pr.id]) { newDraft in
+                                optimisticDrafts[pr.id] = newDraft
                             }
                         }
                     }
