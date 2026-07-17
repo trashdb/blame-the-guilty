@@ -45,7 +45,7 @@ class ConflictWatcherService {
 
     // Called when a real-time merge event arrives
     private func handleMerge(repo: String) {
-        let workspacePath = UserDefaults.standard.string(forKey: "workspacePath") ?? "\(NSHomeDirectory())/Desktop/dev"
+        let workspacePath = UserDefaults.standard.string(forKey: "workspacePath") ?? TeamDefaults.workspacePath
         Task {
             guard let repoPath = await gitService.findRepoPath(ownerRepo: repo, workspacePath: workspacePath) else {
                 os_log("[ConflictWatcher] Repo not found locally: %{public}@", log: conflictLog, type: .debug, repo)
@@ -56,7 +56,7 @@ class ConflictWatcherService {
     }
 
     private func checkAllRepos() async {
-        let workspacePath = UserDefaults.standard.string(forKey: "workspacePath") ?? "\(NSHomeDirectory())/Desktop/dev"
+        let workspacePath = UserDefaults.standard.string(forKey: "workspacePath") ?? TeamDefaults.workspacePath
         let repos = GitService.discoverRepos(workspacePath: workspacePath)
         for repoPath in repos {
             let fullName = await gitService.repoFullName(repoPath: repoPath) ?? GitService.repoName(from: repoPath)

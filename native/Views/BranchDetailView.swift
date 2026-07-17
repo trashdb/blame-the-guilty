@@ -9,6 +9,7 @@ struct BranchDetailView: View {
 
     @State private var deleting = false
     @State private var checkingOut = false
+    @State private var checkoutSuccess = false
     @State private var deleteError: String?
     @State private var showCreatePR = false
     private let git = GitService()
@@ -93,11 +94,17 @@ struct BranchDetailView: View {
                     }
                 }
 
-                if info.isLocal && !info.isCurrent {
-                    actionButton("Checkout", color: .blue) {
+                if info.isLocal && !info.isCurrent && !checkoutSuccess {
+                    actionButton(checkingOut ? "Checking out…" : "Checkout", color: .blue) {
                         Task { await doCheckout() }
                     }
                     .disabled(checkingOut)
+                }
+
+                if checkoutSuccess {
+                    Text("✓ Checked out")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.green)
                 }
 
                 if info.isLocal && !info.isCurrent && !info.isDefault {
@@ -151,7 +158,7 @@ struct BranchDetailView: View {
             try await git.checkoutBranch(repoPath: info.repoPath, name: info.name)
             _ = await git.pullCurrentBranch(repoPath: info.repoPath)
             openRider()
-            dismiss()
+            checkoutSuccess = true
             await MainActor.run { onCheckout?() }
         } catch {}
         checkingOut = false
@@ -185,11 +192,7 @@ struct BranchDetailView: View {
         let file = solutionFile(named: repoName, in: repoURL)
             ?? findSolutionFile(in: repoURL, extension: "slnx")
             ?? findSolutionFile(in: repoURL, extension: "sln")
-            ?? repoURL
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        task.arguments = ["open", "-a", "Rider", file.path]
-        try? task.run()
+        IDEOpener.openSolution(repoPath: info.repoPath) { _ in file?.path }
     }
 
     private func solutionFile(named name: String, in dir: URL) -> URL? {

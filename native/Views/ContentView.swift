@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 struct ContentView: View {
@@ -6,6 +7,8 @@ struct ContentView: View {
     @State private var keepSignedIn = true
     @State private var isLoading = false
     @State private var loginError: String?
+    @State private var showQuickSearch = false
+    @FocusState private var quickSearchFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -133,7 +136,7 @@ struct ContentView: View {
 
                 if signalR.isLoggedIn {
                     Button {
-                        let repo = UserDefaults.standard.string(forKey: "favoriteRepo") ?? "dcp-loyalty-monorepo"
+                        let repo = UserDefaults.standard.string(forKey: "favoriteRepo") ?? TeamDefaults.favoriteRepo
                         if let u = URL(string: "https://github.com/easyjet-dev/\(repo)/pulls") {
                             NSWorkspace.shared.open(u)
                         }
@@ -211,7 +214,140 @@ struct ContentView: View {
         }
         .frame(width: 400, height: 820, alignment: .top)
         .background(.regularMaterial)
-        .onAppear { signalR.restoreSession() }
+        .onAppear {
+            signalR.restoreSession()
+            Task { await scanCurrentBranches() }
+            setupQuickSearchShortcut()
+        }
+        .onChange(of: signalR.activePRs) { updateMenuBarBadge($0) }
+        .overlay(QuickSearchView(
+            isPresented: $showQuickSearch,
+            actions: signalR.isLoggedIn ? quickSearchActions : [],
+            signalR: signalR,
+            gitHubId: signalR.userGitHubId,
+            backendUrl: signalR.baseUrl
+        ))
+    }
+
+    private var quickSearchActions: [QuickSearchAction] {
+        var actions: [QuickSearchAction] = []
+
+        let repo = UserDefaults.standard.string(forKey: "favoriteRepo") ?? TeamDefaults.favoriteRepo
+
+        actions.append(QuickSearchAction(
+            id: "jira-board", title: "Open Jira Board",
+            subtitle: "Browse all tickets",
+            icon: "link", category: .jira
+        ) {
+            let url = UserDefaults.standard.string(forKey: "jiraBoardViewUrl") ?? TeamDefaults.jiraBoardViewUrl
+            if let u = URL(string: url) { NSWorkspace.shared.open(u) }
+        })
+
+        actions.append(QuickSearchAction(
+            id: "daily-notes", title: "Daily Notes",
+            subtitle: "Take notes during standup — AI extracts action items",
+            icon: "note.text", category: .app
+        ) {
+            DailyNoteManager.shared.show(
+                gitHubId: self.signalR.userGitHubId,
+                backendUrl: self.signalR.baseUrl
+            )
+        })
+
+        // Dynamic branch-context actions
+        let branches = MenuBarBadgeService.shared.currentBranches
+        for branch in branches {
+            actions.append(QuickSearchAction(
+                id: "create-pr-\(branch.repoPath)-\(branch.name)",
+                title: "Create PR from \(branch.name)",
+                subtitle: "\(branch.repoName) → open PR preview",
+                icon: "plus.circle", category: .branch
+            ) {
+                let info = BranchInfo(
+                    name: branch.name, repoPath: branch.repoPath,
+                    repoName: branch.repoName,
+                    isCurrent: true, isLocal: true,
+                    isMerged: false, isDefault: false
+                )
+                BranchDetailPanelManager.shared.show(
+                    info: info,
+                    gitHubId: self.signalR.userGitHubId,
+                    backendUrl: self.signalR.baseUrl,
+                    onCheckout: nil
+                )
+            })
+            actions.append(QuickSearchAction(
+                id: "open-ide-\(branch.repoPath)",
+                title: "Open \(branch.repoName) in IDE",
+                subtitle: branch.repoPath,
+                icon: "chevron.left.forwardslash.chevron.right", category: .repo
+            ) {
+                IDEOpener.openRepo(repoPath: branch.repoPath)
+            })
+            if let ticket = branch.ticketNumber {
+                actions.append(QuickSearchAction(
+                    id: "jira-ticket-\(ticket)",
+                    title: "Open Jira ticket \(ticket)",
+                    subtitle: "\(branch.repoName) — current branch",
+                    icon: "link", category: .jira
+                ) {
+                    let base = UserDefaults.standard.string(forKey: "jiraBoardUrl") ?? TeamDefaults.jiraBoardUrl
+                    if let u = URL(string: "\(base)\(ticket)") {
+                        NSWorkspace.shared.open(u)
+                    }
+                })
+            }
+        }
+        // Always show checkout main action for favorite repo
+        if let fav = branches.first(where: { $0.repoName == repo }) {
+            actions.append(QuickSearchAction(
+                id: "checkout-main-\(fav.repoPath)",
+                title: "Checkout main in \(fav.repoName)",
+                subtitle: "Switch to main branch",
+                icon: "arrow.triangle.branch", category: .branch
+            ) {
+                Task {
+                    let git = GitService()
+                    try? await git.checkoutBranch(repoPath: fav.repoPath, name: "main")
+                    try? await git.pullCurrentBranch(repoPath: fav.repoPath)
+                    await self.scanCurrentBranches()
+                }
+            })
+        }
+
+        return actions
+    }
+
+    private func setupQuickSearchShortcut() {
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers == "k" {
+                if let window = NSApp.keyWindow, window.level == .floating || window == NSApp.keyWindow {
+                    self.showQuickSearch.toggle()
+                    return nil
+                }
+            }
+            return event
+        }
+    }
+
+    private func scanCurrentBranches() async {
+        let path = UserDefaults.standard.string(forKey: "workspacePath") ?? TeamDefaults.workspacePath
+        let branches = await GitService.scanCurrentBranches(workspacePath: path)
+        await MainActor.run {
+            MenuBarBadgeService.shared.currentBranches = branches
+        }
+    }
+
+    private func updateMenuBarBadge(_ prs: [PullRequest]) {
+        let badge = MenuBarBadgeService.shared
+        badge.activePRCount = prs.count
+        badge.failedPRCount = prs.filter { $0.ciStatus == "failed" || $0.conclusion == "failure" }.count
+        badge.draftCount = prs.filter { $0.draft }.count
+        badge.waitingCount = prs.filter { $0.ciStatus == "waiting" }.count
+        badge.reviewCount = prs.filter { $0.ciStatus == "review" }.count
+        badge.readyCount = prs.filter { $0.ciStatus == "ready" || $0.ciStatus == "" }.count
+        badge.mergedCount = prs.filter { $0.isMerged }.count
+        badge.runningWorkflowCount = signalR.runningWorkflows.count
     }
 
     private func login() {

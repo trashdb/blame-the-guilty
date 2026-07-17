@@ -33,7 +33,7 @@ public class PullRequestsController : ControllerBase
             return Unauthorized(new { error = "No token" });
 
         var prs = await _db.PullRequestEvents
-            .Where(e => (e.Status == "open" || e.Status == "in_progress") && e.AuthorGitHubId == gitHubId)
+            .Where(e => ((e.Status == "open" || e.Status == "in_progress") || (e.Status == "merged" && e.OccurredAt >= DateTime.UtcNow.AddHours(-24))) && e.AuthorGitHubId == gitHubId)
             .OrderByDescending(e => e.OccurredAt)
             .Select(e => new
             {
@@ -49,7 +49,10 @@ public class PullRequestsController : ControllerBase
                 e.ReviewApproved,
                 e.LastCommentBy,
                 e.LastCommentBody,
-                e.LastCommentAt
+                e.LastCommentAt,
+                e.LastCommentUrl,
+                e.LastReviewFilePath,
+                e.LastReviewLine
             })
             .ToListAsync();
 
@@ -90,7 +93,7 @@ public class PullRequestsController : ControllerBase
         var results = new List<object>();
         foreach (var pr in prs)
         {
-            var (draft, mergeable, headSha) = prData.GetValueOrDefault(pr.PrNumber);
+            var (_, mergeable, headSha) = prData.GetValueOrDefault(pr.PrNumber);
 
             string ciStatus = "review";
             if (headSha != null)
@@ -132,7 +135,10 @@ public class PullRequestsController : ControllerBase
                 ReviewApproved = pr.ReviewApproved,
                 LastCommentBy = pr.LastCommentBy,
                 LastCommentBody = pr.LastCommentBody,
-                LastCommentAt = pr.LastCommentAt
+                LastCommentAt = pr.LastCommentAt,
+                LastCommentUrl = pr.LastCommentUrl,
+                LastReviewFilePath = pr.LastReviewFilePath,
+                LastReviewLine = pr.LastReviewLine
             });
         }
 
@@ -208,7 +214,10 @@ public class PullRequestsController : ControllerBase
             draft = prEvent?.Draft ?? false,
             lastCommentBy = prEvent?.LastCommentBy,
             lastCommentBody = prEvent?.LastCommentBody,
-            lastCommentAt = prEvent?.LastCommentAt
+            lastCommentAt = prEvent?.LastCommentAt,
+            lastCommentUrl = prEvent?.LastCommentUrl,
+            lastReviewFilePath = prEvent?.LastReviewFilePath,
+            lastReviewLine = prEvent?.LastReviewLine
         });
     }
 
@@ -301,28 +310,61 @@ public class PullRequestsController : ControllerBase
         if (string.IsNullOrEmpty(token))
             return Unauthorized(new { error = "No access token found" });
 
-        var request = new HttpRequestMessage(HttpMethod.Patch,
-            $"https://api.github.com/repos/{repo}/pulls/{prNumber}");
-        request.Headers.UserAgent.ParseAdd("BlameTheGuilty");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-        request.Content = new StringContent(
-            draft
-                ? JsonSerializer.Serialize(new { state = "open", draft = true })
-                : JsonSerializer.Serialize(new { draft = false }),
+        Console.WriteLine($"[SetDraft] PR #{prNumber} in {repo} set draft={draft}, tokenSource={(user?.UserPatToken != null ? "UserPatToken" : user?.AccessToken != null ? "AccessToken" : "SharedPat")}");
+
+        // Step 1: Get PR node_id via REST API
+        string nodeId;
+        {
+            var getReq = new HttpRequestMessage(HttpMethod.Get,
+                $"https://api.github.com/repos/{repo}/pulls/{prNumber}");
+            getReq.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+            getReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            HttpResponseMessage getResp;
+            try { getResp = await _githubClient.SendAsync(getReq); }
+            catch (Exception ex) { return StatusCode(502, new { error = $"GitHub API error: {ex.Message}" }); }
+            var getJson = await getResp.Content.ReadAsStringAsync();
+            if (!getResp.IsSuccessStatusCode)
+                return StatusCode((int)getResp.StatusCode, new { error = "Failed to fetch PR", detail = getJson });
+            using var getDoc = JsonDocument.Parse(getJson);
+            nodeId = getDoc.RootElement.GetProperty("node_id").GetString() ?? "";
+            Console.WriteLine($"[SetDraft] Got node_id={nodeId}");
+        }
+
+        // Step 2: Use GraphQL mutation to change draft status
+        // REST API silently ignores the "draft" field — only GraphQL mutations work.
+        var mutationName = draft ? "convertPullRequestToDraft" : "markPullRequestReadyForReview";
+        var gql = $@"mutation {{ {mutationName}(input: {{ pullRequestId: ""{nodeId}"" }}) {{ pullRequest {{ id isDraft }} }} }}";
+        Console.WriteLine($"[SetDraft] GraphQL mutation: {mutationName}");
+
+        var gqlReq = new HttpRequestMessage(HttpMethod.Post, "https://api.github.com/graphql");
+        gqlReq.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        gqlReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        gqlReq.Content = new StringContent(
+            JsonSerializer.Serialize(new { query = gql }),
             System.Text.Encoding.UTF8,
             "application/json");
 
-        HttpResponseMessage response;
-        try { response = await _githubClient.SendAsync(request); }
-        catch (Exception ex) { return StatusCode(502, new { error = $"GitHub API error: {ex.Message}" }); }
+        HttpResponseMessage gqlResp;
+        try { gqlResp = await _githubClient.SendAsync(gqlReq); }
+        catch (Exception ex) { return StatusCode(502, new { error = $"GitHub GraphQL error: {ex.Message}" }); }
 
-        var json = await response.Content.ReadAsStringAsync();
-        var data = JsonSerializer.Deserialize<JsonElement>(json);
+        var gqlJson = await gqlResp.Content.ReadAsStringAsync();
+        Console.WriteLine($"[SetDraft] GraphQL replied {(int)gqlResp.StatusCode}: {gqlJson[..Math.Min(gqlJson.Length, 500)]}");
 
-        if (!response.IsSuccessStatusCode)
+        if (!gqlResp.IsSuccessStatusCode)
         {
-            var msg = data.TryGetProperty("message", out var m) ? m.GetString() : "Unknown error";
-            return StatusCode((int)response.StatusCode, new { error = msg });
+            var msg = "";
+            try { using var d = JsonDocument.Parse(gqlJson); msg = d.RootElement.TryGetProperty("message", out var m) ? m.GetString() ?? "" : ""; } catch { }
+            return StatusCode((int)gqlResp.StatusCode, new { error = msg, detail = gqlJson });
+        }
+
+        // Check for GraphQL-level errors
+        using var gqlDoc = JsonDocument.Parse(gqlJson);
+        if (gqlDoc.RootElement.TryGetProperty("errors", out var errors) && errors.GetArrayLength() > 0)
+        {
+            var firstErr = errors[0].TryGetProperty("message", out var em) ? em.GetString() ?? "" : "Unknown GraphQL error";
+            Console.WriteLine($"[SetDraft] GraphQL errors: {gqlJson}");
+            return StatusCode(422, new { error = firstErr, detail = gqlJson });
         }
 
         // Update DB
@@ -334,6 +376,7 @@ public class PullRequestsController : ControllerBase
         {
             prEvent.Draft = draft;
             await _db.SaveChangesAsync();
+            Console.WriteLine($"[SetDraft] DB updated: PR #{prNumber} draft={draft}");
         }
 
         await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");

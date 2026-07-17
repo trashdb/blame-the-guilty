@@ -221,7 +221,10 @@ class SignalRService: ObservableObject {
                             reviewApproved: pr.reviewApproved ?? false,
                             lastCommentBy: pr.lastCommentBy,
                             lastCommentBody: pr.lastCommentBody,
-                            lastCommentAt: pr.lastCommentAt
+                            lastCommentAt: pr.lastCommentAt,
+                            lastCommentUrl: nil,
+                            lastReviewFilePath: nil,
+                            lastReviewLine: nil
                         )
                     }
                 }
@@ -474,6 +477,7 @@ class SignalRService: ObservableObject {
         let commenterLogin = data["commenterLogin"] as? String ?? "someone"
         let title = data["title"] as? String ?? ""
         let commentBody = data["commentBody"] as? String ?? ""
+        let commentUrl = (data["commentUrl"] as? String).flatMap { URL(string: $0) }
 
         Task { @MainActor in
             let preview = String(commentBody.prefix(120)).replacingOccurrences(of: "\n", with: " ")
@@ -482,7 +486,7 @@ class SignalRService: ObservableObject {
                 title: "PR #\(prNumber) Commented 💬",
                 body: body,
                 subtitle: shortRepo(repo),
-                actionURL: URL(string: "https://github.com/\(repo)/pull/\(prNumber)"),
+                actionURL: commentUrl ?? URL(string: "https://github.com/\(repo)/pull/\(prNumber)"),
                 style: .info
             )
             await syncPRsFromApi(gitHubId: gitHubId)

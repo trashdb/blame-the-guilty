@@ -55,6 +55,14 @@ public class PullRequestEvent
     public DateTime? LastCommentAt { get; set; }
 
     [MaxLength(500)]
+    public string? LastCommentUrl { get; set; }
+
+    [MaxLength(500)]
+    public string? LastReviewFilePath { get; set; }
+
+    public int? LastReviewLine { get; set; }
+
+    [MaxLength(500)]
     public string? ExtraInfo { get; set; }
 
     [MaxLength(40)]

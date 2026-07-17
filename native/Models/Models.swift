@@ -1,6 +1,8 @@
 import Foundation
 
-let backendUrl = "https://moonlike-silenced-sprung.ngrok-free.dev"
+var backendUrl: String {
+    UserDefaults.standard.string(forKey: "backendUrl") ?? TeamDefaults.backendUrl
+}
 
 func shortRepo(_ full: String) -> String {
     if let slash = full.firstIndex(of: "/") {
@@ -44,7 +46,7 @@ struct WorkflowRun: Identifiable, Codable {
 }
 
 struct PullRequest: Identifiable, Equatable {
-    let id = UUID()
+    var id: String { "\(repo)#\(prNumber)" }
     let prNumber: Int64
     let title: String
     let repo: String
@@ -60,6 +62,9 @@ struct PullRequest: Identifiable, Equatable {
     let lastCommentBy: String?
     let lastCommentBody: String?
     let lastCommentAt: Date?
+    let lastCommentUrl: String?
+    let lastReviewFilePath: String?
+    let lastReviewLine: Int?
 
     var prUrl: URL { htmlUrl ?? URL(string: "https://github.com/\(repo)/pull/\(prNumber)")! }
     var isMerged: Bool { status == "merged" }
@@ -110,7 +115,7 @@ struct BranchInfo: Identifiable {
     var ticketNumber: String? { extractTicketNumber(from: name) }
     var jiraUrl: URL? {
         guard let ticket = ticketNumber else { return nil }
-        let url = UserDefaults.standard.string(forKey: "jiraBoardUrl") ?? "https://easyjet.atlassian.net/browse/"
+        let url = UserDefaults.standard.string(forKey: "jiraBoardUrl") ?? TeamDefaults.jiraBoardUrl
         return URL(string: "\(url)\(ticket)")
     }
 }

@@ -7,6 +7,7 @@ private struct PRDetailsResponse: Decodable {
     let mergeableState: String?
     let behindBy: Int?
     let aheadBy: Int?
+    let draft: Bool?
 }
 
 private struct MergeResponse: Decodable {
@@ -20,18 +21,13 @@ private struct UpdateBranchResponse: Decodable {
     let message: String?
 }
 
-private struct DraftResponse: Decodable {
-    let success: Bool?
-    let error: String?
-}
-
 struct PRDetailView: View {
     let pr: PullRequest
     let gitHubId: Int64
+    let onDraftChanged: ((Bool) -> Void)?
 
     @State private var behindBy: Int?
     @State private var aheadBy: Int?
-    @State private var loadingDetails = false
     @State private var detailError: String?
     @State private var merging = false
     @State private var mergeResult: String?
@@ -45,17 +41,14 @@ struct PRDetailView: View {
     @State private var draftError: String?
     @State private var localDraft: Bool
 
-    init(pr: PullRequest, gitHubId: Int64) {
+    init(pr: PullRequest, gitHubId: Int64, optimisticDraft: Bool? = nil, onDraftChanged: ((Bool) -> Void)? = nil) {
         self.pr = pr
         self.gitHubId = gitHubId
-        _localDraft = State(initialValue: pr.draft)
+        self.onDraftChanged = onDraftChanged
+        _localDraft = State(initialValue: optimisticDraft ?? pr.draft)
     }
 
-    @State private var detailRefreshTimer: Timer?
-
-    @AppStorage("workspacePath") private var workspacePath: String = {
-        NSHomeDirectory() + "/Desktop/dev"
-    }()
+    @AppStorage("workspacePath") private var workspacePath = TeamDefaults.workspacePath
 
     var canMerge: Bool {
         !localDraft && pr.ciStatus == "ready" && pr.reviewApproved
@@ -118,66 +111,70 @@ struct PRDetailView: View {
             HStack(spacing: 4) {
                 Spacer()
                 linkButton("Open PR", url: pr.prUrl)
-                linkButton("Compare", url: compareUrl)
-                linkButton("Checks", url: checksUrl)
+                if !pr.isMerged {
+                    linkButton("Compare", url: compareUrl)
+                    linkButton("Checks", url: checksUrl)
+                }
             }
 
-            HStack(spacing: 6) {
-                let m = mergeableInfo
-                Text(m.label)
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(m.color)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(m.color.opacity(0.2), in: RoundedRectangle(cornerRadius: 4))
+            if !pr.isMerged {
+                HStack(spacing: 6) {
+                        let m = mergeableInfo
+                        Text(m.label)
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(m.color)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(m.color.opacity(0.2), in: RoundedRectangle(cornerRadius: 4))
 
-                let c = ciInfo
-                Text(c.label)
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(c.color)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(c.color.opacity(0.2), in: RoundedRectangle(cornerRadius: 4))
+                        let c = ciInfo
+                        Text(c.label)
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(c.color)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(c.color.opacity(0.2), in: RoundedRectangle(cornerRadius: 4))
 
-                if let cl = conclusionInfo {
-                    Text(cl.label)
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(cl.color)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(cl.color.opacity(0.2), in: RoundedRectangle(cornerRadius: 4))
+                        if let cl = conclusionInfo {
+                            Text(cl.label)
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(cl.color)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(cl.color.opacity(0.2), in: RoundedRectangle(cornerRadius: 4))
+                        }
+
+                        if let a = approvalInfo {
+                            Text(a.label)
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(a.color)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(a.color.opacity(0.2), in: RoundedRectangle(cornerRadius: 4))
+                        }
+
+                        Spacer()
+                    }
                 }
 
-                if let a = approvalInfo {
-                    Text(a.label)
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(a.color)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(a.color.opacity(0.2), in: RoundedRectangle(cornerRadius: 4))
+                Text(pr.title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color(white: 0.9))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 4) {
+                    Text(shortRepo(pr.repo))
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                    Text("→")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                    Text(pr.baseBranch)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.blue)
                 }
 
-                Spacer()
-            }
-
-            Text(pr.title)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color(white: 0.9))
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: 4) {
-                Text(shortRepo(pr.repo))
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                Text("→")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.tertiary)
-                Text(pr.baseBranch)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.blue)
-            }
-
-            HStack(spacing: 4) {
+                HStack(spacing: 4) {
                 Text("head:")
                     .font(.system(size: 10))
                     .foregroundStyle(.tertiary)
@@ -190,159 +187,175 @@ struct PRDetailView: View {
                     .foregroundStyle(.secondary)
             }
 
-            HStack(spacing: 6) {
-                if localDraft {
-                    HStack(spacing: 4) {
-                        Image(systemName: "pencil")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.gray)
-                        Text("Draft")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.gray)
-                    }
-                    if pr.status != "merged" {
-                        draftButton(makeDraft: false, label: "Mark Ready", color: .blue)
-                    }
-                } else if pr.status != "merged" {
-                    draftButton(makeDraft: true, label: "Convert to Draft", color: .gray)
-                }
-                if let err = draftError {
-                    Text(err)
-                        .font(.system(size: 9))
-                        .foregroundStyle(.red)
-                }
-            }
-
-            if let commenter = pr.lastCommentBy, let body = pr.lastCommentBody {
+            if !pr.isMerged {
                 HStack(spacing: 6) {
-                    Image(systemName: "bubble.left")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.blue)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("@\(commenter)")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.blue)
-                        Text(String(body.prefix(120)).replacingOccurrences(of: "\n", with: " "))
-                            .font(.system(size: 9))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                    }
-                }
-                .padding(.horizontal, 6)
-                .padding(.vertical, 4)
-                .background(.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 4))
-            }
-
-            if loadingDetails {
-                HStack(spacing: 6) {
-                    ProgressView()
-                        .scaleEffect(0.5)
-                    Text("Loading details...")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
-                }
-            } else if let error = detailError {
-                Text(error)
-                    .font(.system(size: 9))
-                    .foregroundStyle(.red)
-            } else if let behind = behindBy, let ahead = aheadBy {
-                Divider()
-                HStack(spacing: 12) {
-                    if behind > 0 {
-                        Label("\(behind) behind", systemImage: "arrow.down")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.orange)
-                    } else {
-                        Label("Up to date", systemImage: "checkmark")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.green)
-                    }
-                    if ahead > 0 {
-                        Label("\(ahead) ahead", systemImage: "arrow.up")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.blue)
-                    }
-                    Spacer()
-                    if behind > 0 {
-                        if updatingBranch {
-                            ProgressView()
-                                .scaleEffect(0.5)
-                                .frame(width: 12)
-                        } else if let result = branchUpdateResult {
-                            Text(result)
+                    if localDraft {
+                        HStack(spacing: 4) {
+                            Image(systemName: "pencil")
                                 .font(.system(size: 9))
-                                .foregroundStyle(.green)
-                        } else {
-                            Button {
-                                performUpdateBranch()
-                            } label: {
-                                Text("Update branch")
-                                    .font(.system(size: 9, weight: .semibold))
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 3)
-                                    .background(.orange, in: RoundedRectangle(cornerRadius: 4))
-                            }
-                            .buttonStyle(.plain)
-                            .cursor(.pointingHand)
+                                .foregroundStyle(.gray)
+                            Text("Draft")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.gray)
                         }
+                        draftButton(makeDraft: false, label: "Mark Ready", color: .blue)
+                    } else {
+                        draftButton(makeDraft: true, label: "Convert to Draft", color: .gray)
                     }
-                }
-                if let err = branchUpdateError {
-                    Text(err)
-                        .font(.system(size: 9))
-                        .foregroundStyle(.red)
-                }
-            }
-
-            if canMerge, pr.status != "merged" {
-                Divider()
-                if let result = mergeResult {
-                    HStack(spacing: 4) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.green)
-                        Text(result)
-                            .font(.system(size: 10))
-                            .foregroundStyle(.green)
-                    }
-                } else if let err = mergeError {
-                    HStack(spacing: 4) {
-                        Image(systemName: "exclamationmark.circle.fill")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.red)
+                    if let err = draftError {
                         Text(err)
                             .font(.system(size: 9))
                             .foregroundStyle(.red)
-                            .lineLimit(2)
                     }
                 }
-                HStack(spacing: 6) {
-                    if merging {
-                        ProgressView()
-                            .scaleEffect(0.4)
-                            .frame(width: 12)
+
+                if let commenter = pr.lastCommentBy, let body = pr.lastCommentBody {
+                    HStack(spacing: 4) {
+                        Button {
+                            let urlString = pr.lastCommentUrl ?? "https://github.com/\(pr.repo)/pull/\(pr.prNumber)"
+                            if let url = URL(string: urlString) { NSWorkspace.shared.open(url) }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "bubble.left")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(.blue)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    HStack(spacing: 4) {
+                                        Text("@\(commenter)")
+                                            .font(.system(size: 10, weight: .medium))
+                                            .foregroundStyle(.blue)
+                                        if let file = pr.lastReviewFilePath {
+                                            Text(shortFile(file))
+                                                .font(.system(size: 8, design: .monospaced))
+                                                .foregroundStyle(.tertiary)
+                                            if let line = pr.lastReviewLine {
+                                                Text(":\(line)")
+                                                    .font(.system(size: 8, design: .monospaced))
+                                                    .foregroundStyle(.tertiary)
+                                            }
+                                        }
+                                    }
+                                    Text(String(body.prefix(120)).replacingOccurrences(of: "\n", with: " "))
+                                        .font(.system(size: 9))
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(2)
+                                }
+                            }
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 4)
+                            .background(.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 4))
+                        }
+                        .buttonStyle(.plain)
+                        .cursor(.pointingHand)
+
+                        if let file = pr.lastReviewFilePath {
+                            Button {
+                                openInRider(file: file, line: pr.lastReviewLine)
+                            } label: {
+                                Image(systemName: "arrowtriangle.right.circle")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.orange)
+                            }
+                            .buttonStyle(.plain)
+                            .cursor(.pointingHand)
+                            .help("Open in \(UserDefaults.standard.string(forKey: "defaultIDE") ?? "Rider")")
+                        }
                     }
-                    mergeMethodPicker
-                    mergeButton
+                }
+
+                if let behind = behindBy, let ahead = aheadBy {
+                    Divider()
+                    HStack(spacing: 12) {
+                        if behind > 0 {
+                            Label("\(behind) behind", systemImage: "arrow.down")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.orange)
+                        } else {
+                            Label("Up to date", systemImage: "checkmark")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.green)
+                        }
+                        if ahead > 0 {
+                            Label("\(ahead) ahead", systemImage: "arrow.up")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.blue)
+                        }
+                        Spacer()
+                        if behind > 0 {
+                            if updatingBranch {
+                                ProgressView()
+                                    .scaleEffect(0.5)
+                                    .frame(width: 12)
+                            } else if let result = branchUpdateResult {
+                                Text(result)
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(.green)
+                            } else {
+                                Button {
+                                    performUpdateBranch()
+                                } label: {
+                                    Text("Update branch")
+                                        .font(.system(size: 9, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 3)
+                                        .background(.orange, in: RoundedRectangle(cornerRadius: 4))
+                                }
+                                .buttonStyle(.plain)
+                                .cursor(.pointingHand)
+                            }
+                        }
+                    }
+                    if let err = branchUpdateError {
+                        Text(err)
+                            .font(.system(size: 9))
+                            .foregroundStyle(.red)
+                    }
+                }
+                if let error = detailError {
+                    Text(error)
+                        .font(.system(size: 9))
+                        .foregroundStyle(.red)
+                }
+
+                if canMerge {
+                    Divider()
+                    if let result = mergeResult {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.green)
+                            Text(result)
+                                .font(.system(size: 10))
+                                .foregroundStyle(.green)
+                        }
+                    } else if let err = mergeError {
+                        HStack(spacing: 4) {
+                            Image(systemName: "exclamationmark.circle.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.red)
+                            Text(err)
+                                .font(.system(size: 9))
+                                .foregroundStyle(.red)
+                                .lineLimit(2)
+                        }
+                    }
+                    HStack(spacing: 6) {
+                        if merging {
+                            ProgressView()
+                                .scaleEffect(0.4)
+                                .frame(width: 12)
+                        }
+                        mergeMethodPicker
+                        mergeButton
+                    }
                 }
             }
-
             Spacer()
         }
         .padding(16)
-        .frame(width: 320, height: 340)
-        .task(id: pr.id) {
-            loadDetails()
-            detailRefreshTimer?.invalidate()
-            detailRefreshTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
-                loadDetails()
-            }
-        }
-        .onDisappear {
-            detailRefreshTimer?.invalidate()
-            detailRefreshTimer = nil
-        }
+        .frame(width: 320, height: 300)
+        .onAppear { loadDetails() }
     }
 
     private func linkButton(_ label: String, url: URL) -> some View {
@@ -447,13 +460,20 @@ struct PRDetailView: View {
     }
 
     private func performToggleDraft(_ makeDraft: Bool) {
-        togglingDraft = true
+        // Optimistic update: flip immediately before the API call
+        let previousDraft = localDraft
+        localDraft = makeDraft
+        onDraftChanged?(makeDraft)
         draftError = nil
+        togglingDraft = true
+
         let repoStr = pr.repo
         let repoEscaped = repoStr.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? repoStr
         let urlStr = "\(backendUrl)/api/pullrequests/\(pr.prNumber)/draft?repo=\(repoEscaped)&gitHubId=\(gitHubId)&draft=\(makeDraft ? "true" : "false")"
         os_log("[Draft] URL: %{public}@", log: draftLog, type: .debug, urlStr)
         guard let url = URL(string: urlStr) else {
+            localDraft = previousDraft
+            onDraftChanged?(previousDraft)
             draftError = "Invalid URL"
             os_log("[Draft] Invalid URL: %{public}@", log: draftLog, type: .error, urlStr)
             togglingDraft = false
@@ -465,31 +485,22 @@ struct PRDetailView: View {
             DispatchQueue.main.async {
                 self.togglingDraft = false
                 if let err {
+                    self.localDraft = previousDraft
+                    self.onDraftChanged?(previousDraft)
                     self.draftError = err.localizedDescription
-                    os_log("[Draft] Network error: %{public}@", log: draftLog, type: .error, err.localizedDescription)
+                    os_log("[Draft] ❌ Network error, reverted to %d: %{public}@", log: draftLog, type: .error, previousDraft, err.localizedDescription)
                     return
                 }
                 let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
                 let body = data.flatMap { String(data: $0, encoding: .utf8) } ?? "nil"
                 os_log("[Draft] HTTP %d: %{public}@", log: draftLog, type: .debug, status, String(body.prefix(500)))
-                guard let data else {
-                    // No body — assume success if status is 2xx
-                    if status >= 200 && status < 300 {
-                        self.localDraft = makeDraft
-                    }
-                    return
-                }
-                if let decoded = try? JSONDecoder().decode(DraftResponse.self, from: data) {
-                    if let error = decoded.error {
-                        self.draftError = error
-                    } else if decoded.success == true || (status >= 200 && status < 300) {
-                        self.localDraft = makeDraft
-                    }
-                } else if status >= 400 {
+                if status >= 400 {
+                    self.localDraft = previousDraft
+                    self.onDraftChanged?(previousDraft)
                     self.draftError = "HTTP \(status): \(body.prefix(200))"
-                } else {
-                    self.localDraft = makeDraft
+                    os_log("[Draft] ❌ HTTP %d, reverted to %d", log: draftLog, type: .error, status, previousDraft)
                 }
+                // 2xx success → localDraft stays as makeDraft (already set optimistically)
             }
         }.resume()
     }
@@ -538,10 +549,8 @@ struct PRDetailView: View {
     private func loadDetails() {
         let repoEscaped = pr.repo.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? pr.repo
         guard let url = URL(string: "\(backendUrl)/api/pullrequests/\(pr.prNumber)/detail?repo=\(repoEscaped)&gitHubId=\(gitHubId)") else { return }
-        loadingDetails = true
         URLSession.shared.dataTask(with: url) { data, resp, err in
             DispatchQueue.main.async {
-                self.loadingDetails = false
                 if let err { self.detailError = err.localizedDescription; return }
                 guard let data else { return }
                 if let decoded = try? JSONDecoder().decode(PRDetailsResponse.self, from: data) {
@@ -551,6 +560,12 @@ struct PRDetailView: View {
                         self.branchUpdateResult = nil
                         self.branchUpdateError = nil
                     }
+                    if let backendDraft = decoded.draft, !self.togglingDraft {
+                        if backendDraft != self.localDraft {
+                            self.localDraft = backendDraft
+                            self.onDraftChanged?(backendDraft)
+                        }
+                    }
                 } else {
                     let raw = String(data: data, encoding: .utf8) ?? "non-utf8"
                     self.detailError = "Parse error: \(raw.prefix(200))"
@@ -558,4 +573,21 @@ struct PRDetailView: View {
             }
         }.resume()
     }
+
+    private func openInRider(file: String, line: Int?) {
+        Task {
+            let gitService = GitService()
+            guard let repoPath = await gitService.findRepoPath(ownerRepo: pr.repo, workspacePath: workspacePath) else {
+                os_log("[PRDetail] Could not find repo %{public}@ in workspace", log: draftLog, type: .error, pr.repo)
+                return
+            }
+            let fullPath = (repoPath as NSString).appendingPathComponent(file)
+            IDEOpener.openFile(filePath: fullPath, line: line)
+        }
+    }
+}
+
+private func shortFile(_ path: String) -> String {
+    let parts = path.split(separator: "/")
+    return parts.suffix(2).joined(separator: "/")
 }

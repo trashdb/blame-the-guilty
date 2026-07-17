@@ -13,10 +13,8 @@ struct LocalBranchesView: View {
     @State private var showDeleteConfirmation = false
     @State private var checkingOutBranch: (repo: ScannedRepo, name: String)?
     @State private var selectedBranchInfo: BranchInfo?
-    @AppStorage("favoriteRepo") private var favoriteRepo = "dcp-loyalty-monorepo"
-    @AppStorage("workspacePath") private var workspacePath: String = {
-        NSHomeDirectory() + "/Desktop/dev"
-    }()
+    @AppStorage("favoriteRepo") private var favoriteRepo = TeamDefaults.favoriteRepo
+    @AppStorage("workspacePath") private var workspacePath = TeamDefaults.workspacePath
 
     private let git = GitService()
 
@@ -377,10 +375,7 @@ struct LocalBranchesView: View {
 
     @MainActor
     private func openRider(_ repoPath: String) {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        task.arguments = ["open", "-a", "Rider", repoPath]
-        try? task.run()
+        IDEOpener.openRepo(repoPath: repoPath)
     }
 
     private func deleteBranch(repo: ScannedRepo, branch: GitBranch) async {

@@ -370,6 +370,23 @@ actor GitService {
         URL(fileURLWithPath: path).lastPathComponent
     }
 
+    static func scanCurrentBranches(workspacePath: String) async -> [CachedBranch] {
+        let expanded = (workspacePath as NSString).expandingTildeInPath
+        let paths = discoverRepos(workspacePath: expanded)
+        let git = GitService()
+        var result: [CachedBranch] = []
+        for p in paths {
+            if let name = await git.currentBranchName(repoPath: p) {
+                result.append(CachedBranch(
+                    name: name, repoPath: p,
+                    repoName: repoName(from: p),
+                    ticketNumber: extractTicketNumber(from: name)
+                ))
+            }
+        }
+        return result
+    }
+
     func findRepoPath(ownerRepo: String, workspacePath: String) async -> String? {
         let fm = FileManager.default
         guard let enumerator = fm.enumerator(

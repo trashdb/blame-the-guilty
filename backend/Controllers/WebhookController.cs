@@ -69,6 +69,7 @@ public class WebhookController : ControllerBase
         if (eventType == "pull_request") return await HandlePullRequest(payload);
         if (eventType == "pull_request_review") return await HandlePullRequestReview(payload);
         if (eventType == "issue_comment") return await HandleIssueComment(payload);
+        if (eventType == "pull_request_review_comment") return await HandleReviewComment(payload);
         LogWebhook(eventType, null, TryGetRepo(payload), null, "ignored", "Unsupported event type");
         return Ok($"Ignored: unsupported event '{eventType}'.");
     }
@@ -607,6 +608,7 @@ public class WebhookController : ControllerBase
         if (existing != null)
         {
             existing.Status = status;
+            if (merged) existing.OccurredAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
         }
 
@@ -715,6 +717,7 @@ public class WebhookController : ControllerBase
         var repo = payload.GetProperty("repository").GetProperty("full_name").GetString() ?? "unknown";
         var commenterLogin = comment.GetProperty("user").GetProperty("login").GetString() ?? "unknown";
         var commentBody = comment.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "";
+        var commentUrl = comment.TryGetProperty("html_url", out var hu) ? hu.GetString() : null;
 
         var existing = await _db.PullRequestEvents
             .Where(e => e.PrNumber == prNumber && e.RepoFullName == repo && e.Status == "open")
@@ -730,6 +733,7 @@ public class WebhookController : ControllerBase
         existing.LastCommentBy = commenterLogin;
         existing.LastCommentBody = commentBody.Length > 500 ? commentBody[..500] : commentBody;
         existing.LastCommentAt = DateTime.UtcNow;
+        existing.LastCommentUrl = commentUrl;
         await _db.SaveChangesAsync();
 
         LogWebhook("issue_comment", action, repo, null, "processed",
@@ -750,13 +754,89 @@ public class WebhookController : ControllerBase
                     {
                         prNumber, repo, commenterLogin,
                         title = existing.Title,
-                        commentBody = existing.LastCommentBody
+                        commentBody = existing.LastCommentBody,
+                        commentUrl
                     });
             }
         }
 
         await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
         return Ok(new { prNumber, commenterLogin });
+    }
+
+    private async Task<IActionResult> HandleReviewComment(JsonElement payload)
+    {
+        var action = payload.GetProperty("action").GetString();
+        if (action != "created")
+        {
+            LogWebhook("pull_request_review_comment", action, TryGetRepo(payload), null, "ignored", $"Unsupported action '{action}'");
+            return Ok($"Ignored: pull_request_review_comment action '{action}'.");
+        }
+
+        var comment = payload.GetProperty("comment");
+        var commenterType = comment.GetProperty("user").GetProperty("type").GetString();
+        if (commenterType != "User")
+        {
+            LogWebhook("pull_request_review_comment", action, TryGetRepo(payload), null, "ignored", $"Commenter type={commenterType}, skipping");
+            return Ok($"Ignored: commenter type '{commenterType}'.");
+        }
+
+        var pr = payload.GetProperty("pull_request");
+        var prNumber = pr.GetProperty("number").GetInt32();
+        var repo = payload.GetProperty("repository").GetProperty("full_name").GetString() ?? "unknown";
+        var commenterLogin = comment.GetProperty("user").GetProperty("login").GetString() ?? "unknown";
+        var commentBody = comment.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "";
+        var commentUrl = comment.TryGetProperty("html_url", out var hu) ? hu.GetString() : null;
+        var filePath = comment.TryGetProperty("path", out var p) ? p.GetString() : null;
+        int? line = comment.TryGetProperty("line", out var l) ? l.GetInt32() : null;
+
+        var existing = await _db.PullRequestEvents
+            .Where(e => e.PrNumber == prNumber && e.RepoFullName == repo && e.Status == "open")
+            .OrderByDescending(e => e.Id)
+            .FirstOrDefaultAsync();
+
+        if (existing == null)
+        {
+            LogWebhook("pull_request_review_comment", action, repo, null, "ignored", "PR not tracked");
+            return Ok("PR not tracked, ignoring.");
+        }
+
+        existing.LastCommentBy = commenterLogin;
+        existing.LastCommentBody = commentBody.Length > 500 ? commentBody[..500] : commentBody;
+        existing.LastCommentAt = DateTime.UtcNow;
+        existing.LastCommentUrl = commentUrl;
+        existing.LastReviewFilePath = filePath;
+        existing.LastReviewLine = line;
+        await _db.SaveChangesAsync();
+
+        LogWebhook("pull_request_review_comment", action, repo, null, "processed",
+            $"PR #{prNumber} review comment by {commenterLogin} on {filePath}:{line}");
+
+        // Notify PR author
+        if (existing.AuthorGitHubId.HasValue)
+        {
+            var authorConn = await _db.GitHubUsers
+                .Where(u => u.GitHubId == existing.AuthorGitHubId.Value)
+                .Select(u => u.SignalRConnectionId)
+                .FirstOrDefaultAsync();
+
+            if (!string.IsNullOrEmpty(authorConn))
+            {
+                await _hubContext.Clients.Client(authorConn)
+                    .SendAsync("PrCommented", new
+                    {
+                        prNumber, repo, commenterLogin,
+                        title = existing.Title,
+                        commentBody = existing.LastCommentBody,
+                        commentUrl,
+                        filePath,
+                        line
+                    });
+            }
+        }
+
+        await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
+        return Ok(new { prNumber, commenterLogin, filePath, line });
     }
 
     private (string? login, long? id, int? prNumber) ResolveCheckSuiteAuthor(JsonElement payload)

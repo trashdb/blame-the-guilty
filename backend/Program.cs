@@ -181,6 +181,9 @@ using (var scope = app.Services.CreateScope())
     // Add HeadSha columns for ciStatus matching by commit SHA
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "WorkflowRuns" ADD COLUMN "HeadSha" TEXT;"""); } catch { }
     try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "HeadSha" TEXT;"""); } catch { }
+    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "LastCommentUrl" TEXT;"""); } catch { }
+    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "LastReviewFilePath" TEXT;"""); } catch { }
+    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "LastReviewLine" INTEGER;"""); } catch { }
 
     // Recover stuck runs: mark in_progress older than 24h as cancelled.
     // Catches runs that were cancelled/superseded before the fix, or any

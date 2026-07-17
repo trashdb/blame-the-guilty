@@ -21,13 +21,7 @@ struct BlameTheGuiltyApp: App {
                     }
                 }
         } label: {
-            HStack(spacing: 3) {
-                Image(systemName: "flame.fill")
-                    .foregroundStyle(.red)
-                Text("Blame")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.red)
-            }
+            MenuBarLabelView()
         }
         .menuBarExtraStyle(.window)
     }
