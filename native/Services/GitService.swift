@@ -516,6 +516,9 @@ actor GitService {
         process.currentDirectoryURL = URL(fileURLWithPath: repoPath)
         // GUI apps may lack SSH_AUTH_SOCK — search common locations if not set
         var env = ProcessInfo.processInfo.environment
+        if env["HOME"] == nil || env["HOME"]?.isEmpty == true {
+            env["HOME"] = NSHomeDirectory()
+        }
         if env["SSH_AUTH_SOCK"] == nil {
             for dir in ["/tmp", "/var/run"] {
                 guard let files = try? FileManager.default.contentsOfDirectory(atPath: dir) else { continue }
