@@ -517,11 +517,14 @@ actor GitService {
         // GUI apps may lack SSH_AUTH_SOCK — search common locations if not set
         var env = ProcessInfo.processInfo.environment
         if env["SSH_AUTH_SOCK"] == nil {
-            if let tmpFiles = try? FileManager.default.contentsOfDirectory(atPath: "/tmp"),
-               let sockDir = tmpFiles.first(where: { $0.hasPrefix("com.apple.launchd.") }) {
-                let candidate = "/tmp/\(sockDir)/Listeners"
-                if FileManager.default.fileExists(atPath: candidate) {
-                    env["SSH_AUTH_SOCK"] = candidate
+            for dir in ["/tmp", "/var/run"] {
+                guard let files = try? FileManager.default.contentsOfDirectory(atPath: dir) else { continue }
+                if let sockDir = files.first(where: { $0.hasPrefix("com.apple.launchd.") }) {
+                    let candidate = "\(dir)/\(sockDir)/Listeners"
+                    if FileManager.default.fileExists(atPath: candidate) {
+                        env["SSH_AUTH_SOCK"] = candidate
+                        break
+                    }
                 }
             }
         }
