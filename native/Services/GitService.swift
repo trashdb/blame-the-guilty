@@ -98,21 +98,11 @@ actor GitService {
     func pullCurrentBranch(repoPath: String) async -> PullResult {
         guard await hasUpstream(repoPath: repoPath) else { return .noUpstream }
         do {
-            let originUrl = try? await runGit(repoPath: repoPath, args: ["remote", "get-url", "origin"])
-            let currentBranch = try? await currentBranchName(repoPath: repoPath) ?? ""
-            if let url = originUrl?.trimmingCharacters(in: .whitespacesAndNewlines), url.hasPrefix("git@"),
-               let token = Self.storedPAT(), let branch = currentBranch {
-                let parts = url.dropFirst(4).split(separator: ":", maxSplits: 1)
-                if parts.count == 2 {
-                    let hostAlias = String(parts[0])
-                    let repoPathSsh = String(parts[1])
-                    let realHost = resolveSSHHostName(for: hostAlias) ?? hostAlias
-                    let https = "https://x-access-token:\(token)@\(realHost)/\(repoPathSsh)"
-                    try await runGit(repoPath: repoPath, args: ["fetch", https, branch])
-                    try await runGit(repoPath: repoPath, args: ["rebase", "FETCH_HEAD"])
-                } else {
-                    try await runGit(repoPath: repoPath, args: ["pull", "--rebase"])
-                }
+            if let token = Self.storedPAT(), let fullName = await repoFullName(repoPath: repoPath),
+               let branch = try? await currentBranchName(repoPath: repoPath) ?? "" {
+                let url = "https://x-access-token:\(token)@github.com/\(fullName).git"
+                try await runGit(repoPath: repoPath, args: ["fetch", url, branch])
+                try await runGit(repoPath: repoPath, args: ["rebase", "FETCH_HEAD"])
             } else {
                 try await runGit(repoPath: repoPath, args: ["pull", "--rebase"])
             }
@@ -500,20 +490,10 @@ actor GitService {
         if current != name {
             try await runGit(repoPath: repoPath, args: ["checkout", name])
         }
-        let originUrl = try? await runGit(repoPath: repoPath, args: ["remote", "get-url", "origin"])
-        if let url = originUrl?.trimmingCharacters(in: .whitespacesAndNewlines), url.hasPrefix("git@"),
-           let token = Self.storedPAT() {
-            let parts = url.dropFirst(4).split(separator: ":", maxSplits: 1)
-            if parts.count == 2 {
-                let hostAlias = String(parts[0])
-                let repoPathSsh = String(parts[1])
-                let realHost = resolveSSHHostName(for: hostAlias) ?? hostAlias
-                let https = "https://x-access-token:\(token)@\(realHost)/\(repoPathSsh)"
-                try await runGit(repoPath: repoPath, args: ["fetch", https, name])
-                try await runGit(repoPath: repoPath, args: ["rebase", "FETCH_HEAD"])
-            } else {
-                try await runGit(repoPath: repoPath, args: ["pull", "--rebase"])
-            }
+        if let token = Self.storedPAT(), let fullName = await repoFullName(repoPath: repoPath) {
+            let url = "https://x-access-token:\(token)@github.com/\(fullName).git"
+            try await runGit(repoPath: repoPath, args: ["fetch", url, name])
+            try await runGit(repoPath: repoPath, args: ["rebase", "FETCH_HEAD"])
         } else {
             try await runGit(repoPath: repoPath, args: ["pull", "--rebase"])
         }
