@@ -28,5 +28,9 @@ backend/appsettings.Development.json
 *.db-journal
 logs/
 
+# Internal planning docs (not for repo)
+PROFESIONALIZACION.md
+MULTI-TENANT.md
+
 # Planning / roadmap (local only, never committed)
 PROFESIONALIZACION.md

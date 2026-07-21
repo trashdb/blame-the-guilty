@@ -505,6 +505,10 @@ public class WebhookController : ControllerBase
         _db.CheckSuiteEvents.Add(checkEvent);
         await _db.SaveChangesAsync();
 
+        // Always notify all clients so Active PRs refresh ciStatus, even if the
+        // PR author isn't currently connected (other team members may be watching).
+        await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
+
         if (user == null)
         {
             _logger.LogInformation("User '{Login}' not connected.", authorLogin);
@@ -696,9 +700,21 @@ public class WebhookController : ControllerBase
             return Ok("PR not tracked, ignoring.");
         }
 
+        // Only update ReviewApproved on explicit approval or dismissal.
+        // "commented" reviews must NOT reset an existing approval — that's the
+        // most common cause of PRs staying stuck on "review" instead of "ready".
         var approved = reviewState == "approved";
-        existing.ReviewApproved = approved;
-        existing.ApprovedBy = approved ? reviewerLogin : null;
+        if (approved)
+        {
+            existing.ReviewApproved = true;
+            existing.ApprovedBy = reviewerLogin;
+        }
+        else if (reviewState == "dismissed" || reviewState == "changes_requested")
+        {
+            existing.ReviewApproved = false;
+            existing.ApprovedBy = null;
+        }
+        // "commented" → don't touch ReviewApproved at all
         await _db.SaveChangesAsync();
 
         LogWebhook("pull_request_review", action, repo, null, approved ? "approved" : reviewState!,
