@@ -99,12 +99,20 @@ actor GitService {
         guard await hasUpstream(repoPath: repoPath) else { return .noUpstream }
         do {
             let originUrl = try? await runGit(repoPath: repoPath, args: ["remote", "get-url", "origin"])
+            let currentBranch = try? await currentBranchName(repoPath: repoPath) ?? ""
             if let url = originUrl?.trimmingCharacters(in: .whitespacesAndNewlines), url.hasPrefix("git@"),
-               let token = Self.storedPAT() {
-                let https = url
-                    .replacingOccurrences(of: "git@", with: "https://x-access-token:\(token)@")
-                    .replacingOccurrences(of: ".com:", with: ".com/")
-                try await runGit(repoPath: repoPath, args: ["pull", https, "--rebase"])
+               let token = Self.storedPAT(), let branch = currentBranch {
+                let parts = url.dropFirst(4).split(separator: ":", maxSplits: 1)
+                if parts.count == 2 {
+                    let hostAlias = String(parts[0])
+                    let repoPathSsh = String(parts[1])
+                    let realHost = resolveSSHHostName(for: hostAlias) ?? hostAlias
+                    let https = "https://x-access-token:\(token)@\(realHost)/\(repoPathSsh)"
+                    try await runGit(repoPath: repoPath, args: ["fetch", https, branch])
+                    try await runGit(repoPath: repoPath, args: ["rebase", "FETCH_HEAD"])
+                } else {
+                    try await runGit(repoPath: repoPath, args: ["pull", "--rebase"])
+                }
             } else {
                 try await runGit(repoPath: repoPath, args: ["pull", "--rebase"])
             }
@@ -492,14 +500,20 @@ actor GitService {
         if current != name {
             try await runGit(repoPath: repoPath, args: ["checkout", name])
         }
-        // If remote is SSH, use HTTPS with PAT to avoid SSH key issues
         let originUrl = try? await runGit(repoPath: repoPath, args: ["remote", "get-url", "origin"])
         if let url = originUrl?.trimmingCharacters(in: .whitespacesAndNewlines), url.hasPrefix("git@"),
            let token = Self.storedPAT() {
-            let https = url
-                .replacingOccurrences(of: "git@", with: "https://x-access-token:\(token)@")
-                .replacingOccurrences(of: ".com:", with: ".com/")
-            try await runGit(repoPath: repoPath, args: ["pull", https, name, "--rebase"])
+            let parts = url.dropFirst(4).split(separator: ":", maxSplits: 1)
+            if parts.count == 2 {
+                let hostAlias = String(parts[0])
+                let repoPathSsh = String(parts[1])
+                let realHost = resolveSSHHostName(for: hostAlias) ?? hostAlias
+                let https = "https://x-access-token:\(token)@\(realHost)/\(repoPathSsh)"
+                try await runGit(repoPath: repoPath, args: ["fetch", https, name])
+                try await runGit(repoPath: repoPath, args: ["rebase", "FETCH_HEAD"])
+            } else {
+                try await runGit(repoPath: repoPath, args: ["pull", "--rebase"])
+            }
         } else {
             try await runGit(repoPath: repoPath, args: ["pull", "--rebase"])
         }
@@ -544,6 +558,27 @@ actor GitService {
               let dir = dirs.first(where: { $0.hasPrefix("com.apple.launchd.") }) else { return nil }
         let candidate = "/var/run/\(dir)/Listeners"
         return FileManager.default.fileExists(atPath: candidate) ? candidate : nil
+    }
+
+    /// Look up the real hostname (HostName) for an SSH host alias from ~/.ssh/config.
+    /// e.g. `github-trashdb` → `github.com`
+    private func resolveSSHHostName(for alias: String) -> String? {
+        let configPath = NSHomeDirectory() + "/.ssh/config"
+        guard let config = try? String(contentsOfFile: configPath) else { return nil }
+        let lines = config.components(separatedBy: "\n")
+        var inBlock = false
+        for line in lines {
+            let t = line.trimmingCharacters(in: .whitespaces)
+            if t.lowercased().hasPrefix("host ") {
+                let patterns = t.dropFirst(5).trimmingCharacters(in: .whitespaces).split(separator: " ").map(String.init)
+                inBlock = patterns.contains(where: { $0 == alias || $0 == "*" })
+            } else if inBlock && t.lowercased().hasPrefix("hostname ") {
+                return String(t.dropFirst(9)).trimmingCharacters(in: .whitespaces)
+            } else if inBlock && t.lowercased().hasPrefix("host ") {
+                inBlock = false
+            }
+        }
+        return nil
     }
 
     /// Parse ~/.ssh/config to find the IdentityFile for the SSH host in this repo's remote URL.
