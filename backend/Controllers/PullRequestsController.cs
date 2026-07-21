@@ -79,6 +79,28 @@ public class PullRequestsController : ControllerBase
             await SyncCheckRunsForCommit(repo, sha, token);
         }
 
+        // Sync review approval state from GitHub API. The webhook may miss
+        // approvals (e.g. if a "commented" review was submitted after an approval
+        // and the old code reset the flag). This ensures the DB stays in sync.
+        var reviewOverrides = new Dictionary<long, bool>();
+        foreach (var pr in prs.Where(p => p.Status == "open"))
+        {
+            var approved = await FetchReviewApproval(pr.PrNumber, pr.RepoFullName, token);
+            if (approved != null)
+            {
+                reviewOverrides[pr.PrNumber] = approved.Value;
+                var entity = await _db.PullRequestEvents
+                    .Where(e => e.PrNumber == pr.PrNumber && e.RepoFullName == pr.RepoFullName && e.Status == "open")
+                    .OrderByDescending(e => e.Id)
+                    .FirstOrDefaultAsync();
+                if (entity != null && entity.ReviewApproved != approved.Value)
+                {
+                    entity.ReviewApproved = approved.Value;
+                    await _db.SaveChangesAsync();
+                }
+            }
+        }
+
         // Re-fetch all workflow runs after sync
         var allRuns = new List<(string Repo, string? HeadSha, string? WorkflowName, int Id, string Status)>();
         if (repos.Count != 0)
@@ -117,8 +139,10 @@ public class PullRequestsController : ControllerBase
                     ciStatus = "review";
             }
 
-            if (ciStatus == "review" && pr.ReviewApproved)
+            if (ciStatus == "review" && (reviewOverrides.GetValueOrDefault(pr.PrNumber, pr.ReviewApproved)))
                 ciStatus = "ready";
+
+            var finalReviewApproved = reviewOverrides.GetValueOrDefault(pr.PrNumber, pr.ReviewApproved);
 
             results.Add(new
             {
@@ -133,7 +157,7 @@ public class PullRequestsController : ControllerBase
                 Draft = pr.Draft,
                 MergeableState = mergeable,
                 CiStatus = ciStatus,
-                ReviewApproved = pr.ReviewApproved,
+                ReviewApproved = finalReviewApproved,
                 LastCommentBy = pr.LastCommentBy,
                 LastCommentBody = pr.LastCommentBody,
                 LastCommentAt = pr.LastCommentAt,
@@ -689,6 +713,47 @@ public class PullRequestsController : ControllerBase
         catch (Exception ex)
         {
             Console.WriteLine($"[SyncCheckRuns] Error for {repo} @ {sha}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Check the GitHub reviews API to see if any review is "APPROVED".
+    /// Returns true if at least one approved review exists, false if all are
+    /// non-approved, or null if the API call failed.
+    /// </summary>
+    private async Task<bool?> FetchReviewApproval(long prNumber, string repoFullName, string? token)
+    {
+        if (string.IsNullOrEmpty(token)) return null;
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get,
+                $"https://api.github.com/repos/{repoFullName}/pulls/{prNumber}/reviews?per_page=100");
+            request.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var response = await _githubClient.SendAsync(request);
+            if (!response.IsSuccessStatusCode) return null;
+
+            var content = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(content);
+            // A PR is approved if any review has state "APPROVED" and
+            // no later review has "CHANGES_REQUESTED" (GitHub uses latest per reviewer).
+            var reviews = doc.RootElement.EnumerateArray().ToList();
+            // Build per-reviewer latest state (GitHub already returns chronologically)
+            var latestByReviewer = new Dictionary<string, string>();
+            foreach (var review in reviews)
+            {
+                var state = review.GetProperty("state").GetString() ?? "";
+                var reviewer = review.GetProperty("user").GetProperty("login").GetString() ?? "";
+                if (state == "APPROVED" || state == "CHANGES_REQUESTED" || state == "DISMISSED")
+                    latestByReviewer[reviewer] = state;
+            }
+            return latestByReviewer.Values.Any(v => v == "APPROVED")
+                && !latestByReviewer.Values.Any(v => v == "CHANGES_REQUESTED");
+        }
+        catch
+        {
+            return null;
         }
     }
 }
