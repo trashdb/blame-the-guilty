@@ -95,12 +95,12 @@ actor GitService {
         (try? await runGit(repoPath: repoPath, args: ["rev-parse", "--verify", "origin/\(branch)"])) != nil
     }
 
-    func pullCurrentBranch(repoPath: String) async -> PullResult {
+    func pullCurrentBranch(repoPath: String, token: String? = nil) async -> PullResult {
         guard await hasUpstream(repoPath: repoPath) else { return .noUpstream }
         do {
-            if let token = Self.storedPAT(), let fullName = await repoFullName(repoPath: repoPath),
+            if let t = token ?? Self.storedPAT(), let fullName = await repoFullName(repoPath: repoPath),
                let branch = try? await currentBranchName(repoPath: repoPath) ?? "" {
-                let url = "https://x-access-token:\(token)@github.com/\(fullName).git"
+                let url = "https://x-access-token:\(t)@github.com/\(fullName).git"
                 try await runGit(repoPath: repoPath, args: ["fetch", url, branch])
                 try await runGit(repoPath: repoPath, args: ["rebase", "FETCH_HEAD"])
             } else {
@@ -485,13 +485,13 @@ actor GitService {
         return "Branch updated: rebased \(branch) onto \(baseBranch)"
     }
 
-    func pullBranch(repoPath: String, name: String) async throws {
+    func pullBranch(repoPath: String, name: String, token: String? = nil) async throws {
         let current = try? await currentBranchName(repoPath: repoPath) ?? ""
         if current != name {
             try await runGit(repoPath: repoPath, args: ["checkout", name])
         }
-        if let token = Self.storedPAT(), let fullName = await repoFullName(repoPath: repoPath) {
-            let url = "https://x-access-token:\(token)@github.com/\(fullName).git"
+        if let t = token ?? Self.storedPAT(), let fullName = await repoFullName(repoPath: repoPath) {
+            let url = "https://x-access-token:\(t)@github.com/\(fullName).git"
             try await runGit(repoPath: repoPath, args: ["fetch", url, name])
             try await runGit(repoPath: repoPath, args: ["rebase", "FETCH_HEAD"])
         } else {
@@ -500,6 +500,15 @@ actor GitService {
         if let current = current, !current.isEmpty, current != name {
             try await runGit(repoPath: repoPath, args: ["checkout", current])
         }
+    }
+
+    static func fetchPAT(backendUrl: String, gitHubId: Int64) async -> String? {
+        guard let url = URL(string: "\(backendUrl)/api/auth/token?gitHubId=\(gitHubId)") else { return nil }
+        guard let (data, resp) = try? await URLSession.shared.data(from: url),
+              let http = resp as? HTTPURLResponse, http.statusCode == 200,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: String],
+              let token = json["token"] else { return nil }
+        return token
     }
 
     static func storedPAT() -> String? {

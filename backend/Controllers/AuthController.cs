@@ -100,6 +100,16 @@ public class AuthController : ControllerBase
         await _db.SaveChangesAsync();
         return Ok(new { saved = true });
     }
+
+    [HttpGet("token")]
+    public async Task<IActionResult> GetToken([FromQuery] long gitHubId)
+    {
+        var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
+        var token = user?.UserPatToken ?? user?.AccessToken;
+        if (string.IsNullOrEmpty(token))
+            return Unauthorized(new { error = "No access token found" });
+        return Ok(new { token });
+    }
 }
 
 public class PatRequest

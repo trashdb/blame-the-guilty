@@ -201,7 +201,8 @@ struct BranchDetailView: View {
         checkingOut = true
         do {
             try await git.checkoutBranch(repoPath: info.repoPath, name: info.name)
-            _ = await git.pullCurrentBranch(repoPath: info.repoPath)
+            let token = await GitService.fetchPAT(backendUrl: backendUrl, gitHubId: gitHubId)
+            _ = await git.pullCurrentBranch(repoPath: info.repoPath, token: token)
             openRider()
             checkoutSuccess = true
             await MainActor.run { onCheckout?() }
