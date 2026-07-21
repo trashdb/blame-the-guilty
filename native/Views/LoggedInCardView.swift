@@ -6,7 +6,7 @@ struct LoggedInCardView: View {
     let onSignOut: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: DS.Spacing.md) {
             if let avatarUrl, let url = URL(string: avatarUrl) {
                 AsyncImage(url: url) { phase in
                     switch phase {
@@ -18,22 +18,22 @@ struct LoggedInCardView: View {
                     default:
                         Image(systemName: "person.circle.fill")
                             .font(.system(size: 24))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(DS.Color.textSecondary)
                     }
                 }
             } else {
                 Image(systemName: "person.circle.fill")
                     .font(.system(size: 24))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DS.Color.textSecondary)
             }
 
             VStack(alignment: .leading, spacing: 1) {
                 Text("You are logged in as")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .font(DS.Font.small)
+                    .foregroundStyle(DS.Color.textSecondary)
                 Text("@\(username)")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(Color(white: 0.85))
+                    .font(DS.Font.body.medium())
+                    .foregroundStyle(DS.Color.textPrimary)
             }
 
             Spacer()
@@ -43,24 +43,21 @@ struct LoggedInCardView: View {
             } label: {
                 Image(systemName: "rectangle.portrait.and.arrow.right")
                     .font(.system(size: 14))
-                    .foregroundStyle(.white)
-                    .padding(6)
-                    .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                    .foregroundStyle(DS.Color.textSecondary)
+                    .padding(DS.Spacing.sm + 1)
+                    .background(DS.Color.cardBackground, in: RoundedRectangle(cornerRadius: DS.Radius.sm + 1))
             }
             .buttonStyle(.plain)
+            .hoverEffect()
+            .cursor(.pointingHand)
             .help("Sign out")
-            .onHover { inside in
-                if inside { NSCursor.pointingHand.push() }
-                else { NSCursor.pop() }
-            }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(Color(red: 0.18, green: 0.35, blue: 0.18).opacity(0.75), in: RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, DS.Spacing.xl + 1)
+        .padding(.vertical, DS.Spacing.lg + 1)
+        .background(DS.Color.success.opacity(0.75), in: RoundedRectangle(cornerRadius: DS.Radius.lg + 1))
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color(red: 0.28, green: 0.45, blue: 0.28).opacity(0.5), lineWidth: 1)
+            RoundedRectangle(cornerRadius: DS.Radius.lg + 1)
+                .stroke(DS.Color.success.opacity(0.5), lineWidth: 1)
         )
-        //.padding(.vertical, 6)
     }
 }

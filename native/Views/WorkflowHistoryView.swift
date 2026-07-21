@@ -15,12 +15,7 @@ struct WorkflowHistoryView: View {
                 Divider()
 
                 if signalR.recentWorkflows.isEmpty {
-                    Spacer()
-                    Text("No workflows yet")
-                        .font(DS.Font.body)
-                        .foregroundStyle(DS.Color.textSecondary)
-                        .frame(maxWidth: .infinity)
-                    Spacer()
+                    emptyState("No workflows yet", icon: "gearshape.arrow.triangle.2.circlepath")
                 } else {
                     GeometryReader { geo in
                         ScrollView {
@@ -38,6 +33,8 @@ struct WorkflowHistoryView: View {
             .padding(DS.Spacing.xxl)
         }
         .frame(width: 600, height: 500)
+        .closeOnEscape { WorkflowHistoryPanelManager.shared.close() }
+        .closeOnCmdW { WorkflowHistoryPanelManager.shared.close() }
     }
 }
 

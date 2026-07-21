@@ -8,6 +8,7 @@ struct BlameTheGuiltyApp: App {
 
     init() {
         try? SMAppService.mainApp.register()
+        ProcessInfo.processInfo.disableAutomaticTermination("Menu bar icon must stay visible")
     }
 
     var body: some Scene {

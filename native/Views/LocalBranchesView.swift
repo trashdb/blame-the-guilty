@@ -35,6 +35,7 @@ struct LocalBranchesView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 130)
+                .cursor(.pointingHand)
                 Group {
                     if isLoading {
                         ProgressView()
@@ -58,6 +59,7 @@ struct LocalBranchesView: View {
                 Text(error)
                     .font(DS.Font.caption)
                     .foregroundStyle(DS.Color.destructive)
+                    .transition(.opacity)
             }
 
             if repos.isEmpty && !isLoading {
@@ -70,6 +72,7 @@ struct LocalBranchesView: View {
                         .foregroundStyle(DS.Color.textTertiary)
                 }
                 .padding(.vertical, DS.Spacing.sm)
+                .transition(.opacity)
             }
 
             ScrollView {
@@ -78,20 +81,27 @@ struct LocalBranchesView: View {
                         repoRow(repo)
                     }
                 }
+                .animation(DS.Animation.default, value: repos.count)
             }
             .frame(height: 180)
         }
+        .animation(DS.Animation.default, value: showDeleteConfirmation)
         .overlay(alignment: .center) {
             if showDeleteConfirmation {
                 deleteConfirmationOverlay
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
             }
         }
         .background {
             Color.clear
                 .popover(item: $selectedBranchInfo) { info in
                     BranchDetailView(info: info, gitHubId: gitHubId, backendUrl: backendUrl, onCheckout: { Task { await scan() } })
+                        .transition(.scale(scale: 0.95).combined(with: .opacity))
                 }
+                .animation(DS.Animation.popover, value: selectedBranchInfo != nil)
         }
+        .animation(DS.Animation.default, value: isLoading)
+        .animation(DS.Animation.default, value: error != nil)
         .onAppear { if repos.isEmpty { Task { await scan() } } }
     }
 
@@ -176,22 +186,29 @@ struct LocalBranchesView: View {
                 .background(DS.Color.rowBackground, in: RoundedRectangle(cornerRadius: DS.Radius.sm))
             }
             .buttonStyle(.plain)
+            .hoverEffect(cornerRadius: DS.Radius.sm)
             .cursor(.pointingHand)
 
-            if repo.isExpanded {
-                if let err = repo.error {
-                    Text(err)
-                        .font(DS.Font.tiny)
-                        .foregroundStyle(DS.Color.destructive)
-                        .padding(.leading, 18)
-                }
+            Group {
+                if repo.isExpanded {
+                    if let err = repo.error {
+                        Text(err)
+                            .font(DS.Font.tiny)
+                            .foregroundStyle(DS.Color.destructive)
+                            .padding(.leading, 18)
+                            .transition(.opacity)
+                    }
 
-                if selectedTab == 0 {
-                    localBranchList(repo)
-                } else {
-                    remoteBranchList(repo)
+                    if selectedTab == 0 {
+                        localBranchList(repo)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    } else {
+                        remoteBranchList(repo)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
                 }
             }
+            .animation(DS.Animation.default, value: repo.isExpanded)
         }
     }
 
@@ -243,6 +260,7 @@ struct LocalBranchesView: View {
                     .cursor(.pointingHand)
                 }
             }
+            .hoverEffect(cornerRadius: DS.Radius.sm)
             .padding(.leading, 18)
             .padding(.trailing, DS.Spacing.md)
             .padding(.vertical, DS.Spacing.xs)
@@ -304,6 +322,7 @@ struct LocalBranchesView: View {
                     .disabled(!branch.isMerged)
                 }
             }
+            .hoverEffect(cornerRadius: DS.Radius.sm)
             .padding(.leading, 18)
             .padding(.trailing, DS.Spacing.md)
             .padding(.vertical, DS.Spacing.xs)

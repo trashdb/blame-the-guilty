@@ -69,6 +69,7 @@ struct NotificationBannerView: View {
                     .padding(6)
             }
             .buttonStyle(.plain)
+            .cursor(.pointingHand)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 16)
@@ -154,13 +155,5 @@ final class NotificationBanner: NSObject {
         timer = nil
         panel?.close()
         panel = nil
-    }
-}
-
-extension View {
-    func cursor(_ cursor: NSCursor) -> some View {
-        self.onHover { inside in
-            if inside { cursor.push() } else { NSCursor.pop() }
-        }
     }
 }

@@ -447,6 +447,137 @@ public class PullRequestsController : ControllerBase
         });
     }
 
+    [HttpGet("{prNumber}/commits")]
+    public async Task<IActionResult> GetCommits(long prNumber,
+        [FromQuery] string repo,
+        [FromQuery] long gitHubId)
+    {
+        var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
+        var token = user?.UserPatToken ?? user?.AccessToken ?? _configuration["GitHub:PatToken"];
+        if (string.IsNullOrEmpty(token))
+            return Unauthorized(new { error = "No access token" });
+
+        var req = new HttpRequestMessage(HttpMethod.Get,
+            $"https://api.github.com/repos/{repo}/pulls/{prNumber}/commits?per_page=30");
+        req.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        HttpResponseMessage resp;
+        try { resp = await _githubClient.SendAsync(req); }
+        catch (Exception ex) { return StatusCode(502, new { error = $"GitHub API error: {ex.Message}" }); }
+
+        var json = await resp.Content.ReadAsStringAsync();
+        if (!resp.IsSuccessStatusCode)
+            return StatusCode((int)resp.StatusCode, new { error = "Failed to fetch commits", detail = json });
+
+        using var doc = JsonDocument.Parse(json);
+        var commits = doc.RootElement.EnumerateArray().Select(c => new
+        {
+            sha = c.GetProperty("sha").GetString(),
+            message = c.GetProperty("commit").GetProperty("message").GetString(),
+            authorName = c.GetProperty("commit").GetProperty("author").GetProperty("name").GetString(),
+            authorLogin = c.TryGetProperty("author", out var a) && a.ValueKind == System.Text.Json.JsonValueKind.Object
+                ? (a.TryGetProperty("login", out var l) ? l.GetString() : null) : null,
+            date = c.GetProperty("commit").GetProperty("author").GetProperty("date").GetString()
+        }).ToList();
+
+        return Ok(commits);
+    }
+
+    [HttpGet("{prNumber}/files")]
+    public async Task<IActionResult> GetFiles(long prNumber,
+        [FromQuery] string repo,
+        [FromQuery] long gitHubId)
+    {
+        var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
+        var token = user?.UserPatToken ?? user?.AccessToken ?? _configuration["GitHub:PatToken"];
+        if (string.IsNullOrEmpty(token))
+            return Unauthorized(new { error = "No access token" });
+
+        var req = new HttpRequestMessage(HttpMethod.Get,
+            $"https://api.github.com/repos/{repo}/pulls/{prNumber}/files?per_page=30");
+        req.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        HttpResponseMessage resp;
+        try { resp = await _githubClient.SendAsync(req); }
+        catch (Exception ex) { return StatusCode(502, new { error = $"GitHub API error: {ex.Message}" }); }
+
+        var json = await resp.Content.ReadAsStringAsync();
+        if (!resp.IsSuccessStatusCode)
+            return StatusCode((int)resp.StatusCode, new { error = "Failed to fetch files", detail = json });
+
+        using var doc = JsonDocument.Parse(json);
+        var files = doc.RootElement.EnumerateArray().Select(f => new
+        {
+            filename = f.GetProperty("filename").GetString(),
+            status = f.GetProperty("status").GetString(),
+            additions = f.GetProperty("additions").GetInt32(),
+            deletions = f.GetProperty("deletions").GetInt32()
+        }).ToList();
+
+        return Ok(files);
+    }
+
+    [HttpGet("{prNumber}/checks")]
+    public async Task<IActionResult> GetChecks(long prNumber,
+        [FromQuery] string repo,
+        [FromQuery] long gitHubId)
+    {
+        var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
+        var token = user?.UserPatToken ?? user?.AccessToken ?? _configuration["GitHub:PatToken"];
+        if (string.IsNullOrEmpty(token))
+            return Unauthorized(new { error = "No access token" });
+
+        // First get PR to get head SHA
+        var prReq = new HttpRequestMessage(HttpMethod.Get,
+            $"https://api.github.com/repos/{repo}/pulls/{prNumber}");
+        prReq.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        prReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        HttpResponseMessage prResp;
+        try { prResp = await _githubClient.SendAsync(prReq); }
+        catch (Exception ex) { return StatusCode(502, new { error = $"GitHub API error: {ex.Message}" }); }
+
+        var prJson = await prResp.Content.ReadAsStringAsync();
+        if (!prResp.IsSuccessStatusCode)
+            return StatusCode((int)prResp.StatusCode, new { error = "Failed to fetch PR", detail = prJson });
+
+        using var prDoc = JsonDocument.Parse(prJson);
+        var headSha = prDoc.RootElement.GetProperty("head").GetProperty("sha").GetString();
+        if (string.IsNullOrEmpty(headSha))
+            return Ok(Array.Empty<object>());
+
+        // Now fetch check runs for that SHA
+        var crReq = new HttpRequestMessage(HttpMethod.Get,
+            $"https://api.github.com/repos/{repo}/commits/{headSha}/check-runs?per_page=100");
+        crReq.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        crReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        HttpResponseMessage crResp;
+        try { crResp = await _githubClient.SendAsync(crReq); }
+        catch (Exception ex) { return StatusCode(502, new { error = $"GitHub API error: {ex.Message}" }); }
+
+        var crJson = await crResp.Content.ReadAsStringAsync();
+        if (!crResp.IsSuccessStatusCode)
+            return StatusCode((int)crResp.StatusCode, new { error = "Failed to fetch check runs", detail = crJson });
+
+        using var crDoc = JsonDocument.Parse(crJson);
+        if (!crDoc.RootElement.TryGetProperty("check_runs", out var checkRunsProp))
+            return Ok(Array.Empty<object>());
+
+        var checks = checkRunsProp.EnumerateArray().Select(cr => new
+        {
+            name = cr.GetProperty("name").GetString(),
+            status = cr.GetProperty("status").GetString(),
+            conclusion = cr.TryGetProperty("conclusion", out var conc) ? conc.GetString() : null,
+            startedAt = cr.TryGetProperty("started_at", out var sa) ? sa.GetString() : null,
+            completedAt = cr.TryGetProperty("completed_at", out var ca) ? ca.GetString() : null
+        }).ToList();
+
+        return Ok(checks);
+    }
+
     private async Task<(bool? draft, string? mergeableState, string? headSha)> FetchPullRequestData(long prNumber, string repoFullName, string? token)
     {
         try

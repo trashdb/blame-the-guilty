@@ -10,12 +10,15 @@ struct SettingsView: View {
     @AppStorage("favoriteRepo") private var favoriteRepo = TeamDefaults.favoriteRepo
     @AppStorage("defaultIDE") private var defaultIDE = "rider"
     @AppStorage("customIDECommand") private var customIDECommand = ""
-    @AppStorage("menuBarWidgetMode") private var menuBarWidgetMode = MenuBarWidgetMode.minimal.rawValue
     @AppStorage("backendUrl") private var settingsBackendUrl = TeamDefaults.backendUrl
     @State private var pathDraft = ""
+    @State private var pathError: String?
     @State private var jiraDraft = ""
+    @State private var jiraError: String?
     @State private var jiraViewDraft = ""
+    @State private var jiraViewError: String?
     @State private var backendUrlDraft = ""
+    @State private var backendUrlError: String?
     @State private var patDraft = ""
     @State private var ideDraft = ""
     @State private var patSaved = false
@@ -24,52 +27,87 @@ struct SettingsView: View {
     @State private var discoveredRepos: [String] = []
     @State private var scanning = true
 
+    // Connection test states
+    @State private var backendTestResult: ConnectionTestResult?
+    @State private var backendTesting = false
+    @State private var jiraTestResult: ConnectionTestResult?
+
     var body: some View {
         ZStack {
             VisualEffectBackground(material: .sidebar)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    Text("Settings")
-                        .font(DS.Font.largeTitle)
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: DS.Spacing.lg) {
+                        Image(systemName: "flame.fill")
+                            .font(.system(size: 28))
+                            .foregroundStyle(DS.Color.accent)
+                        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                            Text("Settings")
+                                .font(DS.Font.largeTitle)
+                            Text("Blame the Guilty")
+                                .font(DS.Font.caption)
+                                .foregroundStyle(DS.Color.textSecondary)
+                        }
+                    }
+                    .padding(.bottom, DS.Spacing.xl)
 
-                    Divider()
+                    CollapsibleSection(title: "Workspace", icon: "folder") {
+                        workspaceSection
+                    }
 
-                    workspaceSection
-                    Divider()
-                    jiraSection
-                    Divider()
-                    favoriteRepoSection
-                    Divider()
-                    IDEListView(defaultIDE: $defaultIDE, customIDECommand: $customIDECommand)
-                    Divider()
-                    menuBarSection
-                    Divider()
-                    backendSection
-                    Divider()
-                    if gitHubId > 0 { patSection }
+                    CollapsibleSection(title: "Jira", icon: "link") {
+                        jiraSection
+                    }
+
+                    CollapsibleSection(title: "IDE", icon: "chevron.left.forwardslash.chevron.right") {
+                        IDEListView(defaultIDE: $defaultIDE, customIDECommand: $customIDECommand)
+                    }
+
+                    CollapsibleSection(title: "Favorite Repo", icon: "star") {
+                        favoriteRepoSection
+                    }
+
+                    CollapsibleSection(title: "Backend URL", icon: "server.rack") {
+                        backendSection
+                    }
+
+                    CollapsibleSection(title: "Personal Access Token", icon: "key.fill") {
+                        patSection
+                    }
                 }
                 .padding(24)
             }
         }
         .frame(width: 540, height: 620)
         .onAppear { Task { await scanForRepos() } }
+        .closeOnEscape { SettingsPanelManager.shared.close() }
+        .closeOnCmdW { SettingsPanelManager.shared.close() }
     }
+
+    // MARK: - Sections
 
     @ViewBuilder
     private var workspaceSection: some View {
-        Group {
-            sectionHeader("Workspace Path")
-            Text("Local git repos are discovered recursively under this directory.")
-                .font(DS.Font.small)
-                .foregroundStyle(DS.Color.textSecondary)
-                .padding(.top, -8)
-            HStack(spacing: DS.Spacing.md) {
-                styledTextField("e.g. ~/Desktop/dev", text: $pathDraft)
-                    .onAppear { pathDraft = workspacePath }
-                solidButton("Save", color: .green) {
+        Text("Local git repos are discovered recursively under this directory. Changes apply immediately without restart.")
+            .font(DS.Font.small)
+            .foregroundStyle(DS.Color.textSecondary)
+        HStack(spacing: DS.Spacing.md) {
+            styledTextField(
+                "e.g. ~/Desktop/dev",
+                text: $pathDraft,
+                help: "Absolute path to the parent directory containing your git repositories. Subdirectories are scanned recursively.",
+                error: $pathError
+            )
+            .onAppear { pathDraft = workspacePath }
+            solidButton("Save", color: .green) {
+                let expanded = (pathDraft as NSString).expandingTildeInPath
+                if FileManager.default.fileExists(atPath: expanded) {
                     workspacePath = pathDraft
+                    pathError = nil
                     SettingsPanelManager.shared.close()
+                } else {
+                    pathError = "Directory not found at \(expanded)"
                 }
             }
         }
@@ -77,222 +115,199 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var jiraSection: some View {
-        Group {
-            sectionHeader("Jira Ticket Base URL")
-            Text("Used to build links to tickets extracted from branch names (e.g. LOY-1234 → https://.../browse/LOY-1234).")
-                .font(DS.Font.small)
-                .foregroundStyle(DS.Color.textSecondary)
-                .padding(.top, -8)
+        Text("Used to build links to tickets extracted from branch names (e.g. LOY-1234 → https://.../browse/LOY-1234). Paste the full URL including /browse/.")
+            .font(DS.Font.small)
+            .foregroundStyle(DS.Color.textSecondary)
+
+        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+            sectionHeader("Ticket Base URL")
             HStack(spacing: DS.Spacing.md) {
-                styledTextField("https://your-domain.atlassian.net/browse/", text: $jiraDraft)
-                    .onAppear { jiraDraft = jiraBoardUrl }
+                urlTextField(
+                    "https://your-domain.atlassian.net/browse/",
+                    text: $jiraDraft,
+                    required: false,
+                    help: "Base URL for opening individual Jira tickets from branch names (e.g. LOY-123 → https://domain.atlassian.net/browse/LOY-123).",
+                    error: $jiraError
+                )
+                .onAppear { jiraDraft = jiraBoardUrl }
                 solidButton("Save", color: .green) {
-                    jiraBoardUrl = jiraDraft
+                    saveJiraUrl()
                 }
             }
 
-            sectionHeader("Jira Board URL")
-                .padding(.top, 12)
-            Text("Opened by the \"Open Jira Board\" spotlight command.")
-                .font(DS.Font.small)
-                .foregroundStyle(DS.Color.textSecondary)
-                .padding(.top, -8)
+            sectionHeader("Board URL")
             HStack(spacing: DS.Spacing.md) {
-                styledTextField("https://your-domain.atlassian.net/jira/...", text: $jiraViewDraft)
-                    .onAppear { jiraViewDraft = jiraBoardViewUrl }
+                urlTextField(
+                    "https://your-domain.atlassian.net/jira/...",
+                    text: $jiraViewDraft,
+                    required: false,
+                    help: "Full URL to your Jira board for quick access from the toolbar menu.",
+                    error: $jiraViewError
+                )
+                .onAppear { jiraViewDraft = jiraBoardViewUrl }
                 solidButton("Save", color: .green) {
-                    jiraBoardViewUrl = jiraViewDraft
+                    saveJiraViewUrl()
                 }
             }
+
+            HStack(spacing: DS.Spacing.sm) {
+                actionButton("Test Connection", color: .blue, help: "Open Jira board in browser to verify URL") {
+                    let url = jiraBoardViewUrl.isEmpty ? jiraBoardUrl : jiraBoardViewUrl
+                    if let u = URL(string: url) {
+                        NSWorkspace.shared.open(u)
+                        jiraTestResult = .success("Opened in browser")
+                    } else {
+                        jiraTestResult = .failure("Invalid URL")
+                    }
+                }
+                if let result = jiraTestResult {
+                    connectionTestBadge(result)
+                }
+            }
+        }
+    }
+
+    private func saveJiraUrl() {
+        if jiraDraft.isEmpty {
+            jiraBoardUrl = jiraDraft
+            jiraError = nil
+        } else if URL(string: jiraDraft) != nil {
+            jiraBoardUrl = jiraDraft
+            jiraError = nil
+        } else {
+            jiraError = "Invalid URL format"
+        }
+    }
+
+    private func saveJiraViewUrl() {
+        if jiraViewDraft.isEmpty {
+            jiraBoardViewUrl = jiraViewDraft
+            jiraViewError = nil
+        } else if URL(string: jiraViewDraft) != nil {
+            jiraBoardViewUrl = jiraViewDraft
+            jiraViewError = nil
+        } else {
+            jiraViewError = "Invalid URL format"
         }
     }
 
     @ViewBuilder
     private var favoriteRepoSection: some View {
-        Group {
-            sectionHeader("Favorite Repo")
-            HStack(spacing: DS.Spacing.md) {
-                if scanning {
-                    ProgressView()
-                        .scaleEffect(0.6)
-                        .frame(width: 100)
-                } else if discoveredRepos.isEmpty {
-                    Text("No repos found — check workspace path")
-                        .font(DS.Font.body)
-                        .foregroundStyle(DS.Color.textSecondary)
-                } else {
-                    Picker(selection: $favoriteRepo) {
-                        ForEach(discoveredRepos, id: \.self) { repo in
-                            HStack(spacing: DS.Spacing.sm) {
-                                if repo == favoriteRepo {
-                                    Image(systemName: "star.fill")
-                                        .foregroundStyle(.yellow)
-                                }
-                                Text(repo)
-                            }
-                            .tag(repo)
-                        }
-                    } label: {
-                        HStack(spacing: DS.Spacing.sm) {
-                            Image(systemName: "star.fill")
-                                .foregroundStyle(.yellow)
-                                .font(DS.Font.caption)
-                            Text(favoriteRepo)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                actionButton("Refresh", color: .green) {
-                    Task { await scanForRepos() }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var menuBarSection: some View {
-        Group {
-            sectionHeader("Menu Bar Widget")
-            Text("Show PR/CI status counts directly in the menu bar icon.")
-                .font(DS.Font.small)
-                .foregroundStyle(DS.Color.textSecondary)
-                .padding(.top, -8)
-            HStack(spacing: DS.Spacing.lg) {
-                ForEach(MenuBarWidgetMode.allCases, id: \.rawValue) { mode in
-                    menuBarCard(mode)
-                }
-            }
-        }
-    }
-
-    private func menuBarCard(_ mode: MenuBarWidgetMode) -> some View {
-        Button {
-            menuBarWidgetMode = mode.rawValue
-        } label: {
-            VStack(spacing: DS.Spacing.sm) {
-                Image(systemName: modeIcon(mode))
-                    .font(.system(size: 16))
-                Text(mode.rawValue)
-                    .font(DS.Font.small.medium())
-                Text(modeDescription(mode))
-                    .font(DS.Font.tiny)
+        HStack(spacing: DS.Spacing.md) {
+            if scanning {
+                ProgressView()
+                    .scaleEffect(0.6)
+                    .frame(width: 100)
+            } else if discoveredRepos.isEmpty {
+                Text("No repos found — check workspace path")
+                    .font(DS.Font.body)
                     .foregroundStyle(DS.Color.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .frame(height: 24)
+            } else {
+                Picker(selection: $favoriteRepo) {
+                    ForEach(discoveredRepos, id: \.self) { repo in
+                        HStack(spacing: DS.Spacing.sm) {
+                            if repo == favoriteRepo {
+                                Image(systemName: "star.fill")
+                                    .foregroundStyle(.yellow)
+                            }
+                            Text(repo)
+                        }
+                        .tag(repo)
+                    }
+                } label: {
+                    HStack(spacing: DS.Spacing.sm) {
+                        Image(systemName: "star.fill")
+                            .foregroundStyle(.yellow)
+                            .font(DS.Font.caption)
+                        Text(favoriteRepo)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .nativeCursor(.pointingHand)
             }
-            .frame(maxWidth: .infinity)
-            .padding(DS.Spacing.xl)
-            .background(cardBackground(mode), in: RoundedRectangle(cornerRadius: DS.Radius.lg))
-            .overlay(
-                RoundedRectangle(cornerRadius: DS.Radius.lg)
-                    .stroke(cardBorder(mode), lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .cursor(.pointingHand)
-    }
-
-    private func cardBackground(_ mode: MenuBarWidgetMode) -> SwiftUI.Color {
-        menuBarWidgetMode == mode.rawValue ? DS.Color.accent.opacity(0.2) : DS.Color.fieldBackground
-    }
-
-    private func cardBorder(_ mode: MenuBarWidgetMode) -> SwiftUI.Color {
-        menuBarWidgetMode == mode.rawValue ? DS.Color.accent.opacity(0.5) : DS.Color.divider
-    }
-
-    private func modeIcon(_ mode: MenuBarWidgetMode) -> String {
-        switch mode {
-        case .minimal: return "flame"
-        case .badge:   return "flame.badge.exclamationmark"
-        case .counts:  return "number"
-        case .full:    return "text.badge.checkmark"
-        }
-    }
-
-    private func modeDescription(_ mode: MenuBarWidgetMode) -> String {
-        switch mode {
-        case .minimal: return "Just 'Blame'"
-        case .badge:   return "Icons for failures & running"
-        case .counts:  return "Total PR count"
-        case .full:    return "PRs, failures, running"
+            actionButton("Refresh", color: .green) {
+                Task { await scanForRepos() }
+            }
         }
     }
 
     @ViewBuilder
     private var backendSection: some View {
-        Group {
-            sectionHeader("Backend URL")
-            Text("The backend server URL. Only change if self-hosting the blame-the-guilty server.")
-                .font(DS.Font.small)
-                .foregroundStyle(DS.Color.textSecondary)
-                .padding(.top, -8)
-            HStack(spacing: DS.Spacing.md) {
-                styledTextField("https://...", text: $backendUrlDraft)
-                    .onAppear { backendUrlDraft = settingsBackendUrl }
-                solidButton("Save", color: .green) {
-                    settingsBackendUrl = backendUrlDraft
-                }
+        Text("The backend server URL. Only change if self-hosting the blame-the-guilty server. Must point to a running instance with /health endpoint.")
+            .font(DS.Font.small)
+            .foregroundStyle(DS.Color.textSecondary)
+
+        HStack(spacing: DS.Spacing.md) {
+            urlTextField(
+                "https://your-server.com",
+                text: $backendUrlDraft,
+                help: "Full URL of the blame-the-guilty backend server, including protocol (https://). The server must expose a /health endpoint.",
+                error: $backendUrlError
+            )
+            .onAppear { backendUrlDraft = settingsBackendUrl }
+            solidButton("Save", color: .green) {
+                saveBackendUrl()
             }
+        }
+
+        HStack(spacing: DS.Spacing.sm) {
+            actionButton("Test Connection", color: .blue, help: "Test connectivity to the backend server by calling its /health endpoint") {
+                Task { await testBackendConnection() }
+            }
+            .disabled(backendTesting)
+            if backendTesting {
+                ProgressView()
+                    .scaleEffect(0.5)
+                    .frame(width: 16, height: 16)
+            }
+            if let result = backendTestResult {
+                connectionTestBadge(result)
+            }
+        }
+    }
+
+    private func saveBackendUrl() {
+        if backendUrlDraft.isEmpty {
+            backendUrlError = "URL is required"
+        } else if URL(string: backendUrlDraft) != nil {
+            settingsBackendUrl = backendUrlDraft
+            backendUrlError = nil
+        } else {
+            backendUrlError = "Invalid URL format"
         }
     }
 
     @ViewBuilder
     private var patSection: some View {
-        Group {
-            sectionHeader("Personal Access Token")
-            Text("Optional. Used to access org repos when OAuth is blocked. Create at github.com/settings/tokens with repo scope.")
-                .font(DS.Font.small)
-                .foregroundStyle(DS.Color.textSecondary)
-                .padding(.top, -8)
-            HStack(spacing: DS.Spacing.md) {
-                SecureField("github_pat_...", text: $patDraft)
-                    .textFieldStyle(.plain)
-                    .font(DS.Font.mono(12))
-                    .padding(.horizontal, DS.Spacing.lg)
-                    .padding(.vertical, DS.Spacing.md)
-                    .background(DS.Color.fieldBackground, in: RoundedRectangle(cornerRadius: DS.Radius.md))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: DS.Radius.md)
-                            .stroke(DS.Color.divider, lineWidth: 1)
-                    )
-                Button {
-                    Task { await savePat() }
-                } label: {
-                    if patSaving {
-                        ProgressView()
-                            .scaleEffect(0.6)
-                            .frame(width: 40)
-                    } else {
-                        Text("Save")
-                            .font(DS.Font.caption.semibold())
-                            .foregroundStyle(.green)
-                            .padding(.horizontal, DS.Spacing.xl)
-                            .padding(.vertical, DS.Spacing.sm + 1)
-                            .background(DS.Color.badgeBackground(.green), in: RoundedRectangle(cornerRadius: DS.Radius.sm))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: DS.Radius.sm)
-                                    .stroke(DS.Color.badgeBorder(.green), lineWidth: 1)
-                            )
-                    }
-                }
-                .buttonStyle(.plain)
-                .cursor(.pointingHand)
-                .disabled(patSaving || patDraft.isEmpty)
-            }
-            if patSaved {
-                Text("PAT saved successfully")
-                    .font(DS.Font.small)
-                    .foregroundStyle(DS.Color.success)
-            }
-            if let patError {
-                Text(patError)
-                    .font(DS.Font.small)
-                    .foregroundStyle(DS.Color.destructive)
+        Text("Optional. Used to access org repos when OAuth is blocked. Create at github.com/settings/tokens with repo scope. The token is sent to the backend and never stored locally.")
+            .font(DS.Font.small)
+            .foregroundStyle(DS.Color.textSecondary)
+            .padding(.top, -8)
+        HStack(spacing: DS.Spacing.md) {
+            styledTextField(
+                "github_pat_...",
+                text: $patDraft,
+                help: "GitHub Personal Access Token (classic) with repo scope. Required when OAuth authentication does not grant access to organisation repositories."
+            )
+            .onAppear { patDraft = "" }
+            solidButton(patSaving ? "Saving…" : "Save", color: .green, disabled: patSaving || patDraft.isEmpty) {
+                Task { await savePat() }
             }
         }
+        if patSaved {
+            Text("PAT saved successfully")
+                .font(DS.Font.small)
+                .foregroundStyle(DS.Color.success)
+        }
+        if let patError {
+            Text(patError)
+                .font(DS.Font.small)
+                .foregroundStyle(DS.Color.destructive)
+        }
     }
+
+    // MARK: - Helpers
 
     private func scanForRepos() async {
         scanning = true
@@ -334,7 +349,120 @@ struct SettingsView: View {
             patError = error.localizedDescription
         }
     }
+
+    private func testBackendConnection() async {
+        backendTesting = true
+        backendTestResult = nil
+        defer { backendTesting = false }
+
+        let url = backendUrlDraft.isEmpty ? settingsBackendUrl : backendUrlDraft
+        guard let u = URL(string: "\(url)/health") else {
+            backendTestResult = .failure("Invalid URL")
+            return
+        }
+        do {
+            let (data, resp) = try await URLSession.shared.data(from: u)
+            if let http = resp as? HTTPURLResponse, http.statusCode == 200 {
+                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let status = json["status"] as? String {
+                    backendTestResult = .success("Healthy (\(status))")
+                } else {
+                    backendTestResult = .success("Connected")
+                }
+            } else {
+                backendTestResult = .failure("HTTP \((resp as? HTTPURLResponse)?.statusCode ?? 0)")
+            }
+        } catch {
+            backendTestResult = .failure(error.localizedDescription)
+        }
+    }
+
+    @ViewBuilder
+    private func connectionTestBadge(_ result: ConnectionTestResult) -> some View {
+        HStack(spacing: DS.Spacing.xs) {
+            Circle()
+                .fill(result.isSuccess ? DS.Color.success : DS.Color.destructive)
+                .frame(width: 6, height: 6)
+            Text(result.message)
+                .font(DS.Font.tiny)
+                .foregroundStyle(result.isSuccess ? DS.Color.success : DS.Color.destructive)
+        }
+        .padding(.horizontal, DS.Spacing.sm)
+        .padding(.vertical, DS.Spacing.xs)
+        .background(
+            (result.isSuccess ? DS.Color.success : DS.Color.destructive).opacity(0.1),
+            in: RoundedRectangle(cornerRadius: DS.Radius.sm)
+        )
+    }
 }
+
+// MARK: - Connection Test Result
+
+enum ConnectionTestResult {
+    case success(String)
+    case failure(String)
+
+    var isSuccess: Bool {
+        if case .success = self { return true }
+        return false
+    }
+
+    var message: String {
+        switch self {
+        case .success(let m): return m
+        case .failure(let m): return m
+        }
+    }
+}
+
+// MARK: - Collapsible Section
+
+struct CollapsibleSection<Content: View>: View {
+    let title: String
+    let icon: String
+    @State private var isExpanded = false
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.md) {
+            Button {
+                withAnimation(DS.Animation.hover) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: DS.Spacing.sm) {
+                    Image(systemName: icon)
+                        .font(DS.Font.caption)
+                        .foregroundStyle(DS.Color.accent)
+                    Text(title)
+                        .font(DS.Font.section)
+                        .foregroundStyle(DS.Color.textPrimary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(DS.Font.micro)
+                        .foregroundStyle(DS.Color.textTertiary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                }
+                .padding(.vertical, DS.Spacing.md)
+                .padding(.horizontal, DS.Spacing.xs)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .cursor(.pointingHand)
+
+            if isExpanded {
+                content
+                    .padding(.leading, DS.Spacing.md)
+                    .padding(.bottom, DS.Spacing.md)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
+            Divider()
+        }
+    }
+}
+
+// MARK: - IDE List View
 
 struct IDEListView: View {
     @Binding var defaultIDE: String
@@ -351,7 +479,6 @@ struct IDEListView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.lg) {
-            sectionHeader("Default IDE")
             Text("Select your favourite IDE from the dropdown.")
                 .font(DS.Font.small)
                 .foregroundStyle(DS.Color.textSecondary)
@@ -377,10 +504,10 @@ struct IDEListView: View {
                 )
             }
             .buttonStyle(.plain)
-            .cursor(.pointingHand)
+            .help("Choose your preferred IDE for opening files")
             .popover(isPresented: $showPicker, arrowEdge: .bottom) {
                 VStack(spacing: DS.Spacing.md) {
-                    styledTextField("Search IDE…", text: $search)
+                    styledTextField("Search IDE…", text: $search, help: "Filter available IDEs by name")
 
                     ScrollView(.vertical) {
                         LazyVStack(spacing: DS.Spacing.xs) {
@@ -403,9 +530,10 @@ struct IDEListView: View {
                 .padding(DS.Spacing.xl)
                 .frame(width: 320)
             }
+            .cursor(.pointingHand)
 
             if defaultIDE == "custom" {
-                styledTextField("e.g. myeditor://open?file={file}&line={line}", text: $customIDECommand)
+                styledTextField("e.g. myeditor://open?file={file}&line={line}", text: $customIDECommand, help: "Custom URL scheme to open files in your editor")
             }
         }
     }

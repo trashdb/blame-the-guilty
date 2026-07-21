@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct QuickSearchAction: Identifiable {
@@ -62,7 +63,7 @@ struct QuickSearchView: View {
 
         if let match = try? NSRegularExpression(pattern: "^(?:open\\s+)?(\\d+)$", options: .caseInsensitive)
             .firstMatch(in: q, range: NSRange(q.startIndex..., in: q)),
-           let range = Range(match.range(at: 1), in: q) {
+            let range = Range(match.range(at: 1), in: q) {
             let ticket = "\(projectKey)-\(q[range])"
             results.append(QuickSearchAction(
                 id: "smart-ticket-\(ticket)", title: "Open Jira ticket \(ticket)",
@@ -74,7 +75,7 @@ struct QuickSearchView: View {
 
         if let match = try? NSRegularExpression(pattern: "^(?:open\\s+)?([A-Z]+-\\d+)$", options: .caseInsensitive)
             .firstMatch(in: q, range: NSRange(q.startIndex..., in: q)),
-           let range = Range(match.range(at: 1), in: q) {
+            let range = Range(match.range(at: 1), in: q) {
             let ticket = String(q[range]).uppercased()
             results.append(QuickSearchAction(
                 id: "smart-ticket-\(ticket)", title: "Open Jira ticket \(ticket)",
@@ -86,7 +87,7 @@ struct QuickSearchView: View {
 
         if let match = try? NSRegularExpression(pattern: "^checkout\\s+(.+)", options: .caseInsensitive)
             .firstMatch(in: q, range: NSRange(q.startIndex..., in: q)),
-           let range = Range(match.range(at: 1), in: q) {
+            let range = Range(match.range(at: 1), in: q) {
             let term = String(q[range]).lowercased()
             for b in branches {
                 if b.name.lowercased().contains(term) || b.repoName.lowercased().contains(term) {
@@ -107,7 +108,7 @@ struct QuickSearchView: View {
 
         if let match = try? NSRegularExpression(pattern: "(?:create\\s+)?pr\\s+(?:from\\s+)?(.+)", options: .caseInsensitive)
             .firstMatch(in: q, range: NSRange(q.startIndex..., in: q)),
-           let range = Range(match.range(at: 1), in: q) {
+            let range = Range(match.range(at: 1), in: q) {
             let term = String(q[range]).lowercased()
             for b in branches {
                 if b.name.lowercased().contains(term) || b.repoName.lowercased().contains(term) {
@@ -153,6 +154,7 @@ struct QuickSearchView: View {
                 Color.black.opacity(0.35)
                     .ignoresSafeArea()
                     .onTapGesture { isPresented = false }
+                    .cursor(.pointingHand)
 
                 VStack(spacing: 0) {
                     HStack(spacing: DS.Spacing.lg) {
@@ -168,23 +170,27 @@ struct QuickSearchView: View {
                     .padding(DS.Spacing.xl)
                     .background(DS.Color.fieldBackground.opacity(0.6))
 
-                    if query.isEmpty {
-                        resultsList
-                    } else if !hasAnyResults {
-                        VStack(spacing: DS.Spacing.lg) {
-                            Spacer()
-                            Image(systemName: "magnifyingglass")
-                                .font(.system(size: 24))
-                                .foregroundStyle(DS.Color.textTertiary)
-                            Text("No matching commands")
-                                .font(DS.Font.body)
-                                .foregroundStyle(DS.Color.textSecondary)
-                            Spacer()
+                    Group {
+                        if query.isEmpty {
+                            resultsList
+                        } else if !hasAnyResults {
+                            VStack(spacing: DS.Spacing.lg) {
+                                Spacer()
+                                Image(systemName: "magnifyingglass")
+                                    .font(.system(size: 24))
+                                    .foregroundStyle(DS.Color.textTertiary)
+                                Text("No matching commands")
+                                    .font(DS.Font.body)
+                                    .foregroundStyle(DS.Color.textSecondary)
+                                Spacer()
+                            }
+                            .frame(height: 180)
+                        } else {
+                            resultsList
                         }
-                        .frame(height: 180)
-                    } else {
-                        resultsList
                     }
+                    .animation(DS.Animation.default, value: query.isEmpty)
+                    .animation(DS.Animation.default, value: hasAnyResults)
 
                     HStack(spacing: DS.Spacing.xl) {
                         Text("↵ execute")
@@ -210,8 +216,10 @@ struct QuickSearchView: View {
                     RoundedRectangle(cornerRadius: DS.Radius.xl)
                         .stroke(DS.Color.divider, lineWidth: 1)
                 )
+                .transition(.scale(scale: 0.95).combined(with: .opacity))
                 .onAppear {
                     selectedIndex = 0
+                    focusTextField()
                     Task {
                         let path = UserDefaults.standard.string(forKey: "workspacePath") ?? TeamDefaults.workspacePath
                         let branches = await GitService.scanCurrentBranches(workspacePath: path)
@@ -219,7 +227,10 @@ struct QuickSearchView: View {
                     }
                 }
                 .onChange(of: query) { _ in selectedIndex = 0 }
-                .onChange(of: isPresented) { shown in if shown { query = ""; selectedIndex = 0 } }
+                .onChange(of: isPresented) { shown in
+                    if shown { query = ""; selectedIndex = 0; focusTextField() }
+                }
+                .onExitCommand { isPresented = false }
             }
         }
     }
@@ -240,6 +251,7 @@ struct QuickSearchView: View {
                                         actionRow(action, globalIdx: globalIdx)
                                     }
                                     .buttonStyle(.plain)
+                                    .hoverEffect()
                                     .cursor(.pointingHand)
                                     .id(action.id)
                                 }
@@ -302,6 +314,7 @@ struct QuickSearchView: View {
                 Image(systemName: "arrow.left")
                     .font(DS.Font.small)
                     .foregroundStyle(DS.Color.accent)
+                    .transition(.opacity.combined(with: .scale(scale: 0.7)))
             }
         }
         .padding(.horizontal, DS.Spacing.xl)
@@ -312,6 +325,25 @@ struct QuickSearchView: View {
                 : Color.clear,
             in: RoundedRectangle(cornerRadius: DS.Radius.sm)
         )
+        .animation(DS.Animation.default, value: selectedIndex)
+    }
+
+    private func focusTextField() {
+        DispatchQueue.main.async {
+            guard let window = NSApp.keyWindow ?? NSApp.windows.first(where: \.isVisible) else { return }
+
+            func findField(in view: NSView) -> NSTextField? {
+                for sub in view.subviews {
+                    if let tf = sub as? NSTextField, tf.isEditable { return tf }
+                    if let found = findField(in: sub) { return found }
+                }
+                return nil
+            }
+
+            if let tf = findField(in: window.contentView ?? NSView()) {
+                window.makeFirstResponder(tf)
+            }
+        }
     }
 
     @ViewBuilder

@@ -35,12 +35,7 @@ struct WebhookLogView: View {
                         .frame(maxWidth: .infinity)
                     Spacer()
                 } else if logs.isEmpty {
-                    Spacer()
-                    Text("No webhook events yet")
-                        .font(DS.Font.body)
-                        .foregroundStyle(DS.Color.textSecondary)
-                        .frame(maxWidth: .infinity)
-                    Spacer()
+                    emptyState("No webhook events yet", icon: "antenna.radiowaves.left.and.right")
                 } else {
                     ScrollView {
                         LazyVStack(spacing: DS.Spacing.xs) {
@@ -57,6 +52,8 @@ struct WebhookLogView: View {
         }
         .frame(width: 560, height: 500)
         .onAppear(perform: loadLogs)
+        .closeOnEscape { WebhookLogPanelManager.shared.close() }
+        .closeOnCmdW { WebhookLogPanelManager.shared.close() }
     }
 
     private func loadLogs() {

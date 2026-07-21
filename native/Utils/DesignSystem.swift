@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 // MARK: - Design System
@@ -33,15 +34,15 @@ enum DS {
         static let textSecondary = SwiftUI.Color(nsColor: .secondaryLabelColor)
         static let textTertiary = SwiftUI.Color(nsColor: .tertiaryLabelColor)
 
-        // Surfaces
-        static let cardBackground = SwiftUI.Color(nsColor: .controlBackgroundColor).opacity(0.55)
-        static let cardHover = SwiftUI.Color(nsColor: .controlBackgroundColor).opacity(0.8)
-        static let fieldBackground = SwiftUI.Color(nsColor: .controlBackgroundColor).opacity(0.35)
-        static let divider = SwiftUI.Color(nsColor: .separatorColor).opacity(0.25)
+        // Surfaces — use primary.opacity for cross-mode compatibility
+        static let cardBackground = SwiftUI.Color.primary.opacity(0.05)
+        static let cardHover = SwiftUI.Color.primary.opacity(0.1)
+        static let fieldBackground = SwiftUI.Color.primary.opacity(0.06)
+        static let divider = SwiftUI.Color(nsColor: .separatorColor).opacity(0.3)
 
         // Row backgrounds
-        static let rowBackground = SwiftUI.Color(nsColor: .controlBackgroundColor).opacity(0.2)
-        static let rowHover = SwiftUI.Color(nsColor: .controlBackgroundColor).opacity(0.35)
+        static let rowBackground = SwiftUI.Color.primary.opacity(0.04)
+        static let rowHover = SwiftUI.Color.primary.opacity(0.08)
 
         // Accent — a refined blue
         static let accent = SwiftUI.Color(red: 0.2, green: 0.45, blue: 0.95)
@@ -140,7 +141,7 @@ extension View {
 
     /// Ghost action button (outlined)
     @ViewBuilder
-    func actionButton(_ label: String, color: SwiftUI.Color, action: @escaping () -> Void) -> some View {
+    func actionButton(_ label: String, color: SwiftUI.Color, help: String? = nil, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(label)
                 .font(DS.Font.caption.semibold())
@@ -154,13 +155,15 @@ extension View {
                 )
         }
         .buttonStyle(.plain)
-        .cursor(.pointingHand)
+        .hoverEffect()
         .contentShape(Rectangle())
+        .cursor(.pointingHand)
+        .ifLet(help) { $0.help($1) }
     }
 
     /// Solid filled button
     @ViewBuilder
-    func solidButton(_ label: String, color: SwiftUI.Color, disabled: Bool = false, action: @escaping () -> Void) -> some View {
+    func solidButton(_ label: String, color: SwiftUI.Color, disabled: Bool = false, help: String? = nil, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(label)
                 .font(DS.Font.caption.semibold())
@@ -170,15 +173,17 @@ extension View {
                 .background(disabled ? color.opacity(0.4) : color, in: RoundedRectangle(cornerRadius: DS.Radius.sm))
         }
         .buttonStyle(.plain)
-        .cursor(.pointingHand)
+        .hoverEffect()
         .contentShape(Rectangle())
+        .cursor(.pointingHand)
         .disabled(disabled)
+        .ifLet(help) { $0.help($1) }
     }
 
     /// Link button → opens URL
     @ViewBuilder
-    func linkButton(_ label: String, url: URL) -> some View {
-        actionButton(label, color: .blue) {
+    func linkButton(_ label: String, url: URL, help: String? = nil) -> some View {
+        actionButton(label, color: .blue, help: help) {
             NSWorkspace.shared.open(url)
         }
     }
@@ -195,23 +200,66 @@ extension View {
         }
         .buttonStyle(.plain)
         .ifLet(help) { $0.help($1) }
-        .cursor(.pointingHand)
+        .hoverEffect()
         .contentShape(Rectangle())
+        .cursor(.pointingHand)
     }
 
     /// Styled text field used in Settings/forms
     @ViewBuilder
-    func styledTextField(_ placeholder: String, text: Binding<String>) -> some View {
-        TextField(placeholder, text: text)
-            .textFieldStyle(.plain)
-            .font(DS.Font.mono(12))
-            .padding(.horizontal, DS.Spacing.lg)
-            .padding(.vertical, DS.Spacing.md)
-            .background(DS.Color.fieldBackground, in: RoundedRectangle(cornerRadius: DS.Radius.md))
-            .overlay(
-                RoundedRectangle(cornerRadius: DS.Radius.md)
-                    .stroke(DS.Color.divider, lineWidth: 1)
-            )
+    func styledTextField(_ placeholder: String, text: Binding<String>, help: String? = nil, error: Binding<String?>? = nil) -> some View {
+        let hasError = error?.wrappedValue != nil
+        let borderColor: SwiftUI.Color = hasError ? DS.Color.destructive : DS.Color.divider
+        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+            TextField(placeholder, text: text)
+                .textFieldStyle(.plain)
+                .font(DS.Font.mono(12))
+                .foregroundStyle(hasError ? DS.Color.destructive : DS.Color.textPrimary)
+                .padding(.horizontal, DS.Spacing.lg)
+                .padding(.vertical, DS.Spacing.md)
+                .background(DS.Color.fieldBackground, in: RoundedRectangle(cornerRadius: DS.Radius.md))
+                .overlay(
+                    RoundedRectangle(cornerRadius: DS.Radius.md)
+                        .stroke(borderColor, lineWidth: hasError ? 1.5 : 1)
+                )
+                .ifLet(help) { $0.help($1) }
+            if let error, let msg = error.wrappedValue {
+                Text(msg)
+                    .font(DS.Font.tiny)
+                    .foregroundStyle(DS.Color.destructive)
+                    .padding(.leading, DS.Spacing.sm)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+
+    /// URL text field with red border when the value isn't a valid URL
+    @ViewBuilder
+    func urlTextField(_ placeholder: String, text: Binding<String>, required: Bool = true, help: String? = nil, error: Binding<String?>? = nil) -> some View {
+        let urlValid = !required || text.wrappedValue.isEmpty || URL(string: text.wrappedValue) != nil
+        let hasError = error?.wrappedValue != nil || !urlValid
+        let borderColor: SwiftUI.Color = hasError ? DS.Color.destructive : DS.Color.divider
+        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+            TextField(placeholder, text: text)
+                .textFieldStyle(.plain)
+                .font(DS.Font.mono(12))
+                .foregroundStyle(hasError ? DS.Color.destructive : DS.Color.textPrimary)
+                .padding(.horizontal, DS.Spacing.lg)
+                .padding(.vertical, DS.Spacing.md)
+                .background(DS.Color.fieldBackground, in: RoundedRectangle(cornerRadius: DS.Radius.md))
+                .overlay(
+                    RoundedRectangle(cornerRadius: DS.Radius.md)
+                        .stroke(borderColor, lineWidth: hasError ? 1.5 : 1)
+                )
+                .ifLet(help) { $0.help($1) }
+            if hasError, let error, let msg = error.wrappedValue {
+                Text(msg)
+                    .font(DS.Font.tiny)
+                    .foregroundStyle(DS.Color.destructive)
+                    .padding(.leading, DS.Spacing.sm)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
     }
 
     /// Section header label
@@ -222,12 +270,45 @@ extension View {
             .foregroundStyle(color)
     }
 
-    /// Add hover effect with scale + background
+/// Add hover effect with scale + background
+@ViewBuilder
+func hoverEffect<S: ShapeStyle>(cornerRadius: CGFloat = DS.Radius.md, shapeStyle: S = DS.Color.rowHover) -> some View {
+    self.modifier(HoverEffectModifier(cornerRadius: cornerRadius, shapeStyle: shapeStyle))
+}
+
+}
+
+// MARK: - Popover Transition
+extension View {
     @ViewBuilder
-    func hoverEffect<S: ShapeStyle>(cornerRadius: CGFloat = DS.Radius.md, shapeStyle: S = DS.Color.rowHover) -> some View {
-        self.modifier(HoverEffectModifier(cornerRadius: cornerRadius, shapeStyle: shapeStyle))
+    func popoverTransition() -> some View {
+        self.transition(.scale(scale: 0.95).combined(with: .opacity))
     }
 
+    /// Animate a binding-toggled popover with standard spring
+    @ViewBuilder
+    func animatedPopover<V: Identifiable>(item: Binding<V?>, @ViewBuilder content: @escaping (V) -> some View) -> some View {
+        self.background {
+            Color.clear
+                .popover(item: item) { value in
+                    content(value)
+                        .popoverTransition()
+                }
+                .animation(DS.Animation.popover, value: item.wrappedValue != nil)
+        }
+    }
+
+    @ViewBuilder
+    func animatedPopover<P>(isPresented: Binding<Bool>, @ViewBuilder content: @escaping () -> P) -> some View where P: View {
+        self.background {
+            Color.clear
+                .popover(isPresented: isPresented) {
+                    content()
+                        .popoverTransition()
+                }
+                .animation(DS.Animation.popover, value: isPresented.wrappedValue)
+        }
+    }
 }
 
 // MARK: - Hover Effect Modifier
@@ -238,7 +319,6 @@ struct HoverEffectModifier<S: ShapeStyle>: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .scaleEffect(isHovering ? 1.02 : 1.0)
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius)
                     .fill(isHovering ? AnyShapeStyle(shapeStyle) : AnyShapeStyle(.clear))
@@ -248,6 +328,98 @@ struct HoverEffectModifier<S: ShapeStyle>: ViewModifier {
                     isHovering = hovering
                 }
             }
+        }
+    }
+
+extension View {
+    func cursor(_ cursor: NSCursor) -> some View {
+        self.onHover { inside in
+            if inside { cursor.push() } else { NSCursor.pop() }
+        }
+    }
+
+    /// Use addCursorRect for native controls where onHover doesn't fire (e.g. Picker with .menu).
+    func nativeCursor(_ cursor: NSCursor) -> some View {
+        self.overlay(NativeCursorOverlay(cursor: cursor).allowsHitTesting(false))
+    }
+}
+
+// MARK: - Native cursor overlay for controls where onHover is unreliable
+private struct NativeCursorOverlay: NSViewRepresentable {
+    let cursor: NSCursor
+
+    func makeNSView(context: Context) -> NSView {
+        NativeCursorView(cursor: cursor)
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            nsView.window?.invalidateCursorRects(for: nsView)
+        }
+    }
+}
+
+private class NativeCursorView: NSView {
+    let cursor: NSCursor
+
+    init(cursor: NSCursor) {
+        self.cursor = cursor
+        super.init(frame: .zero)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: cursor)
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        window?.invalidateCursorRects(for: self)
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        if let w = window, newSize != .zero {
+            w.invalidateCursorRects(for: self)
+        }
+    }
+}
+
+// MARK: - Keyboard Shortcuts
+extension View {
+    /// Close the current panel/window when Esc is pressed
+    func closeOnEscape(_ action: @escaping () -> Void) -> some View {
+        self.onExitCommand(perform: action)
+    }
+
+    /// ⌘W to close the current panel/window
+    func closeOnCmdW(_ action: @escaping () -> Void) -> some View {
+        self.background(
+            Button("") { action() }
+                .keyboardShortcut("w", modifiers: .command)
+                .labelsHidden()
+                .hidden()
+        )
+    }
+}
+
+// MARK: - Empty State
+extension View {
+    @ViewBuilder
+    func emptyState(_ message: String, icon: String = "tray") -> some View {
+        VStack(spacing: DS.Spacing.md) {
+            Image(systemName: icon)
+                .font(.system(size: 32))
+                .foregroundStyle(DS.Color.textTertiary)
+            Text(message)
+                .font(DS.Font.body)
+                .foregroundStyle(DS.Color.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.vertical, DS.Spacing.xxl)
+        .transition(.opacity.combined(with: .move(edge: .top)))
     }
 }
 
@@ -268,6 +440,16 @@ extension SwiftUI.Font {
     func bold() -> SwiftUI.Font { weight(.bold) }
     func semibold() -> SwiftUI.Font { weight(.semibold) }
     func medium() -> SwiftUI.Font { weight(.medium) }
+}
+
+// MARK: - Badge Color Animation
+extension View {
+    @ViewBuilder
+    func animatingBadge(color: SwiftUI.Color) -> some View {
+        self
+            .foregroundStyle(color)
+            .animation(DS.Animation.fast, value: color)
+    }
 }
 
 // MARK: - Section Header Font

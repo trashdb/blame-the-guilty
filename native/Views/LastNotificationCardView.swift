@@ -4,43 +4,44 @@ struct LastNotificationCardView: View {
     let event: PunishmentEvent
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 5) {
+        VStack(alignment: .leading, spacing: DS.Spacing.md) {
+            HStack(spacing: DS.Spacing.xs) {
                 Image(systemName: "flame.fill")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.red)
+                    .font(DS.Font.caption)
+                    .foregroundStyle(DS.Color.destructive)
                 Text("Last Notification")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.red)
+                    .font(DS.Font.small.semibold())
+                    .foregroundStyle(DS.Color.destructive)
                 Spacer()
                 Text(event.date, style: .relative)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
+                    .font(DS.Font.caption)
+                    .foregroundStyle(DS.Color.textTertiary)
             }
 
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: DS.Spacing.md) {
+                VStack(alignment: .leading, spacing: DS.Spacing.xs) {
                     Text("@\(event.culprit)")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Color(white: 0.85))
+                        .font(DS.Font.body.semibold())
+                        .foregroundStyle(DS.Color.textPrimary)
 
                     if let wfName = event.workflowName {
                         Text(wfName)
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                            .font(DS.Font.small)
+                            .foregroundStyle(DS.Color.textSecondary)
                             .lineLimit(1)
+                            .transition(.opacity)
                     }
 
-                    HStack(spacing: 4) {
+                    HStack(spacing: DS.Spacing.xs) {
                         Text(shortRepo(event.repo))
-                            .font(.system(size: 11))
-                            .foregroundStyle(.tertiary)
+                            .font(DS.Font.small)
+                            .foregroundStyle(DS.Color.textTertiary)
                             .lineLimit(1)
                         Text("·")
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(DS.Color.textTertiary)
                         Text("Run #\(event.runId)")
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(.tertiary)
+                            .font(DS.Font.mono(10))
+                            .foregroundStyle(DS.Color.textTertiary)
                     }
                 }
 
@@ -51,27 +52,30 @@ struct LastNotificationCardView: View {
                 Button {
                     NSWorkspace.shared.open(url)
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: DS.Spacing.xs) {
                         Image(systemName: "arrow.up.right")
-                            .font(.system(size: 10))
+                            .font(DS.Font.caption)
                         Text("Open in GitHub")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(DS.Font.small.medium())
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-                    .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
-                    .foregroundStyle(Color(white: 0.85))
+                    .padding(.vertical, DS.Spacing.sm + 1)
+                    .background(DS.Color.cardBackground, in: RoundedRectangle(cornerRadius: DS.Radius.sm + 1))
+                    .foregroundStyle(DS.Color.textPrimary)
                 }
                 .buttonStyle(.plain)
+                .hoverEffect()
                 .cursor(.pointingHand)
+                .help("Open this workflow run in GitHub")
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, DS.Spacing.xl + 1)
+        .padding(.vertical, DS.Spacing.lg + 1)
+        .background(DS.Color.cardBackground, in: RoundedRectangle(cornerRadius: DS.Radius.lg + 1))
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(.white.opacity(0.08), lineWidth: 1)
+            RoundedRectangle(cornerRadius: DS.Radius.lg + 1)
+                .stroke(DS.Color.divider, lineWidth: 1)
         )
     }
 }

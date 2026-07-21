@@ -13,52 +13,50 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: DS.Spacing.xl) {
-                // Header
-                HStack(spacing: DS.Spacing.md) {
-                    Image(systemName: "flame.fill")
-                        .font(DS.Font.title)
-                    Text("Blame the Guilty")
-                        .font(DS.Font.largeTitle)
-                }
+                    // Header
+                    HStack(spacing: DS.Spacing.md) {
+                        Image(systemName: "flame.fill")
+                            .font(DS.Font.title)
+                        Text("Blame the Guilty")
+                            .font(DS.Font.largeTitle)
+                    }
 
-                Text("CI/CD notifications when a merged PR breaks the build.")
-                    .font(DS.Font.body)
-                    .foregroundStyle(DS.Color.textSecondary)
-                    .lineLimit(2)
+                    Text("CI/CD notifications when a merged PR breaks the build.")
+                        .font(DS.Font.body)
+                        .foregroundStyle(DS.Color.textSecondary)
+                        .lineLimit(2)
 
-                Divider()
-
-                if signalR.isLoggedIn {
-                    LoggedInCardView(username: signalR.username, avatarUrl: signalR.avatarUrl, onSignOut: logout)
-                    KeepSignedInToggleView(isOn: $keepSignedIn)
-                } else {
-                    SignInCardView(isLoading: isLoading, loginError: loginError, onSignIn: login)
-                }
-
-                if signalR.isLoggedIn {
-                    ActivePRsView(prs: signalR.activePRs, gitHubId: signalR.userGitHubId)
                     Divider()
-                }
 
-                if signalR.isLoggedIn {
-                    if let event = signalR.lastEvent {
-                        LastNotificationCardView(event: event)
+                    if signalR.isLoggedIn {
+                        LoggedInCardView(username: signalR.username, avatarUrl: signalR.avatarUrl, onSignOut: logout)
+                        KeepSignedInToggleView(isOn: $keepSignedIn)
                     } else {
-                        EmptyNotificationView()
+                        SignInCardView(isLoading: isLoading, loginError: loginError, onSignIn: login)
+                    }
+
+                    if signalR.isLoggedIn {
+                        ActivePRsView(prs: signalR.activePRs, gitHubId: signalR.userGitHubId)
+                        Divider()
+                    }
+
+                    if signalR.isLoggedIn {
+                        if let event = signalR.lastEvent {
+                            LastNotificationCardView(event: event)
+                        } else {
+                            EmptyNotificationView()
+                        }
+                    }
+
+                    if signalR.isLoggedIn {
+                        Divider()
+                        LocalBranchesView(gitHubId: signalR.userGitHubId, backendUrl: signalR.baseUrl)
                     }
                 }
-
-                if signalR.isLoggedIn {
-                    Divider()
-                    LocalBranchesView(gitHubId: signalR.userGitHubId, backendUrl: signalR.baseUrl)
-                }
-            }
-            .foregroundStyle(DS.Color.textSecondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, DS.Spacing.xl)
-            .padding(.horizontal, DS.Spacing.xxl)
-
-            Spacer(minLength: 0)
+                .foregroundStyle(DS.Color.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, DS.Spacing.xl)
+                .padding(.horizontal, DS.Spacing.xxl)
 
             Divider()
 
@@ -146,7 +144,7 @@ struct ContentView: View {
             .padding(.horizontal, DS.Spacing.xxl)
             .padding(.vertical, DS.Spacing.xl)
         }
-        .frame(width: 400, height: 820, alignment: .top)
+        .frame(width: 400, height: 910, alignment: .top)
         .background(.regularMaterial)
         .onAppear {
             signalR.restoreSession()
@@ -154,6 +152,12 @@ struct ContentView: View {
             setupQuickSearchShortcut()
         }
         .onChange(of: signalR.activePRs) { updateMenuBarBadge($0) }
+        .onChange(of: signalR.runningWorkflows.count) { _ in
+            updateMenuBarBadge(signalR.activePRs)
+        }
+        .onChange(of: signalR.isConnected) { _ in
+            updateMenuBarBadge(signalR.activePRs)
+        }
         .overlay(QuickSearchView(
             isPresented: $showQuickSearch,
             actions: signalR.isLoggedIn ? quickSearchActions : [],
@@ -161,6 +165,18 @@ struct ContentView: View {
             gitHubId: signalR.userGitHubId,
             backendUrl: signalR.baseUrl
         ))
+        .animation(DS.Animation.popover, value: showQuickSearch)
+        .background(
+            Button("") {
+                let m = SettingsPanelManager.shared
+                m.gitHubId = signalR.userGitHubId
+                m.backendUrl = signalR.baseUrl
+                m.show()
+            }
+            .keyboardShortcut(",", modifiers: .command)
+            .labelsHidden()
+            .hidden()
+        )
     }
 
     private var quickSearchActions: [QuickSearchAction] {
@@ -269,6 +285,16 @@ struct ContentView: View {
         badge.readyCount = prs.filter { $0.ciStatus == "ready" || $0.ciStatus == "" }.count
         badge.mergedCount = prs.filter { $0.isMerged }.count
         badge.runningWorkflowCount = signalR.runningWorkflows.count
+
+        if !signalR.isConnected {
+            badge.connectionState = .disconnected
+        } else if badge.failedPRCount > 0 {
+            badge.connectionState = .hasFailures
+        } else if badge.runningWorkflowCount > 0 {
+            badge.connectionState = .hasRunning
+        } else {
+            badge.connectionState = .connected
+        }
     }
 
     private func login() {

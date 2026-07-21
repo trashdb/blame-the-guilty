@@ -128,6 +128,7 @@ struct CreatePRPreviewView: View {
                     .font(.system(size: 10))
                     .padding(.horizontal, 10).padding(.vertical, 4)
                     .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
+                    .cursor(.pointingHand)
                 Button("Create PR") { Task { await createPR() } }
                     .buttonStyle(.plain)
                     .font(.system(size: 10, weight: .medium))
@@ -135,6 +136,7 @@ struct CreatePRPreviewView: View {
                     .padding(.horizontal, 10).padding(.vertical, 4)
                     .background(.green.opacity(0.15), in: RoundedRectangle(cornerRadius: 5))
                     .disabled(isCreating)
+                    .cursor(.pointingHand)
             }
         }
         .padding(12)

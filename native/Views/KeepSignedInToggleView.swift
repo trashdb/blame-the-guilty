@@ -6,7 +6,7 @@ struct KeepSignedInToggleView: View {
     var body: some View {
         HStack {
             Text("Keep me signed in")
-                .font(.system(size: 12))
+                .font(DS.Font.body)
 
             Spacer()
 
@@ -14,10 +14,11 @@ struct KeepSignedInToggleView: View {
                 .toggleStyle(.switch)
                 .controlSize(.mini)
                 .labelsHidden()
+                .cursor(.pointingHand)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
-        .padding(.bottom, 6)
+        .padding(.horizontal, DS.Spacing.xl + 1)
+        .padding(.vertical, DS.Spacing.md + 1)
+        .background(DS.Color.cardBackground, in: RoundedRectangle(cornerRadius: DS.Radius.md + 1))
+        .padding(.bottom, DS.Spacing.sm + 1)
     }
 }

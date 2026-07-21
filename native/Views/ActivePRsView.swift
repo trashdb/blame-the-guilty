@@ -5,6 +5,43 @@ struct ActivePRsView: View {
     let gitHubId: Int64
     @State private var selectedPR: PullRequest?
     @State private var optimisticDrafts: [String: Bool] = [:]
+    @State private var searchQuery = ""
+    @State private var selectedRepo: String? = nil
+    @State private var selectedStatus: PRFilterStatus = .all
+
+    private var repos: [String] {
+        Array(Set(prs.map(\.repo))).sorted()
+    }
+
+    private var filteredPRs: [PullRequest] {
+        var result = prs
+
+        // Search
+        if !searchQuery.isEmpty {
+            let q = searchQuery.lowercased()
+            result = result.filter {
+                $0.title.lowercased().contains(q) ||
+                $0.repo.lowercased().contains(q) ||
+                $0.baseBranch.lowercased().contains(q)
+            }
+        }
+
+        // Repo
+        if let repo = selectedRepo {
+            result = result.filter { $0.repo == repo }
+        }
+
+        // Status
+        switch selectedStatus {
+        case .all:      break
+        case .ready:    result = result.filter { $0.ciStatus == "ready" || $0.ciStatus == "" }
+        case .waiting:  result = result.filter { $0.ciStatus == "waiting" }
+        case .fail:     result = result.filter { $0.ciStatus == "failed" || $0.conclusion == "failure" }
+        case .draft:    result = result.filter { $0.draft }
+        }
+
+        return result
+    }
 
     private func status(for pr: PullRequest) -> (label: String, color: Color) {
         let draft = optimisticDrafts[pr.id] ?? pr.draft
@@ -14,32 +51,102 @@ struct ActivePRsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.md) {
-            sectionHeader("Active PRs (\(prs.count))")
+            sectionHeader("Active PRs (\(filteredPRs.count))")
 
-            ScrollView {
-                LazyVStack(spacing: DS.Spacing.sm) {
-                    ForEach(prs) { pr in
-                        PRCardRow(
-                            pr: pr,
-                            status: status(for: pr),
-                            isPresented: Binding(
-                                get: { selectedPR?.id == pr.id },
-                                set: { if !$0 { selectedPR = nil } }
-                            ),
-                            action: { selectedPR = pr },
-                            popover: PRDetailView(
-                                pr: pr,
-                                gitHubId: gitHubId,
-                                optimisticDraft: optimisticDrafts[pr.id]
-                            ) { newDraft in
-                                optimisticDrafts[pr.id] = newDraft
+            // Search field
+            HStack(spacing: DS.Spacing.sm) {
+                Image(systemName: "magnifyingglass")
+                    .font(DS.Font.caption)
+                    .foregroundStyle(DS.Color.textTertiary)
+                TextField("Search PRs...", text: $searchQuery)
+                    .font(DS.Font.mono(12))
+                    .textFieldStyle(.plain)
+                    .foregroundStyle(DS.Color.textPrimary)
+                    .help("Filter PRs by title, repo, or branch")
+            }
+            .padding(.horizontal, DS.Spacing.md)
+            .padding(.vertical, DS.Spacing.sm)
+            .background(DS.Color.fieldBackground, in: RoundedRectangle(cornerRadius: DS.Radius.md))
+            .overlay(
+                RoundedRectangle(cornerRadius: DS.Radius.md)
+                    .stroke(DS.Color.divider, lineWidth: 1)
+            )
+
+            // Repo picker
+            if repos.count > 1 {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: DS.Spacing.xs) {
+                        repoPill(name: "All", isSelected: selectedRepo == nil) {
+                            withAnimation(DS.Animation.hover) { selectedRepo = nil }
+                        }
+                        ForEach(repos.prefix(6), id: \.self) { repo in
+                            repoPill(name: shortRepo(repo), isSelected: selectedRepo == repo) {
+                                withAnimation(DS.Animation.hover) { selectedRepo = repo }
                             }
-                        )
+                        }
+                        if repos.count > 6 {
+                            Text("+\(repos.count - 6)")
+                                .font(DS.Font.tiny)
+                                .foregroundStyle(DS.Color.textTertiary)
+                        }
                     }
+                    .padding(.horizontal, DS.Spacing.xs)
                 }
             }
-            .scrollDisabled(prs.count < 4)
-            .frame(height: 170, alignment: .top)
+
+            // Status picker
+            Picker("Status", selection: $selectedStatus) {
+                Text("All").tag(PRFilterStatus.all)
+                Text("Ready").tag(PRFilterStatus.ready)
+                Text("Waiting").tag(PRFilterStatus.waiting)
+                Text("Fail").tag(PRFilterStatus.fail)
+                Text("Draft").tag(PRFilterStatus.draft)
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: .infinity)
+            .cursor(.pointingHand)
+
+            // Results (fixed height area)
+            ScrollView {
+                LazyVStack(spacing: DS.Spacing.sm) {
+                    if filteredPRs.isEmpty {
+                        VStack(spacing: DS.Spacing.sm) {
+                            Image(systemName: "tray")
+                                .font(.title2)
+                                .foregroundStyle(DS.Color.textTertiary)
+                            Text("No PRs match your filters")
+                                .font(DS.Font.small)
+                                .foregroundStyle(DS.Color.textSecondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, DS.Spacing.xl)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                    } else {
+                        ForEach(filteredPRs) { pr in
+                            PRCardRow(
+                                pr: pr,
+                                status: status(for: pr),
+                                isPresented: Binding(
+                                    get: { selectedPR?.id == pr.id },
+                                    set: { if !$0 { selectedPR = nil } }
+                                ),
+                                action: { selectedPR = pr },
+                                popover: PRDetailView(
+                                    pr: pr,
+                                    gitHubId: gitHubId,
+                                    optimisticDraft: optimisticDrafts[pr.id]
+                                ) { newDraft in
+                                    optimisticDrafts[pr.id] = newDraft
+                                }
+                            )
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
+                    }
+                }
+                .animation(DS.Animation.default, value: filteredPRs.count)
+            }
+            .scrollDisabled(filteredPRs.count < 4)
+            .frame(height: 180, alignment: .top)
         }
         .padding(.top, DS.Spacing.xs)
         .padding(.bottom, DS.Spacing.sm)
@@ -56,6 +163,35 @@ struct ActivePRsView: View {
             }
         }
     }
+
+    @ViewBuilder
+    private func repoPill(name: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(name)
+                .font(DS.Font.tiny.bold())
+                .foregroundStyle(isSelected ? DS.Color.accent : DS.Color.textSecondary)
+                .padding(.horizontal, DS.Spacing.sm + 2)
+                .padding(.vertical, DS.Spacing.xs)
+                .background(
+                    isSelected
+                    ? DS.Color.accent.opacity(0.12)
+                    : DS.Color.fieldBackground,
+                    in: RoundedRectangle(cornerRadius: DS.Radius.sm)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: DS.Radius.sm)
+                        .stroke(isSelected ? DS.Color.accent.opacity(0.3) : DS.Color.divider, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .hoverEffect()
+        .cursor(.pointingHand)
+        .help("Filter by repository: \(name)")
+    }
+}
+
+enum PRFilterStatus: String, CaseIterable {
+    case all, ready, waiting, fail, draft
 }
 
 // MARK: - Individual PR Card Row
@@ -124,6 +260,9 @@ private struct PRCardRow<PopoverContent: View>: View {
         }
         .popover(isPresented: $isPresented) {
             popover
+                .transition(.scale(scale: 0.95).combined(with: .opacity))
         }
+        .animation(DS.Animation.popover, value: isPresented)
+        .help("\(pr.title) — \(shortRepo(pr.repo)) → \(pr.baseBranch) (\(status.label))")
     }
 }

@@ -2,31 +2,31 @@ import SwiftUI
 
 struct EmptyNotificationView: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 5) {
+        VStack(alignment: .leading, spacing: DS.Spacing.md) {
+            HStack(spacing: DS.Spacing.xs) {
                 Image(systemName: "bell.slash.fill")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
+                    .font(DS.Font.caption)
+                    .foregroundStyle(DS.Color.textSecondary)
                 Text("Last Notification")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .font(DS.Font.small.semibold())
+                    .foregroundStyle(DS.Color.textSecondary)
                 Spacer()
             }
 
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: DS.Spacing.md) {
+                VStack(alignment: .leading, spacing: DS.Spacing.xs) {
                     Text("")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.tertiary)
+                        .font(DS.Font.body.semibold())
+                        .foregroundStyle(DS.Color.textTertiary)
 
                     Text("No recent notifications")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.tertiary)
+                        .font(DS.Font.body)
+                        .foregroundStyle(DS.Color.textTertiary)
 
-                    HStack(spacing: 4) {
+                    HStack(spacing: DS.Spacing.xs) {
                         Text("")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.tertiary)
+                            .font(DS.Font.small)
+                            .foregroundStyle(DS.Color.textTertiary)
                     }
                 }
 
@@ -37,15 +37,15 @@ struct EmptyNotificationView: View {
                 Spacer()
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 6)
-            .padding(.bottom, 12)
+            .padding(.vertical, DS.Spacing.sm + 1)
+            .padding(.bottom, DS.Spacing.xl + 1)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, DS.Spacing.xl + 1)
+        .padding(.vertical, DS.Spacing.lg + 1)
+        .background(DS.Color.cardBackground, in: RoundedRectangle(cornerRadius: DS.Radius.lg + 1))
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(.white.opacity(0.08), lineWidth: 1)
+            RoundedRectangle(cornerRadius: DS.Radius.lg + 1)
+                .stroke(DS.Color.divider, lineWidth: 1)
         )
     }
 }
