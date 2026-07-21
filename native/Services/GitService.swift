@@ -91,6 +91,10 @@ actor GitService {
         (try? await runGit(repoPath: repoPath, args: ["rev-parse", "--abbrev-ref", "@{u}"])) != nil
     }
 
+    func hasUpstream(repoPath: String, branch: String) async -> Bool {
+        (try? await runGit(repoPath: repoPath, args: ["rev-parse", "--verify", "origin/\(branch)"])) != nil
+    }
+
     func pullCurrentBranch(repoPath: String) async -> PullResult {
         guard await hasUpstream(repoPath: repoPath) else { return .noUpstream }
         do {
@@ -508,28 +512,69 @@ actor GitService {
         }
     }
 
+    /// Parse ~/.ssh/config to find the IdentityFile for the SSH host in this repo's remote URL.
+    /// GUI apps can't reliably access the SSH agent, so we pass the key directly.
+    private func resolveSSHIdentityFile(for repoPath: String) -> String? {
+        guard let remoteUrl = try? FileManager.default.contentsOfDirectory(atPath: repoPath + "/.git")
+                .isEmpty == false || true else { return nil }
+        guard let output = try? String(contentsOfFile: "\(repoPath)/.git/config") else { return nil }
+        // Find remote "origin" URL
+        var foundOrigin = false
+        var remoteLine: String?
+        for line in output.components(separatedBy: "\n") {
+            let t = line.trimmingCharacters(in: .whitespaces)
+            if t.hasPrefix("[remote") && t.contains("\"origin\"") { foundOrigin = true; continue }
+            if foundOrigin {
+                if t.hasPrefix("[") { break }
+                if t.hasPrefix("url") {
+                    let comps = t.split(separator: "=", maxSplits: 1)
+                    if comps.count == 2 { remoteLine = String(comps[1]).trimmingCharacters(in: .whitespaces); break }
+                }
+            }
+        }
+        guard let url = remoteLine, url.hasPrefix("git@") else { return nil }
+        let host = url.dropFirst(4).split(separator: ":").first.map(String.init) ?? ""
+
+        // Read SSH config and find matching Host block
+        let configPath = NSHomeDirectory() + "/.ssh/config"
+        guard let config = try? String(contentsOfFile: configPath) else { return nil }
+
+        var inBlock = false
+        for line in config.components(separatedBy: "\n") {
+            let t = line.trimmingCharacters(in: .whitespaces)
+            if t.lowercased().hasPrefix("host ") {
+                let patterns = t.dropFirst(5).trimmingCharacters(in: .whitespaces).split(separator: " ").map(String.init)
+                inBlock = patterns.contains(where: { $0 == host || $0 == "*" })
+            } else if inBlock && t.lowercased().hasPrefix("identityfile") {
+                let path = t.dropFirst(12).trimmingCharacters(in: .whitespaces)
+                let expanded = path.hasPrefix("~") ? NSHomeDirectory() + path.dropFirst(1) : path
+                if FileManager.default.fileExists(atPath: expanded) { return expanded }
+            } else if inBlock && t.lowercased().hasPrefix("host ") && !t.lowercased().hasPrefix("host ") {
+                inBlock = false
+            }
+        }
+        // Fallback: try common default keys
+        for key in ["id_ed25519", "id_rsa", "id_ecdsa"] {
+            let candidate = NSHomeDirectory() + "/.ssh/\(key)"
+            if FileManager.default.fileExists(atPath: candidate) { return candidate }
+        }
+        return nil
+    }
+
     @discardableResult
     private func runGit(repoPath: String, args: [String], timeout: TimeInterval = 15) async throws -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["git"] + args
         process.currentDirectoryURL = URL(fileURLWithPath: repoPath)
-        // GUI apps may lack SSH_AUTH_SOCK — search common locations if not set
+        // GUI apps lack SSH agent — use GIT_SSH_COMMAND with explicit identity file
         var env = ProcessInfo.processInfo.environment
         if env["HOME"] == nil || env["HOME"]?.isEmpty == true {
             env["HOME"] = NSHomeDirectory()
         }
-        if env["SSH_AUTH_SOCK"] == nil {
-            for dir in ["/tmp", "/var/run"] {
-                guard let files = try? FileManager.default.contentsOfDirectory(atPath: dir) else { continue }
-                if let sockDir = files.first(where: { $0.hasPrefix("com.apple.launchd.") }) {
-                    let candidate = "\(dir)/\(sockDir)/Listeners"
-                    if FileManager.default.fileExists(atPath: candidate) {
-                        env["SSH_AUTH_SOCK"] = candidate
-                        break
-                    }
-                }
-            }
+        if env["GIT_SSH_COMMAND"] == nil,
+           let identityFile = resolveSSHIdentityFile(for: repoPath) {
+            env["GIT_SSH_COMMAND"] = "ssh -i '\(identityFile)' -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no"
         }
         process.environment = env
         let out = Pipe(), err = Pipe()

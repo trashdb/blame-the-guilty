@@ -17,6 +17,7 @@ struct BranchDetailView: View {
     @State private var creatingBranch = false
     @State private var createBranchError: String?
     @State private var createBranchSuccess = false
+    @State private var hasUpstream = false
     private let git = GitService()
 
     var body: some View {
@@ -124,12 +125,50 @@ struct BranchDetailView: View {
 
                 Divider()
 
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: DS.Spacing.lg) {
-                        buttonsContent
+                LazyVGrid(columns: [
+                    GridItem(.flexible()),
+                    GridItem(.flexible())
+                ], spacing: DS.Spacing.sm) {
+                    if hasUpstream {
+                        actionButton("Create PR", color: .green) {
+                            showCreatePR = true
+                        }
                     }
-                    VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-                        buttonsContent
+                    actionButton("Branch from here", color: .blue) {
+                        withAnimation(DS.Animation.default) {
+                            showCreateBranch = true
+                            createBranchSuccess = false
+                            createBranchError = nil
+                            newBranchName = ""
+                        }
+                    }
+                    if info.isLocal && !info.isCurrent && !checkoutSuccess {
+                        actionButton(checkingOut ? "Checking out…" : "Checkout", color: .blue) {
+                            Task { await doCheckout() }
+                        }
+                        .disabled(checkingOut)
+                    } else if checkoutSuccess {
+                        Text("✓ Checked out")
+                            .font(DS.Font.small.medium())
+                            .foregroundStyle(DS.Color.success)
+                            .gridCellColumns(2)
+                    }
+                    if info.isLocal && !info.isCurrent && !info.isDefault {
+                        actionButton("Delete", color: .red) {
+                            Task { await doDelete() }
+                        }
+                        .disabled(deleting)
+                    }
+                    if !info.isLocal && !info.isDefault && info.isMerged {
+                        actionButton("Delete Remote", color: .red) {
+                            Task { await doDeleteRemote() }
+                        }
+                        .disabled(deleting)
+                    }
+                    if checkingOut || deleting {
+                        ProgressView()
+                            .scaleEffect(0.5)
+                            .frame(width: 12)
                     }
                 }
 
@@ -138,56 +177,9 @@ struct BranchDetailView: View {
             .padding(DS.Spacing.xxl)
             .frame(width: 320, height: showCreateBranch ? 300 : 220)
             .animation(DS.Animation.default, value: showCreateBranch)
-        }
-    }
-
-    @ViewBuilder
-    private var buttonsContent: some View {
-        if info.isLocal {
-            actionButton("Create PR", color: .green) {
-                showCreatePR = true
+            .task {
+                hasUpstream = await git.hasUpstream(repoPath: info.repoPath, branch: info.name)
             }
-            actionButton("Branch from here", color: .blue) {
-                withAnimation(DS.Animation.default) {
-                    showCreateBranch = true
-                    createBranchSuccess = false
-                    createBranchError = nil
-                    newBranchName = ""
-                }
-            }
-        }
-
-        if info.isLocal && !info.isCurrent && !checkoutSuccess {
-            actionButton(checkingOut ? "Checking out…" : "Checkout", color: .blue) {
-                Task { await doCheckout() }
-            }
-            .disabled(checkingOut)
-        }
-
-        if checkoutSuccess {
-            Text("✓ Checked out")
-                .font(DS.Font.small.medium())
-                .foregroundStyle(DS.Color.success)
-        }
-
-        if info.isLocal && !info.isCurrent && !info.isDefault {
-            actionButton("Delete", color: .red) {
-                Task { await doDelete() }
-            }
-            .disabled(deleting)
-        }
-
-        if !info.isLocal && !info.isDefault && info.isMerged {
-            actionButton("Delete Remote", color: .red) {
-                Task { await doDeleteRemote() }
-            }
-            .disabled(deleting)
-        }
-
-        if checkingOut || deleting {
-            ProgressView()
-                .scaleEffect(0.5)
-                .frame(width: 12)
         }
     }
 
