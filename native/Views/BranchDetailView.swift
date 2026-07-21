@@ -12,6 +12,11 @@ struct BranchDetailView: View {
     @State private var checkoutSuccess = false
     @State private var deleteError: String?
     @State private var showCreatePR = false
+    @State private var showCreateBranch = false
+    @State private var newBranchName = ""
+    @State private var creatingBranch = false
+    @State private var createBranchError: String?
+    @State private var createBranchSuccess = false
     private let git = GitService()
 
     var body: some View {
@@ -79,12 +84,58 @@ struct BranchDetailView: View {
                         .foregroundStyle(DS.Color.destructive)
                 }
 
+                if showCreateBranch {
+                    VStack(spacing: DS.Spacing.sm) {
+                        styledTextField("New branch name", text: $newBranchName, help: "Create a new branch from \"\(info.name)\"")
+                            .frame(maxWidth: .infinity)
+
+                        if let error = createBranchError {
+                            Text(error)
+                                .font(DS.Font.caption)
+                                .foregroundStyle(DS.Color.destructive)
+                        }
+
+                        HStack(spacing: DS.Spacing.md) {
+                            actionButton("Cancel", color: DS.Color.textSecondary) {
+                                withAnimation(DS.Animation.default) {
+                                    showCreateBranch = false
+                                    createBranchError = nil
+                                    newBranchName = ""
+                                }
+                            }
+                            solidButton("Create", color: DS.Color.accent, disabled: newBranchName.trimmingCharacters(in: .whitespaces).isEmpty || creatingBranch) {
+                                Task { await doCreateBranch() }
+                            }
+                            if creatingBranch {
+                                ProgressView()
+                                    .scaleEffect(0.5)
+                                    .frame(width: 12)
+                            }
+                            if createBranchSuccess {
+                                Text("✓ Created")
+                                    .font(DS.Font.small.medium())
+                                    .foregroundStyle(DS.Color.success)
+                            }
+                        }
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    Divider()
+                }
+
                 Divider()
 
                 HStack(spacing: DS.Spacing.lg) {
                     if info.isLocal {
                         actionButton("Create PR", color: .green) {
                             showCreatePR = true
+                        }
+                        actionButton("Branch from here", color: .blue) {
+                            withAnimation(DS.Animation.default) {
+                                showCreateBranch = true
+                                createBranchSuccess = false
+                                createBranchError = nil
+                                newBranchName = ""
+                            }
                         }
                     }
 
@@ -125,8 +176,26 @@ struct BranchDetailView: View {
                 Spacer()
             }
             .padding(DS.Spacing.xxl)
-            .frame(width: 300, height: 220)
+            .frame(width: 320, height: showCreateBranch ? 300 : 220)
+            .animation(DS.Animation.default, value: showCreateBranch)
         }
+    }
+
+    private func doCreateBranch() async {
+        creatingBranch = true
+        createBranchError = nil
+        do {
+            try await git.createBranch(repoPath: info.repoPath, from: info.name, newName: newBranchName.trimmingCharacters(in: .whitespaces))
+            createBranchSuccess = true
+            try await git.checkoutBranch(repoPath: info.repoPath, name: newBranchName.trimmingCharacters(in: .whitespaces))
+            openRider()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                dismiss()
+            }
+        } catch {
+            createBranchError = (error as? GitService.GitError)?.localizedDescription ?? error.localizedDescription
+        }
+        creatingBranch = false
     }
 
     private func doCheckout() async {

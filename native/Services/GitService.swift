@@ -514,6 +514,18 @@ actor GitService {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["git"] + args
         process.currentDirectoryURL = URL(fileURLWithPath: repoPath)
+        // GUI apps may lack SSH_AUTH_SOCK — search common locations if not set
+        var env = ProcessInfo.processInfo.environment
+        if env["SSH_AUTH_SOCK"] == nil {
+            if let tmpFiles = try? FileManager.default.contentsOfDirectory(atPath: "/tmp"),
+               let sockDir = tmpFiles.first(where: { $0.hasPrefix("com.apple.launchd.") }) {
+                let candidate = "/tmp/\(sockDir)/Listeners"
+                if FileManager.default.fileExists(atPath: candidate) {
+                    env["SSH_AUTH_SOCK"] = candidate
+                }
+            }
+        }
+        process.environment = env
         let out = Pipe(), err = Pipe()
         process.standardOutput = out
         process.standardError = err

@@ -14,9 +14,6 @@ struct LocalBranchesView: View {
     @State private var checkingOutBranch: (repo: ScannedRepo, name: String)?
     @State private var pullingBranch: (repoId: String, name: String)?
     @State private var selectedBranchInfo: BranchInfo?
-    @State private var creatingBranchInRepo: String?
-    @State private var newBranchName = ""
-    @State private var sourceBranch = ""
     @AppStorage("favoriteRepo") private var favoriteRepo = TeamDefaults.favoriteRepo
     @AppStorage("workspacePath") private var workspacePath = TeamDefaults.workspacePath
 
@@ -287,71 +284,6 @@ struct LocalBranchesView: View {
             .padding(.trailing, DS.Spacing.md)
             .padding(.vertical, DS.Spacing.xs)
         }
-
-        // Create branch
-        createBranchSection(repo)
-    }
-
-    @ViewBuilder
-    private func createBranchSection(_ repo: ScannedRepo) -> some View {
-        let isCreating = creatingBranchInRepo == repo.id
-        VStack(spacing: DS.Spacing.sm) {
-            Button {
-                withAnimation(DS.Animation.default) {
-                    if isCreating {
-                        creatingBranchInRepo = nil
-                    } else {
-                        creatingBranchInRepo = repo.id
-                        sourceBranch = repo.branches.first(where: { $0.isCurrent })?.name ?? repo.branches.first?.name ?? ""
-                        newBranchName = ""
-                    }
-                }
-            } label: {
-                HStack(spacing: DS.Spacing.xs) {
-                    Image(systemName: isCreating ? "chevron.down" : "plus")
-                        .font(DS.Font.micro)
-                        .foregroundStyle(DS.Color.accent)
-                    Text(isCreating ? "Cancel" : "New branch")
-                        .font(DS.Font.caption)
-                        .foregroundStyle(DS.Color.accent)
-                }
-                .padding(.horizontal, DS.Spacing.sm)
-                .padding(.vertical, 4)
-                .background(DS.Color.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: DS.Radius.sm))
-            }
-            .buttonStyle(.plain)
-            .cursor(.pointingHand)
-            .padding(.leading, 18)
-            .padding(.top, DS.Spacing.xs)
-
-            if isCreating {
-                VStack(spacing: DS.Spacing.sm) {
-                    Picker("From", selection: $sourceBranch) {
-                        ForEach(repo.branches.map(\.name), id: \.self) { name in
-                            Text(name).tag(name)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .frame(maxWidth: .infinity)
-                    .cursor(.pointingHand)
-
-                    styledTextField("Branch name", text: $newBranchName, help: "Enter the name for the new branch")
-
-                    solidButton("Create", color: DS.Color.accent, disabled: newBranchName.trimmingCharacters(in: .whitespaces).isEmpty) {
-                        Task {
-                            await createBranch(repo: repo, from: sourceBranch, newName: newBranchName.trimmingCharacters(in: .whitespaces))
-                            withAnimation(DS.Animation.default) {
-                                creatingBranchInRepo = nil
-                            }
-                        }
-                    }
-                }
-                .padding(.leading, 18)
-                .padding(.trailing, DS.Spacing.md)
-                .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-        }
-        .animation(DS.Animation.default, value: isCreating)
     }
 
     @ViewBuilder
@@ -520,23 +452,6 @@ struct LocalBranchesView: View {
                     repos[ri].error = "Failed to pull \"\(name)\": \((error as? GitService.GitError)?.localizedDescription ?? error.localizedDescription)"
                 }
                 pullingBranch = nil
-            }
-        }
-    }
-
-    private func createBranch(repo: ScannedRepo, from sourceBranch: String, newName: String) async {
-        guard let ri = repos.firstIndex(where: { $0.id == repo.id }) else { return }
-        do {
-            try await git.createBranch(repoPath: repo.path, from: sourceBranch, newName: newName)
-            let branches = try await git.listMyBranches(repoPath: repo.path)
-            await MainActor.run {
-                repos[ri].branches = branches.map { GitBranch(name: $0.name, isCurrent: $0.isCurrent) }
-                repos[ri].isExpanded = true
-            }
-        } catch {
-            await MainActor.run {
-                repos[ri].error = "Failed to create branch \"\(newName)\": \((error as? GitService.GitError)?.localizedDescription ?? error.localizedDescription)"
-                repos[ri].isExpanded = true
             }
         }
     }
