@@ -58,12 +58,32 @@ public class PullRequestsController : ControllerBase
 
         var repos = prs.Select(p => p.RepoFullName).Distinct().ToList();
 
-        // Fetch head SHA, draft, mergeable for every PR from GitHub API
+        // Fetch head SHA, draft, mergeable, and real open/closed state for every PR from GitHub API
         var prData = new Dictionary<long, (bool? Draft, string? Mergeable, string? HeadSha)>();
+        var statusOverrides = new Dictionary<long, string>();
         foreach (var pr in prs)
         {
-            var (draft, mergeable, headSha) = await FetchPullRequestData(pr.PrNumber, pr.RepoFullName, token);
+            var (draft, mergeable, headSha, prState, merged) = await FetchPullRequestData(pr.PrNumber, pr.RepoFullName, token);
             prData[pr.PrNumber] = (draft, mergeable, headSha);
+
+            // Self-heal: if GitHub says the PR is closed/merged but our DB still
+            // has it "open" (missed webhook), correct the status so it never shows
+            // as "ready" after being merged.
+            if (prState == "closed" && pr.Status == "open")
+            {
+                var healed = merged ? "merged" : "closed";
+                statusOverrides[pr.PrNumber] = healed;
+                var entity = await _db.PullRequestEvents
+                    .Where(e => e.PrNumber == pr.PrNumber && e.RepoFullName == pr.RepoFullName && e.Status == "open")
+                    .OrderByDescending(e => e.Id)
+                    .FirstOrDefaultAsync();
+                if (entity != null)
+                {
+                    entity.Status = healed;
+                    if (merged) entity.OccurredAt = DateTime.UtcNow;
+                    await _db.SaveChangesAsync();
+                }
+            }
         }
 
         // Sync workflow run states from GitHub check-runs for each unique (repo, headSha)
@@ -83,7 +103,7 @@ public class PullRequestsController : ControllerBase
         // approvals (e.g. if a "commented" review was submitted after an approval
         // and the old code reset the flag). This ensures the DB stays in sync.
         var reviewOverrides = new Dictionary<long, bool>();
-        foreach (var pr in prs.Where(p => p.Status == "open"))
+        foreach (var pr in prs.Where(p => p.Status == "open" && !statusOverrides.ContainsKey(p.PrNumber)))
         {
             var approved = await FetchReviewApproval(pr.PrNumber, pr.RepoFullName, token);
             if (approved != null)
@@ -116,6 +136,7 @@ public class PullRequestsController : ControllerBase
         foreach (var pr in prs)
         {
             var (_, mergeable, headSha) = prData.GetValueOrDefault(pr.PrNumber);
+            var effectiveStatus = statusOverrides.GetValueOrDefault(pr.PrNumber, pr.Status);
 
             string ciStatus = "review";
             if (headSha != null)
@@ -139,7 +160,10 @@ public class PullRequestsController : ControllerBase
                     ciStatus = "review";
             }
 
-            if (ciStatus == "review" && (reviewOverrides.GetValueOrDefault(pr.PrNumber, pr.ReviewApproved)))
+            // Only compute "ready" for PRs that are still open. A merged/closed PR
+            // must never show as ready to merge.
+            if (effectiveStatus == "open" && ciStatus == "review"
+                && reviewOverrides.GetValueOrDefault(pr.PrNumber, pr.ReviewApproved))
                 ciStatus = "ready";
 
             var finalReviewApproved = reviewOverrides.GetValueOrDefault(pr.PrNumber, pr.ReviewApproved);
@@ -152,7 +176,7 @@ public class PullRequestsController : ControllerBase
                 pr.HeadBranch,
                 pr.BaseBranch,
                 HtmlUrl = pr.PrUrl,
-                pr.Status,
+                Status = effectiveStatus,
                 pr.Conclusion,
                 Draft = pr.Draft,
                 MergeableState = mergeable,
@@ -604,7 +628,7 @@ public class PullRequestsController : ControllerBase
         return Ok(checks);
     }
 
-    private async Task<(bool? draft, string? mergeableState, string? headSha)> FetchPullRequestData(long prNumber, string repoFullName, string? token)
+    private async Task<(bool? draft, string? mergeableState, string? headSha, string? state, bool merged)> FetchPullRequestData(long prNumber, string repoFullName, string? token)
     {
         try
         {
@@ -614,7 +638,7 @@ public class PullRequestsController : ControllerBase
                 request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
             var response = await _githubClient.SendAsync(request);
-            if (!response.IsSuccessStatusCode) return (null, null, null);
+            if (!response.IsSuccessStatusCode) return (null, null, null, null, false);
 
             var content = await response.Content.ReadAsStringAsync();
             var data = JsonSerializer.Deserialize<JsonElement>(content);
@@ -631,11 +655,16 @@ public class PullRequestsController : ControllerBase
             if (data.TryGetProperty("head", out var head) && head.TryGetProperty("sha", out var sha))
                 headSha = sha.GetString();
 
-            return (draft, mergeableState, headSha);
+            // Real open/closed state + whether it was merged — used to self-heal
+            // the DB when a close/merge webhook was missed (e.g. tunnel was down).
+            string? prState = data.TryGetProperty("state", out var st) ? st.GetString() : null;
+            bool merged = data.TryGetProperty("merged", out var mg) && mg.ValueKind == JsonValueKind.True;
+
+            return (draft, mergeableState, headSha, prState, merged);
         }
         catch
         {
-            return (null, null, null);
+            return (null, null, null, null, false);
         }
     }
 
