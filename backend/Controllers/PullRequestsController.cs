@@ -478,7 +478,8 @@ public class PullRequestsController : ControllerBase
             authorName = c.GetProperty("commit").GetProperty("author").GetProperty("name").GetString(),
             authorLogin = c.TryGetProperty("author", out var a) && a.ValueKind == System.Text.Json.JsonValueKind.Object
                 ? (a.TryGetProperty("login", out var l) ? l.GetString() : null) : null,
-            date = c.GetProperty("commit").GetProperty("author").GetProperty("date").GetString()
+            date = c.GetProperty("commit").GetProperty("author").GetProperty("date").GetString(),
+            url = c.TryGetProperty("html_url", out var hu) ? hu.GetString() : null
         }).ToList();
 
         return Ok(commits);
@@ -572,7 +573,8 @@ public class PullRequestsController : ControllerBase
             status = cr.GetProperty("status").GetString(),
             conclusion = cr.TryGetProperty("conclusion", out var conc) ? conc.GetString() : null,
             startedAt = cr.TryGetProperty("started_at", out var sa) ? sa.GetString() : null,
-            completedAt = cr.TryGetProperty("completed_at", out var ca) ? ca.GetString() : null
+            completedAt = cr.TryGetProperty("completed_at", out var ca) ? ca.GetString() : null,
+            url = cr.TryGetProperty("html_url", out var hu) ? hu.GetString() : null
         }).ToList();
 
         return Ok(checks);

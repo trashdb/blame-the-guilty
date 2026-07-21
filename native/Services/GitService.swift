@@ -474,6 +474,21 @@ actor GitService {
         return "Branch updated: rebased \(branch) onto \(baseBranch)"
     }
 
+    func pullBranch(repoPath: String, name: String) async throws {
+        let current = try? await currentBranchName(repoPath: repoPath) ?? ""
+        if current != name {
+            try await runGit(repoPath: repoPath, args: ["checkout", name])
+        }
+        try await runGit(repoPath: repoPath, args: ["pull", "--rebase"])
+        if let current = current, !current.isEmpty, current != name {
+            try await runGit(repoPath: repoPath, args: ["checkout", current])
+        }
+    }
+
+    func createBranch(repoPath: String, from sourceBranch: String, newName: String) async throws {
+        try await runGit(repoPath: repoPath, args: ["checkout", "-b", newName, sourceBranch])
+    }
+
     private func runGitSimple(args: [String]) async throws -> String {
         try await withCheckedThrowingContinuation { continuation in
             let process = Process()

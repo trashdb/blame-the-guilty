@@ -28,6 +28,7 @@ private struct CommitInfo: Decodable, Identifiable {
     let authorName: String?
     let authorLogin: String?
     let date: String?
+    let url: String?
 }
 
 private struct FileInfo: Decodable, Identifiable {
@@ -45,6 +46,7 @@ private struct CheckInfo: Decodable, Identifiable {
     let conclusion: String?
     let startedAt: String?
     let completedAt: String?
+    let url: String?
 }
 
 struct PRDetailView: View {
@@ -300,31 +302,39 @@ struct PRDetailView: View {
                 }
             } else {
                 List(commits) { commit in
-                    HStack(spacing: DS.Spacing.sm) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(commit.message?.trimmingCharacters(in: .newlines) ?? "")
-                                .font(DS.Font.small.medium())
-                                .foregroundStyle(DS.Color.textPrimary)
-                                .lineLimit(2)
-                            HStack(spacing: DS.Spacing.sm) {
-                                Text(commit.authorName ?? commit.authorLogin ?? "unknown")
-                                    .font(DS.Font.caption)
-                                    .foregroundStyle(DS.Color.accent)
-                                if let date = commit.date {
-                                    Text(date)
+                    Button {
+                        if let urlStr = commit.url, let url = URL(string: urlStr) {
+                            NSWorkspace.shared.open(url)
+                        }
+                    } label: {
+                        HStack(spacing: DS.Spacing.sm) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(commit.message?.trimmingCharacters(in: .newlines) ?? "")
+                                    .font(DS.Font.small.medium())
+                                    .foregroundStyle(DS.Color.textPrimary)
+                                    .lineLimit(2)
+                                HStack(spacing: DS.Spacing.sm) {
+                                    Text(commit.authorName ?? commit.authorLogin ?? "unknown")
                                         .font(DS.Font.caption)
-                                        .foregroundStyle(DS.Color.textTertiary)
+                                        .foregroundStyle(DS.Color.accent)
+                                    if let date = commit.date {
+                                        Text(date)
+                                            .font(DS.Font.caption)
+                                            .foregroundStyle(DS.Color.textTertiary)
+                                    }
                                 }
                             }
+                            Spacer()
+                            if let sha = commit.sha, sha.count >= 7 {
+                                Text(String(sha.prefix(7)))
+                                    .font(DS.Font.mono(8))
+                                    .foregroundStyle(DS.Color.textTertiary)
+                            }
                         }
-                        Spacer()
-                        if let sha = commit.sha, sha.count >= 7 {
-                            Text(String(sha.prefix(7)))
-                                .font(DS.Font.mono(8))
-                                .foregroundStyle(DS.Color.textTertiary)
-                        }
+                        .padding(.vertical, 2)
                     }
-                    .padding(.vertical, 2)
+                    .buttonStyle(.plain)
+                    .cursor(.pointingHand)
                 }
                 .listStyle(.plain)
             }
@@ -369,26 +379,34 @@ struct PRDetailView: View {
                 }
             } else {
                 List(files) { file in
-                    HStack(spacing: DS.Spacing.sm) {
-                        Image(systemName: statusIcon(file.status))
-                            .font(DS.Font.caption)
-                            .foregroundStyle(statusColor(file.status))
-                        Text(file.filename ?? "")
-                            .font(DS.Font.small)
-                            .foregroundStyle(DS.Color.textPrimary)
-                        Spacer()
-                        if let adds = file.additions, adds > 0 {
-                            Text("+\(adds)")
-                                .font(DS.Font.mono(8))
-                                .foregroundStyle(DS.Color.success)
+                    Button {
+                        if let filename = file.filename {
+                            openInRider(file: filename, line: nil)
                         }
-                        if let dels = file.deletions, dels > 0 {
-                            Text("-\(dels)")
-                                .font(DS.Font.mono(8))
-                                .foregroundStyle(DS.Color.destructive)
+                    } label: {
+                        HStack(spacing: DS.Spacing.sm) {
+                            Image(systemName: statusIcon(file.status))
+                                .font(DS.Font.caption)
+                                .foregroundStyle(statusColor(file.status))
+                            Text(file.filename ?? "")
+                                .font(DS.Font.small)
+                                .foregroundStyle(DS.Color.textPrimary)
+                            Spacer()
+                            if let adds = file.additions, adds > 0 {
+                                Text("+\(adds)")
+                                    .font(DS.Font.mono(8))
+                                    .foregroundStyle(DS.Color.success)
+                            }
+                            if let dels = file.deletions, dels > 0 {
+                                Text("-\(dels)")
+                                    .font(DS.Font.mono(8))
+                                    .foregroundStyle(DS.Color.destructive)
+                            }
                         }
+                        .padding(.vertical, 2)
                     }
-                    .padding(.vertical, 2)
+                    .buttonStyle(.plain)
+                    .cursor(.pointingHand)
                 }
                 .listStyle(.plain)
             }
@@ -433,33 +451,41 @@ struct PRDetailView: View {
                 }
             } else {
                 List(checks) { check in
-                    HStack(spacing: DS.Spacing.sm) {
-                        Image(systemName: checkIcon(check.conclusion))
-                            .font(DS.Font.small)
-                            .foregroundStyle(checkColor(check.conclusion))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(check.name ?? "")
-                                .font(DS.Font.small.medium())
-                                .foregroundStyle(DS.Color.textPrimary)
-                            HStack(spacing: DS.Spacing.sm) {
-                                Text(check.status ?? "")
-                                    .font(DS.Font.caption)
-                                    .foregroundStyle(DS.Color.textTertiary)
-                                if let conclusion = check.conclusion {
-                                    Text(conclusion)
+                    Button {
+                        if let urlStr = check.url, let url = URL(string: urlStr) {
+                            NSWorkspace.shared.open(url)
+                        }
+                    } label: {
+                        HStack(spacing: DS.Spacing.sm) {
+                            Image(systemName: checkIcon(check.conclusion))
+                                .font(DS.Font.small)
+                                .foregroundStyle(checkColor(check.conclusion))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(check.name ?? "")
+                                    .font(DS.Font.small.medium())
+                                    .foregroundStyle(DS.Color.textPrimary)
+                                HStack(spacing: DS.Spacing.sm) {
+                                    Text(check.status ?? "")
                                         .font(DS.Font.caption)
-                                        .foregroundStyle(checkColor(conclusion))
+                                        .foregroundStyle(DS.Color.textTertiary)
+                                    if let conclusion = check.conclusion {
+                                        Text(conclusion)
+                                            .font(DS.Font.caption)
+                                            .foregroundStyle(checkColor(conclusion))
+                                    }
                                 }
                             }
+                            Spacer()
+                            if let started = parseDate(check.startedAt ?? "") {
+                                Text(started, style: .relative)
+                                    .font(DS.Font.caption)
+                                    .foregroundStyle(DS.Color.textTertiary)
+                            }
                         }
-                        Spacer()
-                        if let started = parseDate(check.startedAt ?? "") {
-                            Text(started, style: .relative)
-                                .font(DS.Font.caption)
-                                .foregroundStyle(DS.Color.textTertiary)
-                        }
+                        .padding(.vertical, 2)
                     }
-                    .padding(.vertical, 2)
+                    .buttonStyle(.plain)
+                    .cursor(.pointingHand)
                 }
                 .listStyle(.plain)
             }
