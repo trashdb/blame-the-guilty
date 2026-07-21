@@ -13,11 +13,13 @@ public class AuthController : ControllerBase
 {
     private readonly GitHubOAuthService _oauth;
     private readonly AppDbContext _db;
+    private readonly IConfiguration _configuration;
 
-    public AuthController(GitHubOAuthService oauth, AppDbContext db)
+    public AuthController(GitHubOAuthService oauth, AppDbContext db, IConfiguration configuration)
     {
         _oauth = oauth;
         _db = db;
+        _configuration = configuration;
     }
 
     [HttpGet("login")]
@@ -105,7 +107,9 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> GetToken([FromQuery] long gitHubId)
     {
         var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
-        var token = user?.UserPatToken ?? user?.AccessToken;
+        // Mirror the fallback chain used by create-pr / merge so the client can obtain
+        // the same token that already works server-side (incl. the shared global PAT).
+        var token = user?.UserPatToken ?? user?.AccessToken ?? _configuration["GitHub:PatToken"];
         if (string.IsNullOrEmpty(token))
             return Unauthorized(new { error = "No access token found" });
         return Ok(new { token });

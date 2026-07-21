@@ -59,6 +59,12 @@ class SignalRService: ObservableObject {
     private var task: Task<Void, Never>?
     private var gitHubId: Int64 = 0
     private var pollTask: Task<Void, Never>?
+    /// Tracks PRs we've already notified as "ready to merge" so we don't re-notify
+    /// on every 30s poll. A PR is removed once it's no longer ready, so it can
+    /// notify again if it regresses (new commits) and becomes ready once more.
+    private var readyNotifiedPRs: Set<String> = []
+    /// First PR sync seeds the ready set silently (no notification burst on launch).
+    private var didSeedReadyPRs = false
 
     init(baseUrl: String) {
         self.baseUrl = baseUrl
@@ -208,7 +214,7 @@ class SignalRService: ObservableObject {
                 var seen = Set<String>()
                 let unique = prs.filter { seen.insert("\($0.repo)#\($0.prNumber)").inserted }
                 await MainActor.run {
-                    activePRs = unique.map { pr in
+                    let newPRs = unique.map { pr in
                         PullRequest(
                             prNumber: pr.prNumber, title: pr.title,
                             repo: pr.repo,
@@ -229,9 +235,54 @@ class SignalRService: ObservableObject {
                             lastReviewLine: nil
                         )
                     }
+                    notifyNewlyReadyPRs(current: newPRs)
+                    activePRs = newPRs
                 }
             }
         } catch {}
+    }
+
+    /// A PR is "ready to merge" when it's open, not a draft, and CI + review are
+    /// green (`ciStatus == "ready"` means approved + checks passing), and GitHub
+    /// doesn't report conflicts.
+    private func isReadyToMerge(_ pr: PullRequest) -> Bool {
+        guard pr.status == "open", !pr.draft, !pr.isMerged else { return false }
+        guard pr.ciStatus == "ready" else { return false }
+        // If GitHub gives us a mergeable state, don't fire on conflicts/behind base.
+        if let state = pr.mergeableState, state == "dirty" || state == "behind" { return false }
+        return true
+    }
+
+    /// Fires a notification when a PR transitions INTO a ready-to-merge state.
+    /// Runs on every PR sync (30s poll + SignalR events). The first sync only
+    /// seeds the set so we don't spam notifications for already-ready PRs on launch.
+    @MainActor
+    private func notifyNewlyReadyPRs(current: [PullRequest]) {
+        let currentIds = Set(current.map { $0.id })
+
+        if !didSeedReadyPRs {
+            didSeedReadyPRs = true
+            readyNotifiedPRs = Set(current.filter { isReadyToMerge($0) }.map { $0.id })
+            return
+        }
+
+        for pr in current where isReadyToMerge(pr) {
+            if readyNotifiedPRs.insert(pr.id).inserted {
+                showNotification(
+                    title: "PR #\(pr.prNumber) ready to merge 🚀",
+                    body: pr.title,
+                    subtitle: shortRepo(pr.repo),
+                    actionURL: pr.prUrl,
+                    style: .info
+                )
+            }
+        }
+        // Allow re-notification if a PR stops being ready (e.g. new commits), and
+        // forget PRs that are gone (merged/closed).
+        readyNotifiedPRs = readyNotifiedPRs.intersection(currentIds)
+        for pr in current where !isReadyToMerge(pr) {
+            readyNotifiedPRs.remove(pr.id)
+        }
     }
 
     private func loadPersistedHistory() {
@@ -571,6 +622,8 @@ class SignalRService: ObservableObject {
         pollTask = nil
         task?.cancel()
         task = nil
+        readyNotifiedPRs = []
+        didSeedReadyPRs = false
         Task { @MainActor in
             isConnected = false
             runStatus = .idle
