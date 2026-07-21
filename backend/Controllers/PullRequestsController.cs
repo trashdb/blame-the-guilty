@@ -88,17 +88,22 @@ public class PullRequestsController : ControllerBase
             }
             // Correct OccurredAt for already-merged PRs whose timestamp is wrong
             // (e.g. previously self-healed with now() instead of the real merge time).
+            // Update ALL merged rows for this PR to avoid stale duplicates lingering.
             else if (pr.Status == "merged" && merged && mergedAt.HasValue)
             {
-                var entity = await _db.PullRequestEvents
+                var mergedRows = await _db.PullRequestEvents
                     .Where(e => e.PrNumber == pr.PrNumber && e.RepoFullName == pr.RepoFullName && e.Status == "merged")
-                    .OrderByDescending(e => e.Id)
-                    .FirstOrDefaultAsync();
-                if (entity != null && Math.Abs((entity.OccurredAt - mergedAt.Value).TotalMinutes) > 2)
+                    .ToListAsync();
+                bool changed = false;
+                foreach (var row in mergedRows)
                 {
-                    entity.OccurredAt = mergedAt.Value;
-                    await _db.SaveChangesAsync();
+                    if (Math.Abs((row.OccurredAt - mergedAt.Value).TotalMinutes) > 2)
+                    {
+                        row.OccurredAt = mergedAt.Value;
+                        changed = true;
+                    }
                 }
+                if (changed) await _db.SaveChangesAsync();
             }
         }
 
