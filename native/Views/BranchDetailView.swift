@@ -125,10 +125,7 @@ struct BranchDetailView: View {
 
                 Divider()
 
-                LazyVGrid(columns: [
-                    GridItem(.flexible()),
-                    GridItem(.flexible())
-                ], spacing: DS.Spacing.sm) {
+                FlowLayout(spacing: DS.Spacing.sm) {
                     if hasUpstream {
                         actionButton("Create PR", color: .green) {
                             showCreatePR = true
@@ -151,7 +148,6 @@ struct BranchDetailView: View {
                         Text("✓ Checked out")
                             .font(DS.Font.small.medium())
                             .foregroundStyle(DS.Color.success)
-                            .gridCellColumns(2)
                     }
                     if info.isLocal && !info.isCurrent && !info.isDefault {
                         actionButton("Delete", color: .red) {
@@ -171,6 +167,7 @@ struct BranchDetailView: View {
                             .frame(width: 12)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 Spacer()
             }

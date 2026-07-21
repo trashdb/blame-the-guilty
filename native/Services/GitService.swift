@@ -512,11 +512,19 @@ actor GitService {
         }
     }
 
+    /// Find the SSH agent socket from launchd (GUI apps don't inherit SSH_AUTH_SOCK).
+    private func resolveSSHAgentSocket() -> String? {
+        if let sock = ProcessInfo.processInfo.environment["SSH_AUTH_SOCK"], !sock.isEmpty {
+            return sock
+        }
+        guard let dirs = try? FileManager.default.contentsOfDirectory(atPath: "/var/run"),
+              let dir = dirs.first(where: { $0.hasPrefix("com.apple.launchd.") }) else { return nil }
+        let candidate = "/var/run/\(dir)/Listeners"
+        return FileManager.default.fileExists(atPath: candidate) ? candidate : nil
+    }
+
     /// Parse ~/.ssh/config to find the IdentityFile for the SSH host in this repo's remote URL.
-    /// GUI apps can't reliably access the SSH agent, so we pass the key directly.
     private func resolveSSHIdentityFile(for repoPath: String) -> String? {
-        guard let remoteUrl = try? FileManager.default.contentsOfDirectory(atPath: repoPath + "/.git")
-                .isEmpty == false || true else { return nil }
         guard let output = try? String(contentsOfFile: "\(repoPath)/.git/config") else { return nil }
         // Find remote "origin" URL
         var foundOrigin = false
@@ -549,7 +557,7 @@ actor GitService {
                 let path = t.dropFirst(12).trimmingCharacters(in: .whitespaces)
                 let expanded = path.hasPrefix("~") ? NSHomeDirectory() + path.dropFirst(1) : path
                 if FileManager.default.fileExists(atPath: expanded) { return expanded }
-            } else if inBlock && t.lowercased().hasPrefix("host ") && !t.lowercased().hasPrefix("host ") {
+            } else if inBlock && t.lowercased().hasPrefix("host ") {
                 inBlock = false
             }
         }
@@ -567,14 +575,17 @@ actor GitService {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["git"] + args
         process.currentDirectoryURL = URL(fileURLWithPath: repoPath)
-        // GUI apps lack SSH agent — use GIT_SSH_COMMAND with explicit identity file
+        // GUI apps lack SSH agent environment — try agent socket, fall back to identity file
         var env = ProcessInfo.processInfo.environment
         if env["HOME"] == nil || env["HOME"]?.isEmpty == true {
             env["HOME"] = NSHomeDirectory()
         }
-        if env["GIT_SSH_COMMAND"] == nil,
-           let identityFile = resolveSSHIdentityFile(for: repoPath) {
-            env["GIT_SSH_COMMAND"] = "ssh -i '\(identityFile)' -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no"
+        let hasAgent = resolveSSHAgentSocket()
+        if let sock = hasAgent {
+            env["SSH_AUTH_SOCK"] = sock
+        } else if env["GIT_SSH_COMMAND"] == nil,
+                  let identityFile = resolveSSHIdentityFile(for: repoPath) {
+            env["GIT_SSH_COMMAND"] = "ssh -i \(identityFile) -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no"
         }
         process.environment = env
         let out = Pipe(), err = Pipe()

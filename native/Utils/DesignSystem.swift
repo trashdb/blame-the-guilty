@@ -146,6 +146,7 @@ extension View {
             Text(label)
                 .font(DS.Font.caption.semibold())
                 .foregroundStyle(color)
+                .lineLimit(1)
                 .padding(.horizontal, DS.Spacing.xl)
                 .padding(.vertical, DS.Spacing.sm + 1)
                 .background(DS.Color.badgeBackground(color), in: RoundedRectangle(cornerRadius: DS.Radius.sm))
@@ -168,6 +169,7 @@ extension View {
             Text(label)
                 .font(DS.Font.caption.semibold())
                 .foregroundStyle(.white)
+                .lineLimit(1)
                 .padding(.horizontal, DS.Spacing.xl + 2)
                 .padding(.vertical, DS.Spacing.sm + 1)
                 .background(disabled ? color.opacity(0.4) : color, in: RoundedRectangle(cornerRadius: DS.Radius.sm))
@@ -270,12 +272,60 @@ extension View {
             .foregroundStyle(color)
     }
 
-/// Add hover effect with scale + background
-@ViewBuilder
-func hoverEffect<S: ShapeStyle>(cornerRadius: CGFloat = DS.Radius.md, shapeStyle: S = DS.Color.rowHover) -> some View {
-    self.modifier(HoverEffectModifier(cornerRadius: cornerRadius, shapeStyle: shapeStyle))
+    /// Add hover effect with scale + background
+    @ViewBuilder
+    func hoverEffect<S: ShapeStyle>(cornerRadius: CGFloat = DS.Radius.md, shapeStyle: S = DS.Color.rowHover) -> some View {
+        self.modifier(HoverEffectModifier(cornerRadius: cornerRadius, shapeStyle: shapeStyle))
+    }
 }
 
+// MARK: - Flow Layout (wrapping HStack)
+struct FlowLayout: Layout {
+    let spacing: CGFloat
+
+    init(spacing: CGFloat = 8) {
+        self.spacing = spacing
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? 0
+        guard width > 0 else { return .zero }
+        var y: CGFloat = 0
+        var currentX: CGFloat = 0
+        var currentRowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if currentX + size.width > width, currentX > 0 {
+                y += currentRowHeight + spacing
+                currentX = 0
+                currentRowHeight = 0
+            }
+            currentRowHeight = max(currentRowHeight, size.height)
+            currentX += size.width + spacing
+        }
+        y += currentRowHeight
+        return CGSize(width: width, height: y)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let width = bounds.width
+        var y: CGFloat = bounds.minY
+        var currentX: CGFloat = bounds.minX
+        var currentRowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if currentX + size.width > bounds.maxX, currentX > bounds.minX {
+                y += currentRowHeight + spacing
+                currentX = bounds.minX
+                currentRowHeight = 0
+            }
+            subview.place(at: CGPoint(x: currentX, y: y), proposal: .unspecified)
+            currentRowHeight = max(currentRowHeight, size.height)
+            currentX += size.width + spacing
+        }
+    }
 }
 
 // MARK: - Popover Transition
