@@ -280,7 +280,7 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var patSection: some View {
-        Text("Optional. Used to access org repos when OAuth is blocked. Create at github.com/settings/tokens with repo scope. The token is sent to the backend and never stored locally.")
+        Text("Optional. Used to access org repos when OAuth is blocked. Create at github.com/settings/tokens with repo scope.")
             .font(DS.Font.small)
             .foregroundStyle(DS.Color.textSecondary)
             .padding(.top, -8)
@@ -340,6 +340,7 @@ struct SettingsView: View {
         do {
             let (_, resp) = try await URLSession.shared.data(for: req)
             if let http = resp as? HTTPURLResponse, http.statusCode == 200 {
+                UserDefaults.standard.set(patDraft, forKey: "patToken")
                 patSaved = true
                 patDraft = ""
             } else {

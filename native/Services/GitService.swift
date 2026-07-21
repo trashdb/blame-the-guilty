@@ -98,7 +98,16 @@ actor GitService {
     func pullCurrentBranch(repoPath: String) async -> PullResult {
         guard await hasUpstream(repoPath: repoPath) else { return .noUpstream }
         do {
-            try await runGit(repoPath: repoPath, args: ["pull", "--rebase"])
+            let originUrl = try? await runGit(repoPath: repoPath, args: ["remote", "get-url", "origin"])
+            if let url = originUrl?.trimmingCharacters(in: .whitespacesAndNewlines), url.hasPrefix("git@"),
+               let token = Self.storedPAT() {
+                let https = url
+                    .replacingOccurrences(of: "git@", with: "https://x-access-token:\(token)@")
+                    .replacingOccurrences(of: ".com:", with: ".com/")
+                try await runGit(repoPath: repoPath, args: ["pull", https, "--rebase"])
+            } else {
+                try await runGit(repoPath: repoPath, args: ["pull", "--rebase"])
+            }
             return .success
         } catch let error as GitError {
             let msg = error.localizedDescription.lowercased()
@@ -483,10 +492,24 @@ actor GitService {
         if current != name {
             try await runGit(repoPath: repoPath, args: ["checkout", name])
         }
-        try await runGit(repoPath: repoPath, args: ["pull", "--rebase"])
+        // If remote is SSH, use HTTPS with PAT to avoid SSH key issues
+        let originUrl = try? await runGit(repoPath: repoPath, args: ["remote", "get-url", "origin"])
+        if let url = originUrl?.trimmingCharacters(in: .whitespacesAndNewlines), url.hasPrefix("git@"),
+           let token = Self.storedPAT() {
+            let https = url
+                .replacingOccurrences(of: "git@", with: "https://x-access-token:\(token)@")
+                .replacingOccurrences(of: ".com:", with: ".com/")
+            try await runGit(repoPath: repoPath, args: ["pull", https, name, "--rebase"])
+        } else {
+            try await runGit(repoPath: repoPath, args: ["pull", "--rebase"])
+        }
         if let current = current, !current.isEmpty, current != name {
             try await runGit(repoPath: repoPath, args: ["checkout", current])
         }
+    }
+
+    static func storedPAT() -> String? {
+        UserDefaults.standard.string(forKey: "patToken")
     }
 
     func createBranch(repoPath: String, from sourceBranch: String, newName: String) async throws {
