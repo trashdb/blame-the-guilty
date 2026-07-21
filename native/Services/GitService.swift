@@ -97,15 +97,18 @@ actor GitService {
 
     func pullCurrentBranch(repoPath: String, token: String? = nil) async -> PullResult {
         guard await hasUpstream(repoPath: repoPath) else { return .noUpstream }
+        // Always pull over HTTPS using the token — never fall back to SSH `git pull`,
+        // which fails in a GUI app with "permission denied (publickey)".
+        guard let t = token ?? Self.storedPAT(),
+              let fullName = await repoFullName(repoPath: repoPath),
+              let branch = try? await currentBranchName(repoPath: repoPath) ?? "",
+              !branch.isEmpty else {
+            return .noToken
+        }
         do {
-            if let t = token ?? Self.storedPAT(), let fullName = await repoFullName(repoPath: repoPath),
-               let branch = try? await currentBranchName(repoPath: repoPath) ?? "" {
-                let url = "https://x-access-token:\(t)@github.com/\(fullName).git"
-                try await runGit(repoPath: repoPath, args: ["fetch", url, branch])
-                try await runGit(repoPath: repoPath, args: ["rebase", "FETCH_HEAD"])
-            } else {
-                try await runGit(repoPath: repoPath, args: ["pull", "--rebase"])
-            }
+            let url = "https://x-access-token:\(t)@github.com/\(fullName).git"
+            try await runGit(repoPath: repoPath, args: ["fetch", url, branch])
+            try await runGit(repoPath: repoPath, args: ["rebase", "FETCH_HEAD"])
             return .success
         } catch let error as GitError {
             let msg = error.localizedDescription.lowercased()
@@ -116,7 +119,7 @@ actor GitService {
     }
 
     enum PullResult {
-        case success, noUpstream, conflict, failed
+        case success, noUpstream, conflict, failed, noToken
     }
 
     func deleteLocalBranch(repoPath: String, name: String) async throws {
@@ -490,24 +493,33 @@ actor GitService {
         if current != name {
             try await runGit(repoPath: repoPath, args: ["checkout", name])
         }
-        if let t = token ?? Self.storedPAT(), let fullName = await repoFullName(repoPath: repoPath) {
-            let url = "https://x-access-token:\(t)@github.com/\(fullName).git"
-            try await runGit(repoPath: repoPath, args: ["fetch", url, name])
-            try await runGit(repoPath: repoPath, args: ["rebase", "FETCH_HEAD"])
-        } else {
-            try await runGit(repoPath: repoPath, args: ["pull", "--rebase"])
+        // Always pull over HTTPS using the token. We never fall back to `git pull`
+        // (which would use the SSH `origin` remote) because a sandboxed GUI app has
+        // no SSH agent and that fails with "permission denied (publickey)".
+        guard let t = token ?? Self.storedPAT() else {
+            throw GitError.commandFailed("No GitHub token available for pull. Open Settings → save your Personal Access Token, then try again.")
         }
+        guard let fullName = await repoFullName(repoPath: repoPath) else {
+            throw GitError.commandFailed("Could not determine the GitHub owner/repo from this repository's remote.")
+        }
+        let url = "https://x-access-token:\(t)@github.com/\(fullName).git"
+        try await runGit(repoPath: repoPath, args: ["fetch", url, name])
+        try await runGit(repoPath: repoPath, args: ["rebase", "FETCH_HEAD"])
         if let current = current, !current.isEmpty, current != name {
             try await runGit(repoPath: repoPath, args: ["checkout", current])
         }
     }
 
     static func fetchPAT(backendUrl: String, gitHubId: Int64) async -> String? {
-        guard let url = URL(string: "\(backendUrl)/api/auth/token?gitHubId=\(gitHubId)") else { return nil }
+        guard let url = URL(string: "\(backendUrl)/api/auth/token?gitHubId=\(gitHubId)") else { return storedPAT() }
         guard let (data, resp) = try? await URLSession.shared.data(from: url),
               let http = resp as? HTTPURLResponse, http.statusCode == 200,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: String],
-              let token = json["token"] else { return nil }
+              let token = json["token"], !token.isEmpty else {
+            // Backend unreachable or returned no token — fall back to the locally
+            // saved PAT so pulls still work over HTTPS instead of failing to SSH.
+            return storedPAT()
+        }
         return token
     }
 
