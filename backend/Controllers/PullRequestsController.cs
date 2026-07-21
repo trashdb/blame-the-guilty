@@ -63,7 +63,7 @@ public class PullRequestsController : ControllerBase
         var statusOverrides = new Dictionary<long, string>();
         foreach (var pr in prs)
         {
-            var (draft, mergeable, headSha, prState, merged) = await FetchPullRequestData(pr.PrNumber, pr.RepoFullName, token);
+            var (draft, mergeable, headSha, prState, merged, mergedAt) = await FetchPullRequestData(pr.PrNumber, pr.RepoFullName, token);
             prData[pr.PrNumber] = (draft, mergeable, headSha);
 
             // Self-heal: if GitHub says the PR is closed/merged but our DB still
@@ -80,7 +80,23 @@ public class PullRequestsController : ControllerBase
                 if (entity != null)
                 {
                     entity.Status = healed;
-                    if (merged) entity.OccurredAt = DateTime.UtcNow;
+                    // Use the real merge time so the 24h "recently merged" window is
+                    // accurate — NOT now (which would resurface old merged PRs).
+                    if (merged && mergedAt.HasValue) entity.OccurredAt = mergedAt.Value;
+                    await _db.SaveChangesAsync();
+                }
+            }
+            // Correct OccurredAt for already-merged PRs whose timestamp is wrong
+            // (e.g. previously self-healed with now() instead of the real merge time).
+            else if (pr.Status == "merged" && merged && mergedAt.HasValue)
+            {
+                var entity = await _db.PullRequestEvents
+                    .Where(e => e.PrNumber == pr.PrNumber && e.RepoFullName == pr.RepoFullName && e.Status == "merged")
+                    .OrderByDescending(e => e.Id)
+                    .FirstOrDefaultAsync();
+                if (entity != null && Math.Abs((entity.OccurredAt - mergedAt.Value).TotalMinutes) > 2)
+                {
+                    entity.OccurredAt = mergedAt.Value;
                     await _db.SaveChangesAsync();
                 }
             }
@@ -628,7 +644,7 @@ public class PullRequestsController : ControllerBase
         return Ok(checks);
     }
 
-    private async Task<(bool? draft, string? mergeableState, string? headSha, string? state, bool merged)> FetchPullRequestData(long prNumber, string repoFullName, string? token)
+    private async Task<(bool? draft, string? mergeableState, string? headSha, string? state, bool merged, DateTime? mergedAt)> FetchPullRequestData(long prNumber, string repoFullName, string? token)
     {
         try
         {
@@ -638,7 +654,7 @@ public class PullRequestsController : ControllerBase
                 request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
             var response = await _githubClient.SendAsync(request);
-            if (!response.IsSuccessStatusCode) return (null, null, null, null, false);
+            if (!response.IsSuccessStatusCode) return (null, null, null, null, false, null);
 
             var content = await response.Content.ReadAsStringAsync();
             var data = JsonSerializer.Deserialize<JsonElement>(content);
@@ -660,11 +676,18 @@ public class PullRequestsController : ControllerBase
             string? prState = data.TryGetProperty("state", out var st) ? st.GetString() : null;
             bool merged = data.TryGetProperty("merged", out var mg) && mg.ValueKind == JsonValueKind.True;
 
-            return (draft, mergeableState, headSha, prState, merged);
+            // Real merge timestamp so the "recently merged" 24h window is accurate
+            // even when we self-heal a PR that was merged days ago.
+            DateTime? mergedAt = null;
+            if (data.TryGetProperty("merged_at", out var ma) && ma.ValueKind == JsonValueKind.String
+                && DateTime.TryParse(ma.GetString(), null, System.Globalization.DateTimeStyles.AdjustToUniversal, out var parsed))
+                mergedAt = parsed;
+
+            return (draft, mergeableState, headSha, prState, merged, mergedAt);
         }
         catch
         {
-            return (null, null, null, null, false);
+            return (null, null, null, null, false, null);
         }
     }
 

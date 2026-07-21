@@ -8,6 +8,7 @@ struct ActivePRsView: View {
     @State private var searchQuery = ""
     @State private var selectedRepo: String? = nil
     @State private var selectedStatus: PRFilterStatus = .all
+    @AppStorage("showMergedPRs") private var showMergedPRs = true
 
     private var repos: [String] {
         Array(Set(prs.map(\.repo))).sorted()
@@ -15,6 +16,11 @@ struct ActivePRsView: View {
 
     private var filteredPRs: [PullRequest] {
         var result = prs
+
+        // Hide merged PRs when the user has disabled them in Settings
+        if !showMergedPRs {
+            result = result.filter { !$0.isMerged }
+        }
 
         // Search
         if !searchQuery.isEmpty {

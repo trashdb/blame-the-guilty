@@ -11,6 +11,7 @@ struct SettingsView: View {
     @AppStorage("defaultIDE") private var defaultIDE = "rider"
     @AppStorage("customIDECommand") private var customIDECommand = ""
     @AppStorage("backendUrl") private var settingsBackendUrl = TeamDefaults.backendUrl
+    @AppStorage("showMergedPRs") private var showMergedPRs = true
     @State private var pathDraft = ""
     @State private var pathError: String?
     @State private var jiraDraft = ""
@@ -114,7 +115,28 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
+    private var pullRequestsSection: some View {
+        Text("Control which pull requests appear in the Active PRs list.")
+            .font(DS.Font.small)
+            .foregroundStyle(DS.Color.textSecondary)
+
+        Toggle(isOn: $showMergedPRs) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Show merged PRs")
+                    .font(DS.Font.body)
+                    .foregroundStyle(DS.Color.textPrimary)
+                Text("When on, recently merged PRs stay visible for 24h. Turn off to only see open PRs.")
+                    .font(DS.Font.small)
+                    .foregroundStyle(DS.Color.textSecondary)
+            }
+        }
+        .toggleStyle(.switch)
+        .tint(DS.Color.success)
+    }
+
+    @ViewBuilder
     private var jiraSection: some View {
+        Text("Used to build links to tickets extracted from branch names (e.g. LOY-1234 → https://.../browse/LOY-1234). Paste the full URL including /browse/.")
         Text("Used to build links to tickets extracted from branch names (e.g. LOY-1234 → https://.../browse/LOY-1234). Paste the full URL including /browse/.")
             .font(DS.Font.small)
             .foregroundStyle(DS.Color.textSecondary)
