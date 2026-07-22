@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Serilog;
+using Scalar.AspNetCore;
 using BlameTheGuilty.Api.Data;
 using BlameTheGuilty.Api.Hubs;
 using BlameTheGuilty.Api.Services;
@@ -43,6 +44,9 @@ try
         {
             options.JsonSerializerOptions.Converters.Add(new UtcDateTimeConverter());
         });
+
+    // OpenAPI / Swagger
+    builder.Services.AddOpenApi();
 
     // CORS (for ngrok + WPF dev)
     builder.Services.AddCors(options =>
@@ -98,6 +102,9 @@ try
             });
         }
     });
+
+    app.MapOpenApi();
+    app.MapScalarApiReference();
 
     app.MapHub<PunishmentHub>("/hub/punishment");
     app.MapControllers();

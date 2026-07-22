@@ -1,0 +1,40 @@
+name: Swift Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'native/**'
+      - 'BlameTheGuiltyTests/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'native/**'
+      - 'BlameTheGuiltyTests/**'
+
+jobs:
+  test:
+    name: Build and Test (macOS)
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Build
+        run: |
+          cd native
+          xcodebuild build -scheme BlameTheGuilty -project btg.xcodeproj \
+            -destination 'platform=macOS' \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO \
+            -derivedDataPath /tmp/btg-build | xcpretty && exit ${PIPESTATUS[0]}
+
+      - name: Run Tests
+        run: |
+          cd native
+          xcodebuild test -scheme BlameTheGuiltyTests -project btg.xcodeproj \
+            -destination 'platform=macOS' \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO \
+            -derivedDataPath /tmp/btg-test | xcpretty && exit ${PIPESTATUS[0]}

@@ -1,0 +1,42 @@
+name: Backend Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'tests-backend/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'tests-backend/**'
+
+jobs:
+  test:
+    name: Build and Test (Linux)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore BlameTheGuilty.slnx
+
+      - name: Build
+        run: dotnet build --no-restore BlameTheGuilty.slnx
+
+      - name: Test
+        run: dotnet test --no-build --logger trx --results-directory /tmp/test-results
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: /tmp/test-results

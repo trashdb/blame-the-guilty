@@ -284,7 +284,7 @@ actor GitService: GitServiceProtocol {
         return CreatePRResult(url: prURL, isExisting: result.existing ?? false)
     }
 
-    private func generatePRTitle(from branchName: String) -> String {
+    func generatePRTitle(from branchName: String) -> String {
         let cleaned = branchName
             .replacingOccurrences(of: #"^(feature|fix|hotfix|bugfix|chore|release)/"#, with: "", options: .regularExpression)
             .replacingOccurrences(of: "-", with: " ")
