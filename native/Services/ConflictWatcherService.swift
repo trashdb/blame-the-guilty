@@ -5,7 +5,7 @@ private let conflictLog = OSLog(subsystem: "com.blametheguilty", category: "conf
 
 class ConflictWatcherService {
     private weak var signalR: SignalRService?
-    private let gitService = GitService()
+    private let gitService = currentDependencies.gitService
     private var pollTask: Task<Void, Never>?
     private var lastKnownMainSha: [String: String] = [:]
     private var recentlyNotified: Set<String> = []

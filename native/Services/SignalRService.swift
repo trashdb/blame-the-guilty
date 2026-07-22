@@ -41,7 +41,7 @@ enum RunStatus: Equatable {
     case idle, running, success, failure
 }
 
-class SignalRService: ObservableObject {
+class SignalRService: ObservableObject, SignalRServiceProtocol {
     @Published var isConnected = false
     @Published var isLoggedIn = false
     @Published var username = ""
@@ -77,6 +77,9 @@ class SignalRService: ObservableObject {
         avatarUrl = session.avatarUrl
         isLoggedIn = true
         let gid = session.gitHubId
+
+        // Show cached PRs immediately so the UI is not empty while loading
+        activePRs = PersistenceService.loadPRs()
 
         // Refresh workflows + avatar on every popover open
         Task {
@@ -120,7 +123,13 @@ class SignalRService: ObservableObject {
         }
     }
 
+    func stopPolling() {
+        pollTask?.cancel()
+        pollTask = nil
+    }
+
     func logout() {
+        stopPolling()
         disconnect()
         KeychainService.delete()
         isLoggedIn = false
@@ -237,6 +246,7 @@ class SignalRService: ObservableObject {
                     }
                     notifyNewlyReadyPRs(current: newPRs)
                     activePRs = newPRs
+                    PersistenceService.save(prs: newPRs)
                 }
             }
         } catch {}
@@ -286,7 +296,7 @@ class SignalRService: ObservableObject {
     }
 
     private func loadPersistedHistory() {
-        let saved = PersistenceService.load()
+        let saved = PersistenceService.loadWorkflows()
         if !saved.isEmpty {
             recentWorkflows = saved.map { run in
                 if run.status == "in_progress" {
@@ -633,7 +643,7 @@ class SignalRService: ObservableObject {
         }
     }
 
-    private func startPolling(gitHubId: Int64) {
+    func startPolling(gitHubId: Int64) {
         pollTask?.cancel()
         pollTask = Task { [weak self] in
             while !Task.isCancelled {

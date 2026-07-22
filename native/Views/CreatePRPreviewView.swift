@@ -16,7 +16,7 @@ struct CreatePRPreviewView: View {
     @State private var summary: String?
     @State private var errorMessage: String?
 
-    private let git = GitService()
+    private let git = currentDependencies.gitService
 
     init(repoPath: String, branchName: String, backendUrl: String, gitHubId: Int64, onComplete: @escaping (URL) -> Void, onCancel: (() -> Void)? = nil) {
         self.repoPath = repoPath
@@ -199,7 +199,7 @@ struct CreatePRPreviewView: View {
             )
             onComplete(result.url)
         } catch {
-            errorMessage = (error as? GitService.GitError)?.localizedDescription ?? error.localizedDescription
+            errorMessage = (error as? GitError)?.localizedDescription ?? error.localizedDescription
         }
         isCreating = false
     }

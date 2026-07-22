@@ -750,7 +750,7 @@ struct PRDetailView: View {
 
     private func openInRider(file: String, line: Int?) {
         Task {
-            let gitService = GitService()
+            let gitService = currentDependencies.gitService
             guard let repoPath = await gitService.findRepoPath(ownerRepo: pr.repo, workspacePath: workspacePath) else {
                 return
             }

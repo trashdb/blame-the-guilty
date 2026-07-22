@@ -17,7 +17,7 @@ struct LocalBranchesView: View {
     @AppStorage("favoriteRepo") private var favoriteRepo = TeamDefaults.favoriteRepo
     @AppStorage("workspacePath") private var workspacePath = TeamDefaults.workspacePath
 
-    private let git = GitService()
+    private let git = currentDependencies.gitService
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.md) {
@@ -371,7 +371,7 @@ struct LocalBranchesView: View {
                     } catch {
                         let repo = ScannedRepo(
                             path: path, branches: [], remoteBranches: [], isExpanded: false,
-                            error: "Error: \((error as? GitService.GitError)?.localizedDescription ?? error.localizedDescription)"
+                            error: "Error: \((error as? GitError)?.localizedDescription ?? error.localizedDescription)"
                         )
                         return (i, repo)
                     }
@@ -423,7 +423,7 @@ struct LocalBranchesView: View {
             await MainActor.run { repos[ri].branches.removeAll { $0.id == branch.id } }
         } catch {
             await MainActor.run {
-                repos[ri].error = "Failed to delete \"\(branch.name)\": \((error as? GitService.GitError)?.localizedDescription ?? error.localizedDescription)"
+                repos[ri].error = "Failed to delete \"\(branch.name)\": \((error as? GitError)?.localizedDescription ?? error.localizedDescription)"
                 repos[ri].isExpanded = true
             }
         }
@@ -451,7 +451,7 @@ struct LocalBranchesView: View {
         } catch {
             await MainActor.run {
                 if let ri = repos.firstIndex(where: { $0.id == repo.id }) {
-                    repos[ri].error = "Failed to pull \"\(name)\": \((error as? GitService.GitError)?.localizedDescription ?? error.localizedDescription)"
+                    repos[ri].error = "Failed to pull \"\(name)\": \((error as? GitError)?.localizedDescription ?? error.localizedDescription)"
                 }
                 pullingBranch = nil
             }
@@ -465,7 +465,7 @@ struct LocalBranchesView: View {
             await MainActor.run { repos[ri].remoteBranches.removeAll { $0.id == branch.id } }
         } catch {
             await MainActor.run {
-                repos[ri].error = "Failed to delete \"\(branch.name)\": \((error as? GitService.GitError)?.localizedDescription ?? error.localizedDescription)"
+                repos[ri].error = "Failed to delete \"\(branch.name)\": \((error as? GitError)?.localizedDescription ?? error.localizedDescription)"
                 repos[ri].isExpanded = true
             }
         }

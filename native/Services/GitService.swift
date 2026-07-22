@@ -39,18 +39,7 @@ private final class RunGitDone: @unchecked Sendable {
     }
 }
 
-actor GitService {
-    enum GitError: LocalizedError {
-        case gitNotFound
-        case commandFailed(String)
-        var errorDescription: String? {
-            switch self {
-            case .gitNotFound: return "Git not found"
-            case .commandFailed(let s): return s
-            }
-        }
-    }
-
+actor GitService: GitServiceProtocol {
     static func discoverRepos(workspacePath: String) -> [String] {
         let url = URL(fileURLWithPath: workspacePath)
         guard let enumerator = FileManager.default.enumerator(
@@ -116,10 +105,6 @@ actor GitService {
         } catch {
             return .failed
         }
-    }
-
-    enum PullResult {
-        case success, noUpstream, conflict, failed, noToken
     }
 
     func deleteLocalBranch(repoPath: String, name: String) async throws {
@@ -243,11 +228,6 @@ actor GitService {
 
     func deleteRemoteBranch(repoPath: String, name: String) async throws {
         try await runGit(repoPath: repoPath, args: ["push", "origin", "--delete", name])
-    }
-
-    struct CreatePRResult {
-        let url: URL
-        let isExisting: Bool
     }
 
     func createPR(repoPath: String, branchName: String, backendUrl: String, gitHubId: Int64,

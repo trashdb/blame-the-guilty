@@ -45,7 +45,7 @@ struct WorkflowRun: Identifiable, Codable {
     }
 }
 
-struct PullRequest: Identifiable, Equatable {
+struct PullRequest: Identifiable, Equatable, Codable {
     var id: String { "\(repo)#\(prNumber)" }
     let prNumber: Int64
     let title: String

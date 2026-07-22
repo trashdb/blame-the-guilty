@@ -244,9 +244,9 @@ struct ContentView: View {
                 icon: "arrow.triangle.branch", category: .branch
             ) {
                 Task {
-                    let git = GitService()
+                    let git = currentDependencies.gitService
                     try? await git.checkoutBranch(repoPath: fav.repoPath, name: "main")
-                    try? await git.pullCurrentBranch(repoPath: fav.repoPath)
+                    try? await git.pullCurrentBranch(repoPath: fav.repoPath, token: nil)
                     await self.scanCurrentBranches()
                 }
             })

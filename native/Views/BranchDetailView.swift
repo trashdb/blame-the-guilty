@@ -18,7 +18,7 @@ struct BranchDetailView: View {
     @State private var createBranchError: String?
     @State private var createBranchSuccess = false
     @State private var hasUpstream = false
-    private let git = GitService()
+    private let git = currentDependencies.gitService
 
     var body: some View {
         if showCreatePR {
@@ -192,7 +192,7 @@ struct BranchDetailView: View {
                 dismiss()
             }
         } catch {
-            createBranchError = (error as? GitService.GitError)?.localizedDescription ?? error.localizedDescription
+            createBranchError = (error as? GitError)?.localizedDescription ?? error.localizedDescription
         }
         creatingBranch = false
     }
@@ -216,7 +216,7 @@ struct BranchDetailView: View {
         do {
             try await git.deleteLocalBranch(repoPath: info.repoPath, name: info.name)
         } catch {
-            deleteError = (error as? GitService.GitError)?.localizedDescription ?? error.localizedDescription
+            deleteError = (error as? GitError)?.localizedDescription ?? error.localizedDescription
         }
         deleting = false
     }
@@ -227,7 +227,7 @@ struct BranchDetailView: View {
         do {
             try await git.deleteRemoteBranch(repoPath: info.repoPath, name: info.name)
         } catch {
-            deleteError = (error as? GitService.GitError)?.localizedDescription ?? error.localizedDescription
+            deleteError = (error as? GitError)?.localizedDescription ?? error.localizedDescription
         }
         deleting = false
     }

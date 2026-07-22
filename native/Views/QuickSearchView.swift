@@ -97,9 +97,9 @@ struct QuickSearchView: View {
                         subtitle: b.repoPath, icon: "arrow.triangle.branch", category: .branch
                     ) {
                         Task {
-                            let git = GitService()
+                            let git = currentDependencies.gitService
                             try? await git.checkoutBranch(repoPath: b.repoPath, name: b.name)
-                            try? await git.pullCurrentBranch(repoPath: b.repoPath)
+                            try? await git.pullCurrentBranch(repoPath: b.repoPath, token: nil)
                         }
                     })
                 }
