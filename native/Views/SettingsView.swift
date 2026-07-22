@@ -76,6 +76,10 @@ struct SettingsView: View {
                     CollapsibleSection(title: "Personal Access Token", icon: "key.fill") {
                         patSection
                     }
+
+                    CollapsibleSection(title: "Pull Requests", icon: "arrow.triangle.branch") {
+                        pullRequestsSection
+                    }
                 }
                 .padding(24)
             }
