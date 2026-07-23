@@ -2,7 +2,7 @@
   <Folder Name="/backend/">
     <Project Path="backend/BlameTheGuilty.Api.csproj" />
   </Folder>
-  <Folder Name="/desktop/">
-    <Project Path="desktop/BlameTheGuilty.Desktop.csproj" />
+  <Folder Name="/tests-backend/">
+    <Project Path="tests-backend/BlameTheGuilty.Api.Tests.csproj" />
   </Folder>
 </Solution>
