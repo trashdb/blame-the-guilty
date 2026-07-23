@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using BlameTheGuilty.Api.Data;
@@ -37,6 +38,7 @@ public class WorkflowsController : ControllerBase
     }
 
     [HttpGet("runs")]
+    [EnableRateLimiting("api")]
     public async Task<IActionResult> GetRuns(
         [FromQuery] long gitHubId,
         [FromQuery] int limit = 20)

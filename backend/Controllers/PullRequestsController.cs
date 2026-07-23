@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using BlameTheGuilty.Api.Data;
@@ -25,7 +26,8 @@ public class PullRequestsController : ControllerBase
     }
 
     [HttpGet("active")]
-    public async Task<IActionResult> GetActive([FromQuery] long gitHubId)
+    [EnableRateLimiting("api")]
+    public async Task<IActionResult> GetActive([FromQuery] long gitHubId, [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
     {
         var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
         var token = user?.UserPatToken ?? user?.AccessToken;
@@ -35,6 +37,8 @@ public class PullRequestsController : ControllerBase
         var prs = await _db.PullRequestEvents
             .Where(e => ((e.Status == "open" || e.Status == "in_progress") || (e.Status == "merged" && e.OccurredAt >= DateTime.UtcNow.AddHours(-24))) && e.AuthorGitHubId == gitHubId)
             .OrderByDescending(e => e.OccurredAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(e => new
             {
                 e.PrNumber,
@@ -216,6 +220,7 @@ public class PullRequestsController : ControllerBase
     }
 
     [HttpGet("{prNumber}/detail")]
+    [EnableRateLimiting("api")]
     public async Task<IActionResult> GetDetail(long prNumber, [FromQuery] string repo, [FromQuery] long gitHubId)
     {
         var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);

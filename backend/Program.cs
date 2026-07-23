@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 using Serilog;
 using Scalar.AspNetCore;
 using BlameTheGuilty.Api.Data;
@@ -48,6 +50,25 @@ try
     // OpenAPI / Swagger
     builder.Services.AddOpenApi();
 
+    // Rate limiting
+    builder.Services.AddRateLimiter(options =>
+    {
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+        options.AddFixedWindowLimiter("api", limiterOptions =>
+        {
+            limiterOptions.PermitLimit = 100;
+            limiterOptions.Window = TimeSpan.FromMinutes(1);
+            limiterOptions.QueueLimit = 10;
+        });
+
+        options.AddFixedWindowLimiter("webhook", limiterOptions =>
+        {
+            limiterOptions.PermitLimit = 50;
+            limiterOptions.Window = TimeSpan.FromMinutes(1);
+        });
+    });
+
     // CORS (for ngrok + WPF dev)
     builder.Services.AddCors(options =>
     {
@@ -77,6 +98,7 @@ try
     }
 
     app.UseCors("SignalR");
+    app.UseRateLimiter();
 
     // Health check
     app.MapGet("/health", async (AppDbContext db) =>

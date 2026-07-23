@@ -507,6 +507,53 @@ extension DS.Font {
     static let section = SwiftUI.Font.system(size: 11, weight: .semibold)
 }
 
+// MARK: - Accessibility
+extension View {
+    /// Disables animations when Reduce Motion is enabled
+    func reduceMotionDisabled() -> some View {
+        self.modifier(ReduceMotionModifier())
+    }
+}
+
+struct ReduceMotionModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content.animation(reduceMotion ? nil : DS.Animation.default, value: UUID())
+    }
+}
+
+// MARK: - Accessible Button Helpers
+extension View {
+    /// Action button with VoiceOver label
+    @ViewBuilder
+    func accessibleAction(_ label: String, hint: String, color: SwiftUI.Color, action: @escaping () -> Void) -> some View {
+        actionButton(label, color: color, action: action)
+            .accessibilityLabel(label)
+            .accessibilityHint(hint)
+            .accessibilityAddTraits(.isButton)
+    }
+
+    /// Solid button with VoiceOver label
+    @ViewBuilder
+    func accessibleSolid(_ label: String, hint: String, color: SwiftUI.Color, disabled: Bool = false, action: @escaping () -> Void) -> some View {
+        solidButton(label, color: color, disabled: disabled, action: action)
+            .accessibilityLabel(label)
+            .accessibilityHint(hint)
+            .accessibilityAddTraits(.isButton)
+    }
+}
+
+// MARK: - Accessible Badge
+extension View {
+    @ViewBuilder
+    func accessibleBadge(_ label: String, color: SwiftUI.Color, hint: String? = nil) -> some View {
+        badge(label, color: color)
+            .accessibilityLabel(label)
+            .ifLet(hint) { $0.accessibilityHint($1) }
+    }
+}
+
 // MARK: - PR Status Colors
 extension DS.Color {
     static func statusColor(for pr: PullRequest, draft: Bool) -> SwiftUI.Color {

@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using BlameTheGuilty.Api.Data;
@@ -65,6 +66,7 @@ public class WebhookController : ControllerBase
     }
 
     [HttpPost("github")]
+    [EnableRateLimiting("webhook")]
     public async Task<IActionResult> HandleGitHubWebhook()
     {
         // Verify HMAC signature if WebhookSecret is configured

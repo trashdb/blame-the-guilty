@@ -119,6 +119,8 @@ struct PRDetailView: View {
             .pickerStyle(.segmented)
             .frame(maxWidth: .infinity)
             .cursor(.pointingHand)
+            .accessibilityLabel("PR detail tabs")
+            .accessibilityHint("Double tap to switch between Details, Commits, Files, and Checks tabs")
 
             switch selectedTab {
             case 0: detailsTab
@@ -153,9 +155,13 @@ struct PRDetailView: View {
                 HStack(spacing: DS.Spacing.sm) {
                     Spacer()
                     linkButton("Open PR", url: pr.prUrl, help: "Open this pull request on GitHub")
+                        .accessibilityLabel("Open PR on GitHub")
+                        .accessibilityHint("Opens the pull request in your browser")
                     if !pr.isMerged {
                         linkButton("Compare", url: compareUrl, help: "Compare base and head branches on GitHub")
+                            .accessibilityLabel("Compare branches on GitHub")
                         linkButton("Checks", url: checksUrl, help: "View CI checks for this pull request")
+                            .accessibilityLabel("View CI checks on GitHub")
                     }
                 }
 
@@ -335,6 +341,9 @@ struct PRDetailView: View {
                     }
                     .buttonStyle(.plain)
                     .cursor(.pointingHand)
+                    .accessibilityLabel("Commit by \(commit.authorName ?? commit.authorLogin ?? "unknown")")
+                    .accessibilityHint("Opens commit on GitHub")
+                    .accessibilityAddTraits(.isButton)
                 }
                 .listStyle(.plain)
             }
@@ -407,6 +416,9 @@ struct PRDetailView: View {
                     }
                     .buttonStyle(.plain)
                     .cursor(.pointingHand)
+                    .accessibilityLabel("\(file.filename ?? "file"), \(file.status ?? "modified")")
+                    .accessibilityHint("Opens in IDE")
+                    .accessibilityAddTraits(.isButton)
                 }
                 .listStyle(.plain)
             }
@@ -486,6 +498,9 @@ struct PRDetailView: View {
                     }
                     .buttonStyle(.plain)
                     .cursor(.pointingHand)
+                    .accessibilityLabel("\(check.name ?? "check"), \(check.conclusion ?? check.status ?? "pending")")
+                    .accessibilityHint("Opens check on GitHub")
+                    .accessibilityAddTraits(.isButton)
                 }
                 .listStyle(.plain)
             }
