@@ -74,3 +74,33 @@ protocol SignalRServiceProtocol: AnyObject {
     func startPolling(gitHubId: Int64)
     func stopPolling()
 }
+
+// MARK: - KeychainServiceProtocol
+
+protocol KeychainServiceProtocol: AnyObject {
+    func save(gitHubId: Int64, username: String, avatarUrl: String?)
+    func load() -> KeychainService.Session?
+    func delete()
+}
+
+// MARK: - PersistenceServiceProtocol
+
+protocol PersistenceServiceProtocol: AnyObject {
+    func save(workflows: [WorkflowRun])
+    func loadWorkflows() -> [WorkflowRun]
+    func save(prs: [PullRequest])
+    func loadPRs() -> [PullRequest]
+}
+
+// MARK: - OAuthServiceProtocol
+
+protocol OAuthServiceProtocol: AnyObject {
+    func startLogin(backendUrl: String) async throws -> (id: Int64, username: String, avatarUrl: String?)
+}
+
+// MARK: - ConflictWatcherServiceProtocol
+
+protocol ConflictWatcherServiceProtocol: AnyObject {
+    func start()
+    func stop()
+}

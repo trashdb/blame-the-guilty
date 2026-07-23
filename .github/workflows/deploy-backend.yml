@@ -1,0 +1,58 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'tests-backend/**'
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: dotnet test --no-restore
+        working-directory: tests-backend
+
+  deploy:
+    name: Deploy to VPS
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish
+        run: |
+          dotnet publish -c Release -r linux-x64 --self-contained \
+            -o /tmp/publish backend/BlameTheGuilty.Api.csproj
+
+      - name: Upload to VPS
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+          # Add VPS to known_hosts
+          ssh-keyscan -H ${{ vars.VPS_HOST || 'underlayer' }} >> ~/.ssh/known_hosts 2>/dev/null
+
+          rsync -az --delete /tmp/publish/ \
+            ${{ vars.VPS_USER || 'root' }}@${{ vars.VPS_HOST || 'underlayer' }}:/opt/blame-the-guilty/
+
+      - name: Restart service
+        run: |
+          ssh ${{ vars.VPS_USER || 'root' }}@${{ vars.VPS_HOST || 'underlayer' }} \
+            "sudo systemctl restart blame-the-guilty"
+
+      - name: Health check
+        run: |
+          sleep 5
+          curl -sf http://${{ vars.VPS_HOST || 'underlayer' }}:5000/health || echo "Health check failed"

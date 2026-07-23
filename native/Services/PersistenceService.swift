@@ -1,6 +1,6 @@
 import Foundation
 
-struct PersistenceService {
+enum PersistenceService {
     private static var baseURL: URL? {
         guard let dir = try? FileManager.default.url(
             for: .applicationSupportDirectory,
@@ -47,5 +47,25 @@ struct PersistenceService {
               let prs = try? JSONDecoder().decode([PullRequest].self, from: data)
         else { return [] }
         return prs
+    }
+}
+
+// MARK: - Protocol Wrapper for DI
+
+final class LivePersistenceService: PersistenceServiceProtocol {
+    func save(workflows: [WorkflowRun]) {
+        PersistenceService.save(workflows: workflows)
+    }
+
+    func loadWorkflows() -> [WorkflowRun] {
+        PersistenceService.loadWorkflows()
+    }
+
+    func save(prs: [PullRequest]) {
+        PersistenceService.save(prs: prs)
+    }
+
+    func loadPRs() -> [PullRequest] {
+        PersistenceService.loadPRs()
     }
 }

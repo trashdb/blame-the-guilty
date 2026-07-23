@@ -66,12 +66,19 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
     /// First PR sync seeds the ready set silently (no notification burst on launch).
     private var didSeedReadyPRs = false
 
-    init(baseUrl: String) {
+    private let keychain: KeychainServiceProtocol
+    private let persistence: PersistenceServiceProtocol
+    private let oauth: OAuthServiceProtocol
+
+    init(baseUrl: String, keychain: KeychainServiceProtocol = LiveKeychainService(), persistence: PersistenceServiceProtocol = LivePersistenceService(), oauth: OAuthServiceProtocol = LiveOAuthService()) {
         self.baseUrl = baseUrl
+        self.keychain = keychain
+        self.persistence = persistence
+        self.oauth = oauth
     }
 
     func restoreSession() {
-        guard let session = KeychainService.load() else { return }
+        guard let session = keychain.load() else { return }
         userGitHubId = session.gitHubId
         username = session.username
         avatarUrl = session.avatarUrl
@@ -79,7 +86,7 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
         let gid = session.gitHubId
 
         // Show cached PRs immediately so the UI is not empty while loading
-        activePRs = PersistenceService.loadPRs()
+        activePRs = persistence.loadPRs()
 
         // Refresh workflows + avatar on every popover open
         Task {
@@ -88,7 +95,7 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
 
             if let fresh = await fetchMe(gitHubId: gid), let url = fresh.avatarUrl {
                 await MainActor.run { avatarUrl = url }
-                KeychainService.save(gitHubId: gid, username: session.username, avatarUrl: url)
+                keychain.save(gitHubId: gid, username: session.username, avatarUrl: url)
             }
         }
 
@@ -109,7 +116,6 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
     }
 
     func login(keepSignedIn: Bool) async throws {
-        let oauth = OAuthService()
         let result = try await oauth.startLogin(backendUrl: baseUrl)
         await MainActor.run {
             userGitHubId = result.id
@@ -118,7 +124,7 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
             isLoggedIn = true
             connect(gitHubId: result.id, username: result.username)
             if keepSignedIn {
-                KeychainService.save(gitHubId: result.id, username: result.username, avatarUrl: result.avatarUrl)
+                keychain.save(gitHubId: result.id, username: result.username, avatarUrl: result.avatarUrl)
             }
         }
     }
@@ -131,7 +137,7 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
     func logout() {
         stopPolling()
         disconnect()
-        KeychainService.delete()
+        keychain.delete()
         isLoggedIn = false
         username = ""
         avatarUrl = nil
@@ -246,7 +252,7 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
                     }
                     notifyNewlyReadyPRs(current: newPRs)
                     activePRs = newPRs
-                    PersistenceService.save(prs: newPRs)
+                    persistence.save(prs: newPRs)
                 }
             }
         } catch {}
@@ -296,7 +302,7 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
     }
 
     private func loadPersistedHistory() {
-        let saved = PersistenceService.loadWorkflows()
+        let saved = persistence.loadWorkflows()
         if !saved.isEmpty {
             recentWorkflows = saved.map { run in
                 if run.status == "in_progress" {
@@ -321,7 +327,7 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
     }
 
     private func persistHistory() {
-        PersistenceService.save(workflows: recentWorkflows)
+        persistence.save(workflows: recentWorkflows)
     }
 
     private var hubWebSocketUrl: URL {

@@ -3,7 +3,7 @@ import OSLog
 
 private let conflictLog = OSLog(subsystem: "com.blametheguilty", category: "conflicts")
 
-class ConflictWatcherService {
+class ConflictWatcherService: ConflictWatcherServiceProtocol {
     private weak var signalR: SignalRService?
     private let gitService = currentDependencies.gitService
     private var pollTask: Task<Void, Never>?
@@ -152,3 +152,7 @@ class ConflictWatcherService {
                log: conflictLog, type: .info, kind.title, kind.body(repo: repo, file: file))
     }
 }
+
+// MARK: - DI Wrapper
+
+typealias LiveConflictWatcherService = ConflictWatcherService

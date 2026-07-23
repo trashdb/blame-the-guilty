@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import Network
 
-class OAuthService {
+class OAuthService: OAuthServiceProtocol {
     func startLogin(backendUrl: String) async throws -> (id: Int64, username: String, avatarUrl: String?) {
         try await withCheckedThrowingContinuation { continuation in
             let port = UInt16.random(in: 49152...65535)
@@ -158,3 +158,7 @@ class OAuthService {
         case timeout
     }
 }
+
+// MARK: - DI Wrapper
+
+typealias LiveOAuthService = OAuthService

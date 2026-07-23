@@ -87,3 +87,54 @@ class MockSignalRService: SignalRServiceProtocol {
     func startPolling(gitHubId: Int64) {}
     func stopPolling() {}
 }
+
+// MARK: - Keychain Mock
+
+class MockKeychainService: KeychainServiceProtocol {
+    var savedSession: KeychainService.Session?
+    var shouldReturnSession = true
+
+    func save(gitHubId: Int64, username: String, avatarUrl: String?) {
+        savedSession = KeychainService.Session(gitHubId: gitHubId, username: username, avatarUrl: avatarUrl)
+    }
+
+    func load() -> KeychainService.Session? {
+        shouldReturnSession ? savedSession : nil
+    }
+
+    func delete() {
+        savedSession = nil
+    }
+}
+
+// MARK: - Persistence Mock
+
+class MockPersistenceService: PersistenceServiceProtocol {
+    var savedWorkflows: [WorkflowRun] = []
+    var savedPRs: [PullRequest] = []
+
+    func save(workflows: [WorkflowRun]) { savedWorkflows = workflows }
+    func loadWorkflows() -> [WorkflowRun] { savedWorkflows }
+    func save(prs: [PullRequest]) { savedPRs = prs }
+    func loadPRs() -> [PullRequest] { savedPRs }
+}
+
+// MARK: - OAuth Mock
+
+class MockOAuthService: OAuthServiceProtocol {
+    var shouldThrow = false
+    var loginResult = (id: Int64(12345), username: "testuser", avatarUrl: "https://example.com/avatar.png")
+
+    func startLogin(backendUrl: String) async throws -> (id: Int64, username: String, avatarUrl: String?) {
+        if shouldThrow { throw GitError.commandFailed("mock oauth error") }
+        return loginResult
+    }
+}
+
+// MARK: - ConflictWatcher Mock
+
+class MockConflictWatcherService: ConflictWatcherServiceProtocol {
+    var isRunning = false
+    func start() { isRunning = true }
+    func stop() { isRunning = false }
+}

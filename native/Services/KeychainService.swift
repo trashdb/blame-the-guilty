@@ -52,3 +52,19 @@ enum KeychainService {
         ]
     }
 }
+
+// MARK: - Protocol Wrapper for DI
+
+final class LiveKeychainService: KeychainServiceProtocol {
+    func save(gitHubId: Int64, username: String, avatarUrl: String?) {
+        KeychainService.save(gitHubId: gitHubId, username: username, avatarUrl: avatarUrl)
+    }
+
+    func load() -> KeychainService.Session? {
+        KeychainService.load()
+    }
+
+    func delete() {
+        KeychainService.delete()
+    }
+}
