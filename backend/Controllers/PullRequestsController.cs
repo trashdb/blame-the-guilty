@@ -168,7 +168,7 @@ public class PullRequestsController : ControllerBase
             {
                 var prRuns = allRuns
                     .Where(r => r.Repo == pr.RepoFullName && r.HeadSha == headSha
-                        && r.Status != "superseded" && r.Status != "cancelled")
+                        && r.Status != "superseded" && r.Status != "cancelled" && r.Status != "skipped")
                     .ToList();
                 var latestByWorkflow = prRuns
                     .GroupBy(r => r.WorkflowName)
@@ -183,6 +183,18 @@ public class PullRequestsController : ControllerBase
                     ciStatus = "failed";
                 else
                     ciStatus = "review";
+            }
+
+            // Determine conclusion from actual check suite events for this SHA
+            string? conclusion = pr.Conclusion;
+            if (headSha != null)
+            {
+                var latestCheck = await _db.CheckSuiteEvents
+                    .Where(c => c.HeadSha == headSha && c.RepoFullName == pr.RepoFullName)
+                    .OrderByDescending(c => c.Id)
+                    .FirstOrDefaultAsync();
+                if (latestCheck != null)
+                    conclusion = latestCheck.Conclusion;
             }
 
             // Only compute "ready" for PRs that are still open. A merged/closed PR
@@ -202,7 +214,7 @@ public class PullRequestsController : ControllerBase
                 pr.BaseBranch,
                 HtmlUrl = pr.PrUrl,
                 Status = effectiveStatus,
-                pr.Conclusion,
+                Conclusion = conclusion,
                 Draft = pr.Draft,
                 MergeableState = mergeable,
                 CiStatus = ciStatus,
