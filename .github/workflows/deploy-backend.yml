@@ -38,21 +38,21 @@ jobs:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
           mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
 
           # Add VPS to known_hosts
-          ssh-keyscan -H ${{ vars.VPS_HOST || 'underlayer' }} >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H ${{ vars.VPS_HOST || '49.13.88.205' }} >> ~/.ssh/known_hosts 2>/dev/null
 
-          rsync -az --delete /tmp/publish/ \
-            ${{ vars.VPS_USER || 'root' }}@${{ vars.VPS_HOST || 'underlayer' }}:/opt/blame-the-guilty/
+          rsync -az --delete -e "ssh -i ~/.ssh/id_ed25519" /tmp/publish/ \
+            ${{ vars.VPS_USER || 'root' }}@${{ vars.VPS_HOST || '49.13.88.205' }}:/opt/blame-the-guilty/
 
       - name: Restart service
         run: |
-          ssh ${{ vars.VPS_USER || 'root' }}@${{ vars.VPS_HOST || 'underlayer' }} \
+          ssh -i ~/.ssh/id_ed25519 ${{ vars.VPS_USER || 'root' }}@${{ vars.VPS_HOST || '49.13.88.205' }} \
             "sudo systemctl restart blame-the-guilty"
 
       - name: Health check
         run: |
           sleep 5
-          curl -sf http://${{ vars.VPS_HOST || 'underlayer' }}:5000/health || echo "Health check failed"
+          curl -sf http://${{ vars.VPS_HOST || '49.13.88.205' }}:5000/health || echo "Health check failed"
