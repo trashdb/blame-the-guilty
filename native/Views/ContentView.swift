@@ -65,6 +65,7 @@ struct ContentView: View {
                 if signalR.isLoggedIn {
                     toolbarButton(icon: "arrow.triangle.2.circlepath", help: "Full resync: workflows + PRs") {
                         Task {
+                            _ = await signalR.syncPRsFromGitHub(gitHubId: signalR.userGitHubId)
                             let n = await signalR.syncActiveWorkflows(gitHubId: signalR.userGitHubId)
                             if n > 0 {
                                 showNotification(

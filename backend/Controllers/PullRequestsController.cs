@@ -25,12 +25,105 @@ public class PullRequestsController : ControllerBase
         _hubContext = hubContext;
     }
 
+    [HttpPost("sync")]
+    [EnableRateLimiting("api")]
+    public async Task<IActionResult> SyncFromGitHub([FromQuery] long gitHubId)
+    {
+        var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
+        var token = user?.UserPatToken ?? user?.AccessToken ?? _configuration["GitHub:PatToken"];
+        if (string.IsNullOrEmpty(token))
+            return Unauthorized(new { error = "No token" });
+
+        var synced = 0;
+        var page = 1;
+        const int perPage = 100;
+
+        while (true)
+        {
+            var req = new HttpRequestMessage(HttpMethod.Get,
+                $"https://api.github.com/user/pulls?state=open&per_page={perPage}&page={page}");
+            req.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            HttpResponseMessage resp;
+            try { resp = await _githubClient.SendAsync(req); }
+            catch { break; }
+
+            if (!resp.IsSuccessStatusCode) break;
+
+            var json = await resp.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) break;
+
+            var prArray = doc.RootElement.EnumerateArray().ToList();
+            if (prArray.Count == 0) break;
+
+            foreach (var pr in prArray)
+            {
+                var prNumber = pr.GetProperty("number").GetInt64();
+                var title = pr.TryGetProperty("title", out var t) ? t.GetString() ?? "" : "";
+                var authorLogin = pr.TryGetProperty("user", out var u) && u.TryGetProperty("login", out var l) ? l.GetString() ?? "" : "";
+                var authorId = pr.TryGetProperty("user", out var u2) && u2.TryGetProperty("id", out var id) ? id.GetInt64() : (long?)null;
+                var repoUrl = pr.TryGetProperty("head", out var head) && head.TryGetProperty("repo", out var repo) && repo.TryGetProperty("full_name", out var fn) ? fn.GetString() : null;
+                var headBranch = pr.TryGetProperty("head", out var h2) && h2.TryGetProperty("ref", out var r) ? r.GetString() : null;
+                var baseBranch = pr.TryGetProperty("base", out var b) && b.TryGetProperty("ref", out var br) ? br.GetString() : null;
+                var htmlUrl = pr.TryGetProperty("html_url", out var hu) ? hu.GetString() : null;
+                var draft = pr.TryGetProperty("draft", out var d) && d.ValueKind == JsonValueKind.True;
+                var createdAt = pr.TryGetProperty("created_at", out var ca) && DateTime.TryParse(ca.GetString(), null, System.Globalization.DateTimeStyles.AdjustToUniversal, out var cd) ? cd : DateTime.UtcNow;
+
+                if (string.IsNullOrEmpty(repoUrl)) continue;
+
+                var existing = await _db.PullRequestEvents
+                    .Where(e => e.PrNumber == prNumber && e.RepoFullName == repoUrl)
+                    .OrderByDescending(e => e.Id)
+                    .FirstOrDefaultAsync();
+
+                if (existing != null)
+                {
+                    existing.Title = title;
+                    existing.AuthorLogin = authorLogin;
+                    existing.AuthorGitHubId = authorId;
+                    existing.HeadBranch = headBranch;
+                    existing.BaseBranch = baseBranch;
+                    existing.PrUrl = htmlUrl;
+                    existing.Draft = draft;
+                    existing.Status = "open";
+                }
+                else
+                {
+                    _db.PullRequestEvents.Add(new Models.PullRequestEvent
+                    {
+                        PrNumber = prNumber,
+                        Title = title,
+                        AuthorLogin = authorLogin,
+                        AuthorGitHubId = authorId,
+                        RepoFullName = repoUrl,
+                        HeadBranch = headBranch,
+                        BaseBranch = baseBranch,
+                        PrUrl = htmlUrl,
+                        Status = "open",
+                        Draft = draft,
+                        OccurredAt = createdAt
+                    });
+                }
+                synced++;
+            }
+
+            await _db.SaveChangesAsync();
+
+            if (prArray.Count < perPage) break;
+            page++;
+        }
+
+        return Ok(new { synced });
+    }
+
     [HttpGet("active")]
     [EnableRateLimiting("api")]
     public async Task<IActionResult> GetActive([FromQuery] long gitHubId, [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
     {
         var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
-        var token = user?.UserPatToken ?? user?.AccessToken;
+        var token = user?.UserPatToken ?? user?.AccessToken ?? _configuration["GitHub:PatToken"];
         if (string.IsNullOrEmpty(token))
             return Unauthorized(new { error = "No token" });
 

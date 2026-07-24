@@ -90,6 +90,7 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
 
         // Refresh workflows + avatar on every popover open
         Task {
+            _ = await syncPRsFromGitHub(gitHubId: gid)
             await syncFromApi(gitHubId: gid)
             await syncPRsFromApi(gitHubId: gid)
 
@@ -150,6 +151,7 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
         task = Task { [weak self] in
             guard let self else { return }
 
+            _ = await syncPRsFromGitHub(gitHubId: gitHubId)
             await syncFromApi(gitHubId: gitHubId)
             await syncPRsFromApi(gitHubId: gitHubId)
             startPolling(gitHubId: gitHubId)
@@ -615,6 +617,20 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
                 )
             }
         }
+    }
+
+    func syncPRsFromGitHub(gitHubId: Int64) async -> Int {
+        guard let url = URL(string: "\(baseUrl)/api/pullrequests/sync?gitHubId=\(gitHubId)") else { return 0 }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        do {
+            let (data, _) = try await URLSession.shared.data(for: request)
+            struct SyncResult: Decodable { let synced: Int }
+            if let result = try? JSONDecoder().decode(SyncResult.self, from: data) {
+                return result.synced
+            }
+        } catch {}
+        return 0
     }
 
     func syncActiveWorkflows(gitHubId: Int64) async -> Int {
