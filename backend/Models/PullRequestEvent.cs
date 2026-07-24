@@ -68,6 +68,10 @@ public class PullRequestEvent
     [MaxLength(40)]
     public string? HeadSha { get; set; }
 
+    /// <summary>JSON array of GitHub user IDs subscribed to this PR, e.g. "[99991,99992]"</summary>
+    [MaxLength(1000)]
+    public string? SubscriberIds { get; set; }
+
     public DateTime OccurredAt { get; set; } = DateTime.UtcNow;
 
     public bool WasNotified { get; set; }

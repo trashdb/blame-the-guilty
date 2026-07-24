@@ -73,6 +73,8 @@ protocol SignalRServiceProtocol: AnyObject {
     func logout()
     func startPolling(gitHubId: Int64)
     func stopPolling()
+    func subscribeToPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool
+    func unsubscribeFromPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool
 }
 
 // MARK: - KeychainServiceProtocol

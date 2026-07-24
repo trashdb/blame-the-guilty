@@ -86,6 +86,8 @@ class MockSignalRService: SignalRServiceProtocol {
     func logout() {}
     func startPolling(gitHubId: Int64) {}
     func stopPolling() {}
+    func subscribeToPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool { false }
+    func unsubscribeFromPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool { false }
 }
 
 // MARK: - Keychain Mock

@@ -175,7 +175,8 @@ public class PullRequestsController : ControllerBase
             return Unauthorized(new { error = "No token" });
 
         var prs = await _db.PullRequestEvents
-            .Where(e => ((e.Status == "open" || e.Status == "in_progress") || (e.Status == "merged" && e.OccurredAt >= DateTime.UtcNow.AddHours(-24))) && e.AuthorGitHubId == gitHubId)
+            .Where(e => ((e.Status == "open" || e.Status == "in_progress") || (e.Status == "merged" && e.OccurredAt >= DateTime.UtcNow.AddHours(-24)))
+                && (e.AuthorGitHubId == gitHubId || (e.SubscriberIds != null && e.SubscriberIds.Contains(gitHubId.ToString()))))
             .OrderByDescending(e => e.OccurredAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -196,7 +197,8 @@ public class PullRequestsController : ControllerBase
                 e.LastCommentAt,
                 e.LastCommentUrl,
                 e.LastReviewFilePath,
-                e.LastReviewLine
+                e.LastReviewLine,
+                e.SubscriberIds
             })
             .ToListAsync();
 
@@ -358,6 +360,7 @@ public class PullRequestsController : ControllerBase
                 ciStatus = "ready";
 
             var finalReviewApproved = reviewOverrides.GetValueOrDefault(pr.PrNumber, pr.ReviewApproved);
+            var subscriberIds = DeserializeSubscriberIds(pr.SubscriberIds);
 
             results.Add(new
             {
@@ -378,7 +381,9 @@ public class PullRequestsController : ControllerBase
                 LastCommentAt = pr.LastCommentAt,
                 LastCommentUrl = pr.LastCommentUrl,
                 LastReviewFilePath = pr.LastReviewFilePath,
-                LastReviewLine = pr.LastReviewLine
+                LastReviewLine = pr.LastReviewLine,
+                IsSubscribed = subscriberIds.Contains(gitHubId),
+                SubscriberIds = subscriberIds
             });
         }
 
@@ -983,5 +988,78 @@ public class PullRequestsController : ControllerBase
         {
             return null;
         }
+    }
+
+    // ── PR Subscribers ──────────────────────────────────────────────────
+
+    private static long[] DeserializeSubscriberIds(string? raw) =>
+        raw is { Length: > 0 } && JsonSerializer.Deserialize<long[]>(raw) is { } arr ? arr : [];
+
+    private static string? SerializeSubscriberIds(long[] ids) =>
+        ids.Length > 0 ? JsonSerializer.Serialize(ids) : null;
+
+    [HttpPost("{prNumber}/subscribe")]
+    [EnableRateLimiting("api")]
+    public async Task<IActionResult> Subscribe(long prNumber, [FromQuery] string repo, [FromQuery] long gitHubId)
+    {
+        var pr = await _db.PullRequestEvents
+            .Where(e => e.PrNumber == prNumber && e.RepoFullName == repo && e.Status == "open")
+            .OrderByDescending(e => e.Id)
+            .FirstOrDefaultAsync();
+        if (pr == null) return NotFound(new { error = "PR not found" });
+
+        var current = DeserializeSubscriberIds(pr.SubscriberIds);
+        if (!current.Contains(gitHubId))
+        {
+            var updated = current.Append(gitHubId).ToArray();
+            pr.SubscriberIds = SerializeSubscriberIds(updated);
+            await _db.SaveChangesAsync();
+        }
+
+        await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
+        return Ok(new { subscribed = true, subscribers = DeserializeSubscriberIds(pr.SubscriberIds) });
+    }
+
+    [HttpPost("{prNumber}/unsubscribe")]
+    [EnableRateLimiting("api")]
+    public async Task<IActionResult> Unsubscribe(long prNumber, [FromQuery] string repo, [FromQuery] long gitHubId)
+    {
+        var pr = await _db.PullRequestEvents
+            .Where(e => e.PrNumber == prNumber && e.RepoFullName == repo && e.Status == "open")
+            .OrderByDescending(e => e.Id)
+            .FirstOrDefaultAsync();
+        if (pr == null) return NotFound(new { error = "PR not found" });
+
+        var current = DeserializeSubscriberIds(pr.SubscriberIds);
+        if (current.Contains(gitHubId))
+        {
+            var updated = current.Where(id => id != gitHubId).ToArray();
+            pr.SubscriberIds = SerializeSubscriberIds(updated);
+            await _db.SaveChangesAsync();
+        }
+
+        await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
+        return Ok(new { subscribed = false, subscribers = DeserializeSubscriberIds(pr.SubscriberIds) });
+    }
+
+    [HttpGet("{prNumber}/subscribers")]
+    [EnableRateLimiting("api")]
+    public async Task<IActionResult> GetSubscribers(long prNumber, [FromQuery] string repo)
+    {
+        var pr = await _db.PullRequestEvents
+            .Where(e => e.PrNumber == prNumber && e.RepoFullName == repo)
+            .OrderByDescending(e => e.Id)
+            .FirstOrDefaultAsync();
+        if (pr == null) return NotFound(new { error = "PR not found" });
+
+        var ids = DeserializeSubscriberIds(pr.SubscriberIds);
+
+        // Resolve GitHub IDs to usernames + avatars
+        var users = await _db.GitHubUsers
+            .Where(u => ids.Contains(u.GitHubId))
+            .Select(u => new { u.GitHubId, u.GitHubUsername, u.AvatarUrl })
+            .ToListAsync();
+
+        return Ok(new { subscribers = users, subscriberIds = ids });
     }
 }

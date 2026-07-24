@@ -226,6 +226,8 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
                 let lastCommentBy: String?
                 let lastCommentBody: String?
                 let lastCommentAt: Date?
+                let isSubscribed: Bool?
+                let subscriberIds: [Int64]?
             }
             if let prs = try? JSONDecoder().decode([ApiPR].self, from: data) {
                 var seen = Set<String>()
@@ -249,7 +251,9 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
                             lastCommentAt: pr.lastCommentAt,
                             lastCommentUrl: nil,
                             lastReviewFilePath: nil,
-                            lastReviewLine: nil
+                            lastReviewLine: nil,
+                            isSubscribed: pr.isSubscribed ?? false,
+                            subscriberIds: pr.subscriberIds ?? []
                         )
                     }
                     notifyNewlyReadyPRs(current: newPRs)
@@ -631,6 +635,28 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
             }
         } catch {}
         return 0
+    }
+
+    func subscribeToPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool {
+        let repoEncoded = repo.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? repo
+        guard let url = URL(string: "\(baseUrl)/api/pullrequests/\(prNumber)/subscribe?repo=\(repoEncoded)&gitHubId=\(gitHubId)") else { return false }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        guard let (_, resp) = try? await URLSession.shared.data(for: req),
+              let http = resp as? HTTPURLResponse, http.statusCode == 200 else { return false }
+        await syncFromApi(gitHubId: gitHubId)
+        return true
+    }
+
+    func unsubscribeFromPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool {
+        let repoEncoded = repo.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? repo
+        guard let url = URL(string: "\(baseUrl)/api/pullrequests/\(prNumber)/unsubscribe?repo=\(repoEncoded)&gitHubId=\(gitHubId)") else { return false }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        guard let (_, resp) = try? await URLSession.shared.data(for: req),
+              let http = resp as? HTTPURLResponse, http.statusCode == 200 else { return false }
+        await syncFromApi(gitHubId: gitHubId)
+        return true
     }
 
     func syncActiveWorkflows(gitHubId: Int64) async -> Int {

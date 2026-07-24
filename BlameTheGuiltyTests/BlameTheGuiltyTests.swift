@@ -14,7 +14,8 @@ func prID() {
         status: "open", conclusion: nil, draft: false,
         mergeableState: nil, ciStatus: "", reviewApproved: false,
         lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
-        lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil)
+        lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
+        isSubscribed: false, subscriberIds: [])
     #expect(pr.id == "owner/repo#42")
     #expect(!pr.isMerged)
 }
@@ -26,7 +27,8 @@ func prMerged() {
         htmlUrl: nil, status: "merged", conclusion: nil, draft: false,
         mergeableState: nil, ciStatus: "", reviewApproved: false,
         lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
-        lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil)
+        lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
+        isSubscribed: false, subscriberIds: [])
     #expect(pr.isMerged)
 }
 
@@ -38,7 +40,8 @@ func prUrlWithHtml() {
         status: "open", conclusion: nil, draft: false,
         mergeableState: nil, ciStatus: "", reviewApproved: false,
         lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
-        lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil)
+        lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
+        isSubscribed: false, subscriberIds: [])
     #expect(pr.prUrl.absoluteString == "https://github.com/r/pull/1")
 }
 
@@ -50,7 +53,8 @@ func prUrlFallback() {
         status: "open", conclusion: nil, draft: false,
         mergeableState: nil, ciStatus: "", reviewApproved: false,
         lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
-        lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil)
+        lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
+        isSubscribed: false, subscriberIds: [])
     #expect(pr.prUrl.absoluteString == "https://github.com/owner/repo/pull/42")
 }
 
@@ -61,13 +65,15 @@ func prEquality() {
         htmlUrl: nil, status: "open", conclusion: nil, draft: false,
         mergeableState: nil, ciStatus: "", reviewApproved: false,
         lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
-        lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil)
+        lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
+        isSubscribed: false, subscriberIds: [])
     let b = PullRequest(
         prNumber: 1, title: "different", repo: "r", headBranch: "", baseBranch: "",
         htmlUrl: nil, status: "open", conclusion: nil, draft: false,
         mergeableState: nil, ciStatus: "", reviewApproved: false,
         lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
-        lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil)
+        lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
+        isSubscribed: false, subscriberIds: [])
     #expect(a == b)
 }
 
@@ -78,13 +84,15 @@ func prInequality() {
         htmlUrl: nil, status: "open", conclusion: nil, draft: false,
         mergeableState: nil, ciStatus: "", reviewApproved: false,
         lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
-        lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil)
+        lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
+        isSubscribed: false, subscriberIds: [])
     let c = PullRequest(
         prNumber: 2, title: "", repo: "r", headBranch: "", baseBranch: "",
         htmlUrl: nil, status: "open", conclusion: nil, draft: false,
         mergeableState: nil, ciStatus: "", reviewApproved: false,
         lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
-        lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil)
+        lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
+        isSubscribed: false, subscriberIds: [])
     #expect(a != c)
 }
 
@@ -95,13 +103,15 @@ func prInequalityRepo() {
         htmlUrl: nil, status: "open", conclusion: nil, draft: false,
         mergeableState: nil, ciStatus: "", reviewApproved: false,
         lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
-        lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil)
+        lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
+        isSubscribed: false, subscriberIds: [])
     let d = PullRequest(
         prNumber: 1, title: "", repo: "other", headBranch: "", baseBranch: "",
         htmlUrl: nil, status: "open", conclusion: nil, draft: false,
         mergeableState: nil, ciStatus: "", reviewApproved: false,
         lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
-        lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil)
+        lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
+        isSubscribed: false, subscriberIds: [])
     #expect(a != d)
 }
 
@@ -116,7 +126,8 @@ func prCoding() throws {
         reviewApproved: true, lastCommentBy: "user",
         lastCommentBody: "LGTM", lastCommentAt: Date(),
         lastCommentUrl: "https://...", lastReviewFilePath: "file.swift",
-        lastReviewLine: 10)
+        lastReviewLine: 10,
+        isSubscribed: true, subscriberIds: [123, 456])
     let data = try JSONEncoder().encode(pr)
     let decoded = try JSONDecoder().decode(PullRequest.self, from: data)
     #expect(decoded.prNumber == 42)
@@ -501,7 +512,8 @@ func remoteBranchID() {
             htmlUrl: nil, status: "open", conclusion: nil, draft: false,
             mergeableState: nil, ciStatus: "", reviewApproved: false,
             lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
-            lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil)
+            lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
+        isSubscribed: false, subscriberIds: [])
         PersistenceService.save(prs: [pr])
         let loaded = PersistenceService.loadPRs()
         #expect(loaded.count == 1)
@@ -522,13 +534,15 @@ func remoteBranchID() {
             htmlUrl: nil, status: "open", conclusion: nil, draft: false,
             mergeableState: nil, ciStatus: "", reviewApproved: false,
             lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
-            lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil)
+            lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
+        isSubscribed: false, subscriberIds: [])
         let pr2 = PullRequest(
             prNumber: 2, title: "", repo: "r", headBranch: "", baseBranch: "",
             htmlUrl: nil, status: "open", conclusion: nil, draft: false,
             mergeableState: nil, ciStatus: "", reviewApproved: false,
             lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
-            lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil)
+            lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
+        isSubscribed: false, subscriberIds: [])
         PersistenceService.save(prs: [pr1])
         PersistenceService.save(prs: [pr2])
         #expect(PersistenceService.loadPRs().count == 1)

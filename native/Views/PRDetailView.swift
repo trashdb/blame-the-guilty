@@ -170,6 +170,37 @@ struct PRDetailView: View {
                     PRDetailBadges(pr: pr)
                 }
 
+                // Subscribe button (for PRs authored by others)
+                if !pr.isMerged && pr.repo != "trashdb/blame-the-guilty" {
+                    HStack(spacing: DS.Spacing.sm) {
+                        if pr.isSubscribed {
+                            Image(systemName: "bell.fill")
+                                .font(DS.Font.caption)
+                                .foregroundStyle(DS.Color.accent)
+                            Text("Subscribed")
+                                .font(DS.Font.small)
+                                .foregroundStyle(DS.Color.accent)
+                            Spacer()
+                            solidButton("Unsubscribe", color: .secondary, help: "Stop receiving notifications for this PR") {
+                                Task { await performUnsubscribe() }
+                            }
+                        } else {
+                            Image(systemName: "bell")
+                                .font(DS.Font.caption)
+                                .foregroundStyle(DS.Color.textTertiary)
+                            Text("Not subscribed")
+                                .font(DS.Font.small)
+                                .foregroundStyle(DS.Color.textTertiary)
+                            Spacer()
+                            solidButton("Subscribe", color: DS.Color.accent, help: "Get notified of comments, reviews, and status changes") {
+                                Task { await performSubscribe() }
+                            }
+                        }
+                    }
+                    .padding(.vertical, DS.Spacing.xs)
+                    .animation(DS.Animation.default, value: pr.isSubscribed)
+                }
+
                 // Title
                 Text(pr.title)
                     .font(DS.Font.title)
@@ -689,6 +720,26 @@ struct PRDetailView: View {
                 }
             }
         }.resume()
+    }
+
+    private func performSubscribe() async {
+        let service = currentDependencies.signalRService
+        let success = await service.subscribeToPR(prNumber: pr.prNumber, repo: pr.repo, gitHubId: gitHubId)
+        if success {
+            await MainActor.run {
+                NotificationCenter.default.post(name: .prSubscriptionChanged, object: nil)
+            }
+        }
+    }
+
+    private func performUnsubscribe() async {
+        let service = currentDependencies.signalRService
+        let success = await service.unsubscribeFromPR(prNumber: pr.prNumber, repo: pr.repo, gitHubId: gitHubId)
+        if success {
+            await MainActor.run {
+                NotificationCenter.default.post(name: .prSubscriptionChanged, object: nil)
+            }
+        }
     }
 
     private func loadCommits() {

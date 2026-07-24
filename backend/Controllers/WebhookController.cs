@@ -728,6 +728,10 @@ public class WebhookController : ControllerBase
             }
         }
 
+        // Notify subscribers (excluding the reviewer themselves)
+        var reviewerUser = await _db.GitHubUsers.Where(u => u.GitHubUsername == reviewerLogin).Select(u => u.GitHubId).FirstOrDefaultAsync();
+        await NotifySubscribers(existing, "PrApproved", new { prNumber, repo, reviewerLogin, title = existing.Title }, reviewerUser);
+
         await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
         return Ok(new { prNumber, approved });
     }
@@ -802,6 +806,16 @@ public class WebhookController : ControllerBase
                     });
             }
         }
+
+        // Notify subscribers (excluding the commenter)
+        var commenterUser = await _db.GitHubUsers.Where(u => u.GitHubUsername == commenterLogin).Select(u => u.GitHubId).FirstOrDefaultAsync();
+        await NotifySubscribers(existing, "PrCommented", new
+        {
+            prNumber, repo, commenterLogin,
+            title = existing.Title,
+            commentBody = existing.LastCommentBody,
+            commentUrl
+        }, commenterUser);
 
         await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
         return Ok(new { prNumber, commenterLogin });
@@ -878,6 +892,16 @@ public class WebhookController : ControllerBase
             }
         }
 
+        // Notify subscribers (excluding the commenter)
+        var rcUser = await _db.GitHubUsers.Where(u => u.GitHubUsername == commenterLogin).Select(u => u.GitHubId).FirstOrDefaultAsync();
+        await NotifySubscribers(existing, "PrCommented", new
+        {
+            prNumber, repo, commenterLogin,
+            title = existing.Title,
+            commentBody = existing.LastCommentBody,
+            commentUrl, filePath, line
+        }, rcUser);
+
         await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
         return Ok(new { prNumber, commenterLogin, filePath, line });
     }
@@ -924,6 +948,26 @@ public class WebhookController : ControllerBase
 
     private static long[] DeserializeTargetIds(string? raw) =>
         raw is { Length: > 0 } && System.Text.Json.JsonSerializer.Deserialize<long[]>(raw) is { } arr ? arr : [];
+
+    private static long[] DeserializeSubscriberIds(string? raw) =>
+        raw is { Length: > 0 } && System.Text.Json.JsonSerializer.Deserialize<long[]>(raw) is { } arr ? arr : [];
+
+    private async Task NotifySubscribers(Models.PullRequestEvent pr, string eventName, object data, long? excludeGitHubId = null)
+    {
+        var subscriberIds = DeserializeSubscriberIds(pr.SubscriberIds);
+        if (subscriberIds.Length == 0) return;
+
+        var connections = await _db.GitHubUsers
+            .Where(u => subscriberIds.Contains(u.GitHubId) && u.SignalRConnectionId != null
+                && (excludeGitHubId == null || u.GitHubId != excludeGitHubId.Value))
+            .Select(u => u.SignalRConnectionId!)
+            .ToListAsync();
+
+        foreach (var conn in connections)
+        {
+            await _hubContext.Clients.Client(conn).SendAsync(eventName, data);
+        }
+    }
 
     private async Task<Models.GitHubUser?> FindConnectedUser(string login, long? gitHubId)
     {
