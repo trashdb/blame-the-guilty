@@ -180,7 +180,7 @@ public class PullRequestsController : ControllerBase
             .OrderByDescending(e => e.OccurredAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(e => new
+.Select(e => new
             {
                 e.PrNumber,
                 e.Title,
@@ -198,7 +198,8 @@ public class PullRequestsController : ControllerBase
                 e.LastCommentUrl,
                 e.LastReviewFilePath,
                 e.LastReviewLine,
-                e.SubscriberIds
+                e.SubscriberIds,
+                e.AuthorGitHubId
             })
             .ToListAsync();
 
@@ -383,7 +384,8 @@ public class PullRequestsController : ControllerBase
                 LastReviewFilePath = pr.LastReviewFilePath,
                 LastReviewLine = pr.LastReviewLine,
                 IsSubscribed = subscriberIds.Contains(gitHubId),
-                SubscriberIds = subscriberIds
+                SubscriberIds = subscriberIds,
+                AuthorGitHubId = pr.AuthorGitHubId
             });
         }
 
@@ -1061,5 +1063,60 @@ public class PullRequestsController : ControllerBase
             .ToListAsync();
 
         return Ok(new { subscribers = users, subscriberIds = ids });
+    }
+
+    [HttpPost("{prNumber}/add-subscriber")]
+    [EnableRateLimiting("api")]
+    public async Task<IActionResult> AddSubscriber(long prNumber, [FromQuery] string repo, [FromQuery] long gitHubId, [FromQuery] string username)
+    {
+        var pr = await _db.PullRequestEvents
+            .Where(e => e.PrNumber == prNumber && e.RepoFullName == repo && e.Status == "open")
+            .OrderByDescending(e => e.Id)
+            .FirstOrDefaultAsync();
+        if (pr == null) return NotFound(new { error = "PR not found" });
+
+        // Only PR author can add subscribers (or self-subscribe)
+        if (pr.AuthorGitHubId != gitHubId)
+            return Forbid();
+
+        var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubUsername == username);
+        if (user == null) return NotFound(new { error = "User not found in database" });
+
+        var current = DeserializeSubscriberIds(pr.SubscriberIds);
+        if (!current.Contains(user.GitHubId))
+        {
+            var updated = current.Append(user.GitHubId).ToArray();
+            pr.SubscriberIds = SerializeSubscriberIds(updated);
+            await _db.SaveChangesAsync();
+        }
+
+        await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
+        return Ok(new { added = true, subscribers = DeserializeSubscriberIds(pr.SubscriberIds) });
+    }
+
+    [HttpPost("{prNumber}/remove-subscriber")]
+    [EnableRateLimiting("api")]
+    public async Task<IActionResult> RemoveSubscriber(long prNumber, [FromQuery] string repo, [FromQuery] long gitHubId, [FromQuery] long subscriberId)
+    {
+        var pr = await _db.PullRequestEvents
+            .Where(e => e.PrNumber == prNumber && e.RepoFullName == repo && e.Status == "open")
+            .OrderByDescending(e => e.Id)
+            .FirstOrDefaultAsync();
+        if (pr == null) return NotFound(new { error = "PR not found" });
+
+        // Only PR author can remove subscribers (or self-unsubscribe)
+        if (pr.AuthorGitHubId != gitHubId && subscriberId != gitHubId)
+            return Forbid();
+
+        var current = DeserializeSubscriberIds(pr.SubscriberIds);
+        if (current.Contains(subscriberId))
+        {
+            var updated = current.Where(id => id != subscriberId).ToArray();
+            pr.SubscriberIds = SerializeSubscriberIds(updated);
+            await _db.SaveChangesAsync();
+        }
+
+        await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
+        return Ok(new { removed = true, subscribers = DeserializeSubscriberIds(pr.SubscriberIds) });
     }
 }

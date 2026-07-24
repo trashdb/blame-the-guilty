@@ -231,7 +231,7 @@ actor GitService: GitServiceProtocol {
     }
 
     func createPR(repoPath: String, branchName: String, backendUrl: String, gitHubId: Int64,
-                  overrideTitle: String? = nil, overrideBody: String? = nil) async throws -> CreatePRResult {
+                  overrideTitle: String? = nil, overrideBody: String? = nil, subscribers: String? = nil) async throws -> CreatePRResult {
         // Check if the specific branch exists on remote
         let remoteRef = "origin/\(branchName)"
         let hasRemote = (try? await runGit(repoPath: repoPath, args: ["rev-parse", "--verify", remoteRef])) != nil
@@ -258,6 +258,9 @@ actor GitService: GitServiceProtocol {
         ]
         if let body = overrideBody, !body.isEmpty {
             components.queryItems?.append(.init(name: "body", value: body))
+        }
+        if let subs = subscribers, !subs.isEmpty {
+            components.queryItems?.append(.init(name: "subscribers", value: subs))
         }
         guard let url = components.url else { throw GitError.commandFailed("Invalid URL") }
 

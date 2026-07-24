@@ -99,7 +99,8 @@ public class GitHubApiController : ControllerBase
 
     [HttpPost("create-pr")]
     public async Task<IActionResult> CreatePr([FromQuery] long gitHubId, [FromQuery] string repo,
-        [FromQuery] string head, [FromQuery] string baseBranch, [FromQuery] string title, [FromQuery] string? body = null)
+        [FromQuery] string head, [FromQuery] string baseBranch, [FromQuery] string title,
+        [FromQuery] string? body = null, [FromQuery] string? subscribers = null)
     {
         var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
         var token = user?.UserPatToken ?? user?.AccessToken ?? _configuration["GitHub:PatToken"];
@@ -197,6 +198,19 @@ public class GitHubApiController : ControllerBase
                 .FirstOrDefaultAsync(e => e.RepoFullName == repo && e.PrNumber == prNumber);
             if (existing == null)
             {
+                // Resolve subscriber usernames to GitHubIds
+                long[] subscriberIds = [];
+                if (!string.IsNullOrWhiteSpace(subscribers))
+                {
+                    var usernames = subscribers.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    var resolved = await _db.GitHubUsers
+                        .Where(u => usernames.Contains(u.GitHubUsername))
+                        .Select(u => u.GitHubId)
+                        .ToListAsync();
+                    if (resolved.Count > 0)
+                        subscriberIds = resolved.ToArray();
+                }
+
                 var ev = new PullRequestEvent
                 {
                     PrNumber = prNumber,
@@ -209,11 +223,12 @@ public class GitHubApiController : ControllerBase
                     PrUrl = prUrl,
                     Status = "open",
                     Draft = false,
-                    OccurredAt = DateTime.UtcNow
+                    OccurredAt = DateTime.UtcNow,
+                    SubscriberIds = subscriberIds.Length > 0 ? JsonSerializer.Serialize(subscriberIds) : null
                 };
                 _db.PullRequestEvents.Add(ev);
                 await _db.SaveChangesAsync();
-                _logger.LogInformation("CreatePr: inserted PullRequestEvent for pr={PrNumber}", prNumber);
+                _logger.LogInformation("CreatePr: inserted PullRequestEvent for pr={PrNumber} subscribers={Subscribers}", prNumber, subscriberIds.Length);
             }
             await _hubContext.Clients.All.SendAsync("PullRequestsUpdated");
         }

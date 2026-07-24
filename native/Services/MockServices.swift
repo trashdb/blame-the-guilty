@@ -35,7 +35,7 @@ actor MockGitService: GitServiceProtocol {
 
     func baseRefName(repoPath: String) async -> String? { "main" }
 
-    func createPR(repoPath: String, branchName: String, backendUrl: String, gitHubId: Int64, overrideTitle: String?, overrideBody: String?) async throws -> CreatePRResult {
+    func createPR(repoPath: String, branchName: String, backendUrl: String, gitHubId: Int64, overrideTitle: String?, overrideBody: String?, subscribers: String?) async throws -> CreatePRResult {
         if shouldThrow { throw GitError.commandFailed("mock error") }
         return CreatePRResult(url: URL(string: "https://github.com/owner/repo/pull/1")!, isExisting: false)
     }

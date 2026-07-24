@@ -228,6 +228,7 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
                 let lastCommentAt: Date?
                 let isSubscribed: Bool?
                 let subscriberIds: [Int64]?
+                let authorGitHubId: Int64?
             }
             if let prs = try? JSONDecoder().decode([ApiPR].self, from: data) {
                 var seen = Set<String>()
@@ -253,7 +254,8 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
                             lastReviewFilePath: nil,
                             lastReviewLine: nil,
                             isSubscribed: pr.isSubscribed ?? false,
-                            subscriberIds: pr.subscriberIds ?? []
+                            subscriberIds: pr.subscriberIds ?? [],
+                            authorGitHubId: pr.authorGitHubId
                         )
                     }
                     notifyNewlyReadyPRs(current: newPRs)

@@ -10,6 +10,7 @@ struct CreatePRPreviewView: View {
 
     @State private var title: String
     @State private var bodyText: String
+    @State private var subscribersText: String = ""
     @State private var isLoading = true
     @State private var isCreating = false
     @State private var suggestedBody: String?
@@ -102,6 +103,16 @@ struct CreatePRPreviewView: View {
                 .overlay(RoundedRectangle(cornerRadius: 5).stroke(.white.opacity(0.1), lineWidth: 1))
             }
 
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Subscribers (GitHub usernames, comma-separated)").font(.system(size: 10)).foregroundStyle(.secondary)
+                TextField("e.g. alvaro-lopez-ej, teammate1", text: $subscribersText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 11, design: .monospaced))
+                    .padding(6)
+                    .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 5))
+                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(.white.opacity(0.1), lineWidth: 1))
+            }
+
             if let errorMessage {
                 Text(errorMessage)
                     .font(.system(size: 9))
@@ -140,7 +151,7 @@ struct CreatePRPreviewView: View {
             }
         }
         .padding(12)
-        .frame(width: 440, height: 380)
+        .frame(width: 440, height: 440)
         .onAppear { Task { await loadPreview() } }
     }
 
@@ -195,10 +206,15 @@ struct CreatePRPreviewView: View {
     private func createPR() async {
         isCreating = true
         do {
+            let subs = subscribersText
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+            let subsString = subs.isEmpty ? nil : subs.joined(separator: ",")
             let result = try await git.createPR(
                 repoPath: repoPath, branchName: branchName,
                 backendUrl: backendUrl, gitHubId: gitHubId,
-                overrideTitle: title, overrideBody: bodyText
+                overrideTitle: title, overrideBody: bodyText, subscribers: subsString
             )
             onComplete(result.url)
         } catch {

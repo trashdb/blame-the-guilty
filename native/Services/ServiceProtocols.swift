@@ -36,7 +36,7 @@ protocol GitServiceProtocol: AnyObject {
     func fetchRepo(repoPath: String) async
     func repoFullName(repoPath: String) async -> String?
     func baseRefName(repoPath: String) async -> String?
-    func createPR(repoPath: String, branchName: String, backendUrl: String, gitHubId: Int64, overrideTitle: String?, overrideBody: String?) async throws -> CreatePRResult
+    func createPR(repoPath: String, branchName: String, backendUrl: String, gitHubId: Int64, overrideTitle: String?, overrideBody: String?, subscribers: String?) async throws -> CreatePRResult
     func pullBranch(repoPath: String, name: String, token: String?) async throws
     func createBranch(repoPath: String, from sourceBranch: String, newName: String) async throws
     func listMyBranches(repoPath: String) async throws -> [(name: String, isCurrent: Bool)]

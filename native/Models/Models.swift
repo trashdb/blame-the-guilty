@@ -67,6 +67,7 @@ struct PullRequest: Identifiable, Equatable, Codable {
     let lastReviewLine: Int?
     let isSubscribed: Bool
     let subscriberIds: [Int64]
+    let authorGitHubId: Int64?
 
     var prUrl: URL { htmlUrl ?? URL(string: "https://github.com/\(repo)/pull/\(prNumber)")! }
     var isMerged: Bool { status == "merged" }

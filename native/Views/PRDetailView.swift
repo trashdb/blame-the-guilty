@@ -170,35 +170,45 @@ struct PRDetailView: View {
                     PRDetailBadges(pr: pr)
                 }
 
-                // Subscribe button (for PRs authored by others)
+                // Subscriber management
                 if !pr.isMerged && pr.repo != "trashdb/blame-the-guilty" {
-                    HStack(spacing: DS.Spacing.sm) {
-                        if pr.isSubscribed {
-                            Image(systemName: "bell.fill")
-                                .font(DS.Font.caption)
-                                .foregroundStyle(DS.Color.accent)
-                            Text("Subscribed")
-                                .font(DS.Font.small)
-                                .foregroundStyle(DS.Color.accent)
-                            Spacer()
-                            solidButton("Unsubscribe", color: .secondary, help: "Stop receiving notifications for this PR") {
-                                Task { await performUnsubscribe() }
-                            }
-                        } else {
-                            Image(systemName: "bell")
-                                .font(DS.Font.caption)
-                                .foregroundStyle(DS.Color.textTertiary)
-                            Text("Not subscribed")
-                                .font(DS.Font.small)
-                                .foregroundStyle(DS.Color.textTertiary)
-                            Spacer()
-                            solidButton("Subscribe", color: DS.Color.accent, help: "Get notified of comments, reviews, and status changes") {
-                                Task { await performSubscribe() }
+                    let isAuthor = pr.authorGitHubId != nil && pr.authorGitHubId == gitHubId
+                    if isAuthor {
+                        SubscriberManagementView(
+                            pr: pr,
+                            gitHubId: gitHubId,
+                            backendUrl: backendUrl
+                        )
+                    } else {
+                        // Self-subscribe for non-authors
+                        HStack(spacing: DS.Spacing.sm) {
+                            if pr.isSubscribed {
+                                Image(systemName: "bell.fill")
+                                    .font(DS.Font.caption)
+                                    .foregroundStyle(DS.Color.accent)
+                                Text("Subscribed")
+                                    .font(DS.Font.small)
+                                    .foregroundStyle(DS.Color.accent)
+                                Spacer()
+                                solidButton("Unsubscribe", color: .secondary, help: "Stop receiving notifications for this PR") {
+                                    Task { await performUnsubscribe() }
+                                }
+                            } else {
+                                Image(systemName: "bell")
+                                    .font(DS.Font.caption)
+                                    .foregroundStyle(DS.Color.textTertiary)
+                                Text("Not subscribed")
+                                    .font(DS.Font.small)
+                                    .foregroundStyle(DS.Color.textTertiary)
+                                Spacer()
+                                solidButton("Subscribe", color: DS.Color.accent, help: "Get notified of comments, reviews, and status changes") {
+                                    Task { await performSubscribe() }
+                                }
                             }
                         }
+                        .padding(.vertical, DS.Spacing.xs)
+                        .animation(DS.Animation.default, value: pr.isSubscribed)
                     }
-                    .padding(.vertical, DS.Spacing.xs)
-                    .animation(DS.Animation.default, value: pr.isSubscribed)
                 }
 
                 // Title
@@ -1096,4 +1106,175 @@ struct PRDetailCommentCard: View {
 private func shortFile(_ path: String) -> String {
     let parts = path.split(separator: "/")
     return parts.suffix(2).joined(separator: "/")
+}
+
+// MARK: - Subscriber Management View
+struct SubscriberManagementView: View {
+    let pr: PullRequest
+    let gitHubId: Int64
+    let backendUrl: String
+    
+    @State private var subscriberInput = ""
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    @State private var subscribers: [SubscriberInfo] = []
+    
+    struct SubscriberInfo: Identifiable, Decodable {
+        var id: Int64 { gitHubId }
+        let gitHubId: Int64
+        let gitHubUsername: String
+        let avatarUrl: String
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+            HStack(spacing: DS.Spacing.sm) {
+                Image(systemName: "person.2.fill")
+                    .font(DS.Font.caption)
+                    .foregroundStyle(DS.Color.accent)
+                Text("Subscribers")
+                    .font(DS.Font.small.medium())
+                    .foregroundStyle(DS.Color.textSecondary)
+                Spacer()
+            }
+            
+            // Current subscribers list
+            if subscribers.isEmpty && !isLoading {
+                Text("No subscribers yet")
+                    .font(DS.Font.caption)
+                    .foregroundStyle(DS.Color.textTertiary)
+                    .padding(.vertical, DS.Spacing.xs)
+            } else {
+                ForEach(subscribers) { sub in
+                    HStack(spacing: DS.Spacing.sm) {
+                        AsyncImage(url: URL(string: sub.avatarUrl)) { img in
+                            img.resizable()
+                        } placeholder: {
+                            Image(systemName: "person.circle.fill")
+                                .foregroundStyle(DS.Color.textTertiary)
+                        }
+                        .frame(width: 18, height: 18)
+                        .clipShape(Circle())
+                        
+                        Text("@\(sub.gitHubUsername)")
+                            .font(DS.Font.small)
+                            .foregroundStyle(DS.Color.textPrimary)
+                            .lineLimit(1)
+                        
+                        Spacer()
+                        
+                        solidButton("Remove", color: .secondary, disabled: isLoading) {
+                            Task { await removeSubscriber(sub.gitHubId) }
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+            
+            // Add subscriber input
+            if !isLoading {
+                HStack(spacing: DS.Spacing.sm) {
+                    TextField("GitHub username to add", text: $subscriberInput)
+                        .textFieldStyle(.plain)
+                        .font(DS.Font.mono(10))
+                        .padding(6)
+                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 5))
+                        .overlay(RoundedRectangle(cornerRadius: 5).stroke(.white.opacity(0.1), lineWidth: 1))
+                        .frame(maxWidth: 200)
+                    
+                    solidButton("Add", color: DS.Color.accent, disabled: subscriberInput.trimmingCharacters(in: .whitespaces).isEmpty || isLoading) {
+                        Task { await addSubscriber(subscriberInput.trimmingCharacters(in: .whitespaces)) }
+                    }
+                }
+            }
+            
+            if let error = errorMessage {
+                Text(error)
+                    .font(DS.Font.caption)
+                    .foregroundStyle(DS.Color.destructive)
+            }
+        }
+        .padding(.vertical, DS.Spacing.xs)
+        .onAppear { Task { await loadSubscribers() } }
+    }
+    
+    private func loadSubscribers() async {
+        isLoading = true
+        let repoEscaped = pr.repo.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? pr.repo
+        guard let url = URL(string: "\(backendUrl)/api/pullrequests/\(pr.prNumber)/subscribers?repo=\(repoEscaped)") else { return }
+        
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            struct SubscriberResponse: Decodable {
+                let subscribers: [SubscriberInfo]
+            }
+            if let decoded = try? JSONDecoder().decode(SubscriberResponse.self, from: data) {
+                await MainActor.run { self.subscribers = decoded.subscribers }
+            }
+        } catch {
+            await MainActor.run { self.errorMessage = "Failed to load subscribers" }
+        }
+        isLoading = false
+    }
+    
+    private func addSubscriber(_ username: String) async {
+        isLoading = true
+        errorMessage = nil
+        let repoEscaped = pr.repo.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? pr.repo
+        guard let url = URL(string: "\(backendUrl)/api/pullrequests/\(pr.prNumber)/add-subscriber?repo=\(repoEscaped)&gitHubId=\(gitHubId)&username=\(username.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? username)") else { return }
+        
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        
+        do {
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
+                struct ErrResp: Decodable { let error: String? }
+                if let err = try? JSONDecoder().decode(ErrResp.self, from: data), let msg = err.error {
+                    await MainActor.run { self.errorMessage = msg }
+                } else {
+                    await MainActor.run { self.errorMessage = "Failed to add subscriber" }
+                }
+            } else {
+                await MainActor.run {
+                    self.subscriberInput = ""
+                    Task { await loadSubscribers() }
+                    NotificationCenter.default.post(name: .prSubscriptionChanged, object: nil)
+                }
+            }
+        } catch {
+            await MainActor.run { self.errorMessage = error.localizedDescription }
+        }
+        isLoading = false
+    }
+    
+    private func removeSubscriber(_ subscriberGitHubId: Int64) async {
+        isLoading = true
+        errorMessage = nil
+        let repoEscaped = pr.repo.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? pr.repo
+        guard let url = URL(string: "\(backendUrl)/api/pullrequests/\(pr.prNumber)/remove-subscriber?repo=\(repoEscaped)&gitHubId=\(gitHubId)&subscriberId=\(subscriberGitHubId)") else { return }
+        
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        
+        do {
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
+                struct ErrResp: Decodable { let error: String? }
+                if let err = try? JSONDecoder().decode(ErrResp.self, from: data), let msg = err.error {
+                    await MainActor.run { self.errorMessage = msg }
+                } else {
+                    await MainActor.run { self.errorMessage = "Failed to remove subscriber" }
+                }
+            } else {
+                await MainActor.run {
+                    Task { await loadSubscribers() }
+                    NotificationCenter.default.post(name: .prSubscriptionChanged, object: nil)
+                }
+            }
+        } catch {
+            await MainActor.run { self.errorMessage = error.localizedDescription }
+        }
+        isLoading = false
+    }
 }
