@@ -43,6 +43,20 @@ public class WorkflowsController : ControllerBase
         [FromQuery] long gitHubId,
         [FromQuery] int limit = 20)
     {
+        // Get PRs user is subscribed to (including authored)
+        var subscribedPrs = await _db.PullRequestEvents
+            .Where(e => e.Status == "open" 
+                && (e.AuthorGitHubId == gitHubId 
+                    || (e.SubscriberIds != null && e.SubscriberIds.Contains(gitHubId.ToString()))))
+            .Select(e => new { e.RepoFullName, e.HeadBranch })
+            .Distinct()
+            .ToListAsync();
+
+        var subscribedRepoBranches = subscribedPrs
+            .Select(p => (p.RepoFullName, p.HeadBranch))
+            .Where(p => !string.IsNullOrEmpty(p.HeadBranch))
+            .ToList();
+
         var myRuns = await _db.WorkflowRuns
             .Where(w => w.GitHubId == gitHubId && !w.IsIgnored)
             .OrderByDescending(w => w.Id)
@@ -60,14 +74,28 @@ public class WorkflowsController : ControllerBase
             .Take(limit)
             .ToList();
 
-        var runs = myRuns.Concat(filteredTargetRuns)
+        // Get runs from PRs user is subscribed to (but not already in myRuns/targetRuns)
+        var subscribedRuns = new List<WorkflowRun>();
+        if (subscribedRepoBranches.Count > 0)
+        {
+            var repoBranches = subscribedRepoBranches.ToList();
+            subscribedRuns = await _db.WorkflowRuns
+                .Where(w => !w.IsIgnored 
+                    && w.GitHubId != gitHubId 
+                    && repoBranches.Any(rb => rb.RepoFullName == w.Repo && rb.HeadBranch == w.HeadBranch))
+                .OrderByDescending(w => w.Id)
+                .Take(limit)
+                .ToListAsync();
+        }
+
+        var allRuns = myRuns.Concat(filteredTargetRuns).Concat(subscribedRuns)
             .DistinctBy(w => w.Id)
             .OrderByDescending(w => w.Id)
             .Take(limit)
             .ToList();
 
         // Look up PRs matching each run's repo+branch
-        var branchKeys = runs
+        var branchKeys = allRuns
             .Where(r => r.HeadBranch != null)
             .Select(r => new { r.Repo, r.HeadBranch })
             .Distinct()
@@ -87,7 +115,7 @@ public class WorkflowsController : ControllerBase
                 .ToList();
         }
 
-        return Ok(runs.Select(w => new
+        return Ok(allRuns.Select(w => new
         {
             w.Id,
             w.RunId,
