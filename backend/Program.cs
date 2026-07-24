@@ -147,7 +147,7 @@ finally
 
 void ApplyMigrations(AppDbContext db)
 {
-    db.Database.EnsureCreated();
+    db.Database.Migrate();
 
     // Ensure the PunishmentEvents table exists even on existing DBs
     db.Database.ExecuteSqlRaw("""
