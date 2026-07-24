@@ -1118,7 +1118,7 @@ struct SubscriberManagementView: View {
     @State private var isLoadingUsers = false
     @State private var errorMessage: String?
     @State private var subscribers: [SubscriberInfo] = []
-    @State private var allUsers: [GitHubUserInfo] = []
+    @State private var availableUsers: [AvailableUser] = []
     @State private var selectedUserIds: Set<Int64> = []
     @State private var showUserPicker = false
     
@@ -1129,10 +1129,11 @@ struct SubscriberManagementView: View {
         let avatarUrl: String
     }
     
-    struct GitHubUserInfo: Identifiable, Decodable {
+    struct AvailableUser: Identifiable, Decodable {
         var id: Int64 { gitHubId }
         let gitHubId: Int64
         let login: String
+        let avatarUrl: String?
     }
     
     var body: some View {
@@ -1146,8 +1147,8 @@ struct SubscriberManagementView: View {
                     .foregroundStyle(DS.Color.textSecondary)
                 Spacer()
                 
-                solidButton("Add Subscriber", color: DS.Color.accent, disabled: isLoadingUsers) {
-                    loadUsers()
+                solidButton("Add", color: DS.Color.accent, disabled: isLoadingUsers) {
+                    Task { await loadAvailableUsers() }
                     showUserPicker = true
                 }
             }
@@ -1185,57 +1186,6 @@ struct SubscriberManagementView: View {
                 }
             }
             
-            // User picker popover
-            if showUserPicker {
-                VStack(alignment: .leading, spacing: DS.Spacing.xs) {
-                    if isLoadingUsers {
-                        ProgressView().scaleEffect(0.5)
-                    } else {
-                        ForEach(allUsers.filter { !selectedUserIds.contains($0.gitHubId) && $0.gitHubId != gitHubId && !subscribers.contains { $0.gitHubId == $0.gitHubId } }) { user in
-                            Button {
-                                selectedUserIds.insert(user.gitHubId)
-                            } label: {
-                                HStack(spacing: DS.Spacing.sm) {
-                                    Image(systemName: selectedUserIds.contains(user.gitHubId) ? "checkmark.square.fill" : "square")
-                                        .font(DS.Font.small)
-                                        .foregroundStyle(selectedUserIds.contains(user.gitHubId) ? DS.Color.accent : DS.Color.textSecondary)
-                                    Text("@\(user.login)")
-                                        .font(DS.Font.small)
-                                        .foregroundStyle(DS.Color.textPrimary)
-                                    Spacer()
-                                }
-                                .padding(.horizontal, DS.Spacing.sm)
-                                .padding(.vertical, DS.Spacing.xs)
-                                .background(
-                                    selectedUserIds.contains(user.gitHubId)
-                                        ? DS.Color.accent.opacity(0.08)
-                                        : Color.clear,
-                                    in: RoundedRectangle(cornerRadius: DS.Radius.sm)
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .cursor(.pointingHand)
-                        }
-                        
-                        HStack {
-                            Spacer()
-                            solidButton("Cancel", color: .secondary) {
-                                selectedUserIds.removeAll()
-                                showUserPicker = false
-                            }
-                            solidButton("Add Selected", color: DS.Color.accent, disabled: selectedUserIds.isEmpty || isLoading) {
-                                Task { await addSelectedSubscribers() }
-                            }
-                        }
-                        .padding(.top, DS.Spacing.xs)
-                    }
-                }
-                .padding(DS.Spacing.sm)
-                .background(DS.Color.rowBackground, in: RoundedRectangle(cornerRadius: DS.Radius.sm))
-                .overlay(RoundedRectangle(cornerRadius: DS.Radius.sm).stroke(DS.Color.accent.opacity(0.3), lineWidth: 1))
-                .transition(.opacity.combined(with: .scale(scale: 0.95)))
-            }
-            
             if let error = errorMessage {
                 Text(error)
                     .font(DS.Font.caption)
@@ -1243,7 +1193,23 @@ struct SubscriberManagementView: View {
             }
         }
         .padding(.vertical, DS.Spacing.xs)
-        .onAppear { Task { await loadSubscribers() } }
+        .onAppear {
+            Task { await loadSubscribers() }
+        }
+        .popover(isPresented: $showUserPicker, arrowEdge: .bottom) {
+            UserPickerView(
+                users: availableUsers,
+                currentSubscribers: subscribers.map { $0.gitHubId },
+                currentUserId: gitHubId,
+                selectedIds: $selectedUserIds,
+                onDone: {
+                    showUserPicker = false
+                    Task { await addSelectedSubscribers() }
+                },
+                onCancel: { showUserPicker = false }
+            )
+            .frame(width: 220)
+        }
     }
     
     private func loadSubscribers() async {
@@ -1265,17 +1231,21 @@ struct SubscriberManagementView: View {
         isLoading = false
     }
     
-    private func loadUsers() {
+    private func loadAvailableUsers() async {
         isLoadingUsers = true
         guard let url = URL(string: "\(backendUrl)/api/users") else { return }
-        URLSession.shared.dataTask(with: url) { data, _, _ in
-            isLoadingUsers = false
-            guard let data = data,
-                  let decoded = try? JSONDecoder().decode([GitHubUserInfo].self, from: data) else { return }
-            DispatchQueue.main.async {
-                self.allUsers = decoded
+        
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            if let decoded = try? JSONDecoder().decode([AvailableUser].self, from: data) {
+                await MainActor.run {
+                    self.availableUsers = decoded.filter { $0.gitHubId != gitHubId }
+                }
             }
-        }.resume()
+        } catch {
+            // Ignore
+        }
+        isLoadingUsers = false
     }
     
     private func addSelectedSubscribers() async {
@@ -1339,5 +1309,131 @@ struct SubscriberManagementView: View {
             await MainActor.run { self.errorMessage = error.localizedDescription }
         }
         isLoading = false
+    }
+}
+
+// MARK: - User Picker View
+struct UserPickerView: View {
+    let users: [SubscriberManagementView.AvailableUser]
+    let currentSubscribers: [Int64]
+    let currentUserId: Int64
+    @Binding var selectedIds: Set<Int64>
+    let onDone: () -> Void
+    let onCancel: () -> Void
+    
+    var filteredUsers: [SubscriberManagementView.AvailableUser] {
+        users.filter { user in
+            user.gitHubId != currentUserId &&
+            !currentSubscribers.contains(user.gitHubId) &&
+            !selectedIds.contains(user.gitHubId)
+        }
+    }
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Add Subscribers")
+                    .font(DS.Font.small.medium())
+                    .foregroundStyle(DS.Color.textPrimary)
+                Spacer()
+            }
+            .padding(DS.Spacing.md)
+            
+            Divider()
+            
+            if filteredUsers.isEmpty {
+                VStack(spacing: DS.Spacing.sm) {
+                    Image(systemName: "person.2")
+                        .font(.title2)
+                        .foregroundStyle(DS.Color.textTertiary)
+                    Text("No other users available")
+                        .font(DS.Font.caption)
+                        .foregroundStyle(DS.Color.textSecondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(DS.Spacing.xl)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(filteredUsers) { user in
+                            UserPickerRow(
+                                user: user,
+                                isSelected: selectedIds.contains(user.gitHubId),
+                                onToggle: {
+                                    if selectedIds.contains(user.gitHubId) {
+                                        selectedIds.remove(user.gitHubId)
+                                    } else {
+                                        selectedIds.insert(user.gitHubId)
+                                    }
+                                }
+                            )
+                            Divider()
+                        }
+                    }
+                }
+            }
+            
+            Divider()
+            
+            HStack(spacing: DS.Spacing.sm) {
+                Spacer()
+                Button("Cancel", action: onCancel)
+                    .buttonStyle(.plain)
+                    .font(DS.Font.small)
+                    .foregroundStyle(DS.Color.textSecondary)
+                    .cursor(.pointingHand)
+                solidButton("Add Selected", color: DS.Color.accent, disabled: selectedIds.isEmpty) {
+                    onDone()
+                }
+            }
+            .padding(DS.Spacing.md)
+        }
+        .background(Color(NSColor.windowBackgroundColor))
+    }
+}
+
+struct UserPickerRow: View {
+    let user: SubscriberManagementView.AvailableUser
+    let isSelected: Bool
+    let onToggle: () -> Void
+    
+    var body: some View {
+        Button(action: onToggle) {
+            HStack(spacing: DS.Spacing.md) {
+                Image(systemName: isSelected ? "checkmark.square.fill" : "square")
+                    .font(DS.Font.small)
+                    .foregroundStyle(isSelected ? DS.Color.accent : DS.Color.textTertiary)
+                
+                if let avatarUrl = user.avatarUrl, !avatarUrl.isEmpty {
+                    AsyncImage(url: URL(string: avatarUrl)) { img in
+                        img.resizable()
+                    } placeholder: {
+                        Image(systemName: "person.circle.fill")
+                            .foregroundStyle(DS.Color.textTertiary)
+                    }
+                    .frame(width: 22, height: 22)
+                    .clipShape(Circle())
+                } else {
+                    Image(systemName: "person.circle.fill")
+                        .font(DS.Font.body)
+                        .foregroundStyle(DS.Color.textTertiary)
+                        .frame(width: 22, height: 22)
+                }
+                
+                Text("@\(user.login)")
+                    .font(DS.Font.body)
+                    .foregroundStyle(isSelected ? DS.Color.textPrimary : DS.Color.textSecondary)
+                
+                Spacer()
+            }
+            .padding(.horizontal, DS.Spacing.xxl)
+            .padding(.vertical, DS.Spacing.lg)
+            .background(
+                isSelected ? DS.Color.accent.opacity(0.08) : Color.clear,
+                in: RoundedRectangle(cornerRadius: DS.Radius.sm)
+            )
+        }
+        .buttonStyle(.plain)
+        .cursor(.pointingHand)
     }
 }
