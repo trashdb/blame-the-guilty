@@ -147,7 +147,7 @@ finally
 
 void ApplyMigrations(AppDbContext db)
 {
-    db.Database.Migrate();
+    db.Database.EnsureCreated();
 
     // Ensure the PunishmentEvents table exists even on existing DBs
     db.Database.ExecuteSqlRaw("""
@@ -222,6 +222,9 @@ void ApplyMigrations(AppDbContext db)
             "WasNotified" INTEGER NOT NULL DEFAULT 0
         );
         """);
+
+    // Add SubscriberIds column to existing databases (silently skips if already exists)
+    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "SubscriberIds" TEXT;"""); } catch { /* column already exists */ }
 
     db.Database.ExecuteSqlRaw("""
         CREATE INDEX IF NOT EXISTS "IX_PullRequestEvents_AuthorLogin" ON "PullRequestEvents" ("AuthorLogin");
