@@ -131,7 +131,7 @@ struct PRDetailView: View {
             }
         }
         .padding(DS.Spacing.xxl)
-        .frame(width: 320, height: 340)
+        .frame(width: 320, height: 420)
         .animation(DS.Animation.default, value: selectedTab)
         .onAppear { loadDetails() }
         .onChange(of: selectedTab) { newTab in
@@ -1114,16 +1114,25 @@ struct SubscriberManagementView: View {
     let gitHubId: Int64
     let backendUrl: String
     
-    @State private var subscriberInput = ""
     @State private var isLoading = false
+    @State private var isLoadingUsers = false
     @State private var errorMessage: String?
     @State private var subscribers: [SubscriberInfo] = []
+    @State private var allUsers: [GitHubUserInfo] = []
+    @State private var selectedUserIds: Set<Int64> = []
+    @State private var showUserPicker = false
     
     struct SubscriberInfo: Identifiable, Decodable {
         var id: Int64 { gitHubId }
         let gitHubId: Int64
         let gitHubUsername: String
         let avatarUrl: String
+    }
+    
+    struct GitHubUserInfo: Identifiable, Decodable {
+        var id: Int64 { gitHubId }
+        let gitHubId: Int64
+        let login: String
     }
     
     var body: some View {
@@ -1136,6 +1145,11 @@ struct SubscriberManagementView: View {
                     .font(DS.Font.small.medium())
                     .foregroundStyle(DS.Color.textSecondary)
                 Spacer()
+                
+                solidButton("Add Subscriber", color: DS.Color.accent, disabled: isLoadingUsers) {
+                    loadUsers()
+                    showUserPicker = true
+                }
             }
             
             // Current subscribers list
@@ -1171,21 +1185,55 @@ struct SubscriberManagementView: View {
                 }
             }
             
-            // Add subscriber input
-            if !isLoading {
-                HStack(spacing: DS.Spacing.sm) {
-                    TextField("GitHub username to add", text: $subscriberInput)
-                        .textFieldStyle(.plain)
-                        .font(DS.Font.mono(10))
-                        .padding(6)
-                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 5))
-                        .overlay(RoundedRectangle(cornerRadius: 5).stroke(.white.opacity(0.1), lineWidth: 1))
-                        .frame(maxWidth: 200)
-                    
-                    solidButton("Add", color: DS.Color.accent, disabled: subscriberInput.trimmingCharacters(in: .whitespaces).isEmpty || isLoading) {
-                        Task { await addSubscriber(subscriberInput.trimmingCharacters(in: .whitespaces)) }
+            // User picker popover
+            if showUserPicker {
+                VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                    if isLoadingUsers {
+                        ProgressView().scaleEffect(0.5)
+                    } else {
+                        ForEach(allUsers.filter { !selectedUserIds.contains($0.gitHubId) && $0.gitHubId != gitHubId && !subscribers.contains { $0.gitHubId == $0.gitHubId } }) { user in
+                            Button {
+                                selectedUserIds.insert(user.gitHubId)
+                            } label: {
+                                HStack(spacing: DS.Spacing.sm) {
+                                    Image(systemName: selectedUserIds.contains(user.gitHubId) ? "checkmark.square.fill" : "square")
+                                        .font(DS.Font.small)
+                                        .foregroundStyle(selectedUserIds.contains(user.gitHubId) ? DS.Color.accent : DS.Color.textSecondary)
+                                    Text("@\(user.login)")
+                                        .font(DS.Font.small)
+                                        .foregroundStyle(DS.Color.textPrimary)
+                                    Spacer()
+                                }
+                                .padding(.horizontal, DS.Spacing.sm)
+                                .padding(.vertical, DS.Spacing.xs)
+                                .background(
+                                    selectedUserIds.contains(user.gitHubId)
+                                        ? DS.Color.accent.opacity(0.08)
+                                        : Color.clear,
+                                    in: RoundedRectangle(cornerRadius: DS.Radius.sm)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .cursor(.pointingHand)
+                        }
+                        
+                        HStack {
+                            Spacer()
+                            solidButton("Cancel", color: .secondary) {
+                                selectedUserIds.removeAll()
+                                showUserPicker = false
+                            }
+                            solidButton("Add Selected", color: DS.Color.accent, disabled: selectedUserIds.isEmpty || isLoading) {
+                                Task { await addSelectedSubscribers() }
+                            }
+                        }
+                        .padding(.top, DS.Spacing.xs)
                     }
                 }
+                .padding(DS.Spacing.sm)
+                .background(DS.Color.rowBackground, in: RoundedRectangle(cornerRadius: DS.Radius.sm))
+                .overlay(RoundedRectangle(cornerRadius: DS.Radius.sm).stroke(DS.Color.accent.opacity(0.3), lineWidth: 1))
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
             }
             
             if let error = errorMessage {
@@ -1217,33 +1265,48 @@ struct SubscriberManagementView: View {
         isLoading = false
     }
     
-    private func addSubscriber(_ username: String) async {
+    private func loadUsers() {
+        isLoadingUsers = true
+        guard let url = URL(string: "\(backendUrl)/api/users") else { return }
+        URLSession.shared.dataTask(with: url) { data, _, _ in
+            isLoadingUsers = false
+            guard let data = data,
+                  let decoded = try? JSONDecoder().decode([GitHubUserInfo].self, from: data) else { return }
+            DispatchQueue.main.async {
+                self.allUsers = decoded
+            }
+        }.resume()
+    }
+    
+    private func addSelectedSubscribers() async {
         isLoading = true
         errorMessage = nil
-        let repoEscaped = pr.repo.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? pr.repo
-        guard let url = URL(string: "\(backendUrl)/api/pullrequests/\(pr.prNumber)/add-subscriber?repo=\(repoEscaped)&gitHubId=\(gitHubId)&username=\(username.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? username)") else { return }
         
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        
-        do {
-            let (data, resp) = try await URLSession.shared.data(for: req)
-            if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
-                struct ErrResp: Decodable { let error: String? }
-                if let err = try? JSONDecoder().decode(ErrResp.self, from: data), let msg = err.error {
-                    await MainActor.run { self.errorMessage = msg }
-                } else {
-                    await MainActor.run { self.errorMessage = "Failed to add subscriber" }
+        for subscriberId in selectedUserIds {
+            let repoEscaped = pr.repo.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? pr.repo
+            guard let url = URL(string: "\(backendUrl)/api/pullrequests/\(pr.prNumber)/add-subscriber?repo=\(repoEscaped)&gitHubId=\(gitHubId)&subscriberId=\(subscriberId)") else { continue }
+            
+            var req = URLRequest(url: url)
+            req.httpMethod = "POST"
+            
+            do {
+                let (data, resp) = try await URLSession.shared.data(for: req)
+                if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
+                    struct ErrResp: Decodable { let error: String? }
+                    if let err = try? JSONDecoder().decode(ErrResp.self, from: data), let msg = err.error {
+                        await MainActor.run { self.errorMessage = msg }
+                    }
                 }
-            } else {
-                await MainActor.run {
-                    self.subscriberInput = ""
-                    Task { await loadSubscribers() }
-                    NotificationCenter.default.post(name: .prSubscriptionChanged, object: nil)
-                }
+            } catch {
+                await MainActor.run { self.errorMessage = error.localizedDescription }
             }
-        } catch {
-            await MainActor.run { self.errorMessage = error.localizedDescription }
+        }
+        
+        await MainActor.run {
+            selectedUserIds.removeAll()
+            showUserPicker = false
+            Task { await loadSubscribers() }
+            NotificationCenter.default.post(name: .prSubscriptionChanged, object: nil)
         }
         isLoading = false
     }

@@ -1067,7 +1067,7 @@ public class PullRequestsController : ControllerBase
 
     [HttpPost("{prNumber}/add-subscriber")]
     [EnableRateLimiting("api")]
-    public async Task<IActionResult> AddSubscriber(long prNumber, [FromQuery] string repo, [FromQuery] long gitHubId, [FromQuery] string username)
+    public async Task<IActionResult> AddSubscriber(long prNumber, [FromQuery] string repo, [FromQuery] long gitHubId, [FromQuery] string? username = null, [FromQuery] long? subscriberId = null)
     {
         var pr = await _db.PullRequestEvents
             .Where(e => e.PrNumber == prNumber && e.RepoFullName == repo && e.Status == "open")
@@ -1079,13 +1079,28 @@ public class PullRequestsController : ControllerBase
         if (pr.AuthorGitHubId != gitHubId)
             return Forbid();
 
-        var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubUsername == username);
-        if (user == null) return NotFound(new { error = "User not found in database" });
+        long targetId;
+        if (subscriberId.HasValue)
+        {
+            targetId = subscriberId.Value;
+            var userExists = await _db.GitHubUsers.AnyAsync(u => u.GitHubId == targetId);
+            if (!userExists) return NotFound(new { error = "User not found in database" });
+        }
+        else if (!string.IsNullOrEmpty(username))
+        {
+            var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubUsername == username);
+            if (user == null) return NotFound(new { error = "User not found in database" });
+            targetId = user.GitHubId;
+        }
+        else
+        {
+            return BadRequest(new { error = "Must provide username or subscriberId" });
+        }
 
         var current = DeserializeSubscriberIds(pr.SubscriberIds);
-        if (!current.Contains(user.GitHubId))
+        if (!current.Contains(targetId))
         {
-            var updated = current.Append(user.GitHubId).ToArray();
+            var updated = current.Append(targetId).ToArray();
             pr.SubscriberIds = SerializeSubscriberIds(updated);
             await _db.SaveChangesAsync();
         }

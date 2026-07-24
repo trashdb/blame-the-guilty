@@ -293,7 +293,8 @@ public class UsersController : ControllerBase
             .Select(u => new
             {
                 u.GitHubId,
-                Login = u.GitHubUsername
+                Login = u.GitHubUsername,
+                u.AvatarUrl
             })
             .ToListAsync();
 
