@@ -364,11 +364,6 @@ struct SettingsView: View {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try? JSONEncoder().encode(["patToken": patDraft])
 
-        // Persist locally first so `GitService.storedPAT()` is always a reliable
-        // fallback for git pull over HTTPS, even if the backend is unreachable.
-        let draft = patDraft
-        UserDefaults.standard.set(draft, forKey: "patToken")
-
         do {
             let (_, resp) = try await URLSession.shared.data(for: req)
             if let http = resp as? HTTPURLResponse, http.statusCode == 200 {

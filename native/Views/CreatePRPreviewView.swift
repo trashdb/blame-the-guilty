@@ -176,9 +176,12 @@ struct CreatePRPreviewView: View {
                 isLoading = false
                 return
             }
-            struct PreviewData: Decodable { let summary: String; let suggestedBody: String }
+            struct PreviewData: Decodable { let summary: String; let suggestedBody: String; let summaryError: String? }
             let decoded = try JSONDecoder().decode(PreviewData.self, from: data)
             summary = decoded.summary.isEmpty ? nil : decoded.summary
+            if let err = decoded.summaryError, !err.isEmpty {
+                errorMessage = err
+            }
             if !decoded.suggestedBody.isEmpty {
                 bodyText = decoded.suggestedBody
                 suggestedBody = decoded.suggestedBody

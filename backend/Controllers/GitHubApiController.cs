@@ -265,19 +265,27 @@ public class GitHubApiController : ControllerBase
         _logger.LogInformation("PrPreview: fetched {Count} commits for {Base}...{Head}", commits.Count, baseBranch, head);
 
         var summary = "";
-        if (user?.AccessToken != null && commits.Count > 0)
+        string? summaryError = null;
+        if (commits.Count > 0)
         {
-            _logger.LogInformation("PrPreview: calling Copilot API for summary");
-            summary = await GenerateSummary(commits, user.AccessToken);
-            if (string.IsNullOrEmpty(summary))
-                _logger.LogWarning("PrPreview: Copilot returned empty summary");
+            var oauthToken = user?.AccessToken;
+            if (!string.IsNullOrEmpty(oauthToken))
+            {
+                _logger.LogInformation("PrPreview: calling Copilot API for summary (oauthToken present)");
+                summary = await GenerateSummary(commits, oauthToken);
+                if (string.IsNullOrEmpty(summary))
+                {
+                    summaryError = "Copilot API returned empty response. Token may be expired — re-login to GitHub.";
+                    _logger.LogWarning("PrPreview: Copilot returned empty summary (token prefix={Prefix})", oauthToken[..Math.Min(8, oauthToken.Length)]);
+                }
+                else
+                    _logger.LogInformation("PrPreview: Copilot summary generated ({Len} chars)", summary.Length);
+            }
             else
-                _logger.LogInformation("PrPreview: Copilot summary generated ({Len} chars)", summary.Length);
-        }
-        else
-        {
-            _logger.LogWarning("PrPreview: skipping Copilot (AccessToken={HasToken}, commits={Count})",
-                user?.AccessToken != null, commits.Count);
+            {
+                summaryError = "No OAuth token available. Login to GitHub to enable Copilot summaries.";
+                _logger.LogWarning("PrPreview: no OAuth token for Copilot");
+            }
         }
 
         var ticketMatch = System.Text.RegularExpressions.Regex.Match(head, @"[A-Z]+-\d+");
@@ -289,7 +297,8 @@ public class GitHubApiController : ControllerBase
             template = template ?? "",
             commits,
             summary,
-            suggestedBody
+            suggestedBody,
+            summaryError
         });
     }
 

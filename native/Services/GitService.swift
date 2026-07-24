@@ -491,21 +491,17 @@ actor GitService: GitServiceProtocol {
     }
 
     static func fetchPAT(backendUrl: String, gitHubId: Int64) async -> String? {
-        guard let url = URL(string: "\(backendUrl)/api/auth/token?gitHubId=\(gitHubId)") else { return storedPAT() }
+        guard let url = URL(string: "\(backendUrl)/api/auth/token?gitHubId=\(gitHubId)") else { return nil }
         guard let (data, resp) = try? await URLSession.shared.data(from: url),
               let http = resp as? HTTPURLResponse, http.statusCode == 200,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: String],
               let token = json["token"], !token.isEmpty else {
-            // Backend unreachable or returned no token — fall back to the locally
-            // saved PAT so pulls still work over HTTPS instead of failing to SSH.
-            return storedPAT()
+            return nil
         }
         return token
     }
 
-    static func storedPAT() -> String? {
-        UserDefaults.standard.string(forKey: "patToken")
-    }
+    static func storedPAT() -> String? { nil }
 
     func createBranch(repoPath: String, from sourceBranch: String, newName: String) async throws {
         try await runGit(repoPath: repoPath, args: ["checkout", "-b", newName, sourceBranch])

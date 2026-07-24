@@ -325,16 +325,30 @@ public class PullRequestsController : ControllerBase
                     ciStatus = "review";
             }
 
-            // Determine conclusion from actual check suite events for this SHA
+            // Determine conclusion: prefer workflow run status over stale CheckSuiteEvent
             string? conclusion = pr.Conclusion;
             if (headSha != null)
             {
+                // First try: latest CheckSuiteEvent
                 var latestCheck = await _db.CheckSuiteEvents
                     .Where(c => c.HeadSha == headSha && c.RepoFullName == pr.RepoFullName)
                     .OrderByDescending(c => c.Id)
                     .FirstOrDefaultAsync();
                 if (latestCheck != null)
                     conclusion = latestCheck.Conclusion;
+
+                // Override with latest workflow run status if more recent
+                var latestRun = allRuns
+                    .Where(r => r.Repo == pr.RepoFullName && r.HeadSha == headSha
+                        && r.Status != "superseded" && r.Status != "in_progress")
+                    .OrderByDescending(r => r.Id)
+                    .FirstOrDefault();
+                if (latestRun.Status == "success")
+                    conclusion = "success";
+                else if (latestRun.Status == "failure")
+                    conclusion = "failure";
+                else if (latestRun.Status == "cancelled")
+                    conclusion = "cancelled";
             }
 
             // Only compute "ready" for PRs that are still open. A merged/closed PR

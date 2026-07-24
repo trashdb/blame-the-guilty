@@ -326,16 +326,7 @@ public class WebhookController : ControllerBase
 
         if (conclusion is "cancelled" or "timed_out" or "stale" or "action_required" or "skipped" or "neutral" or "startup_failure")
         {
-            var cancelUser = await FindConnectedUser(culprit.Login, culprit.Id);
-            if (cancelUser != null)
-                await NotifyCompleted(cancelUser.GitHubId, false);
-            var cancelTargetIds = DeserializeTargetIds(dbRun?.TargetGitHubIds);
-            foreach (var tid in cancelTargetIds)
-            {
-                if (tid != cancelUser?.GitHubId)
-                    await NotifyCompleted(tid, false);
-            }
-            LogWebhook("workflow_run", "completed", repoFullName, workflowName, "processed", $"conclusion={conclusion}, no punishment");
+            LogWebhook("workflow_run", "completed", repoFullName, workflowName, "processed", $"conclusion={conclusion}, no notification (non-failure)");
             return Ok(new { runId, conclusion });
         }
 
