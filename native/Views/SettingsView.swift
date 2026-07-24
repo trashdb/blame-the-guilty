@@ -354,11 +354,12 @@ struct SettingsView: View {
         patError = nil
         defer { patSaving = false }
 
-        guard let url = URL(string: "\(settingsBackendUrl)/api/auth/pat?gitHubId=\(gitHubId)") else {
+        let url = backendUrlDraft.isEmpty ? settingsBackendUrl : backendUrlDraft
+        guard let endpoint = URL(string: "\(url)/api/auth/pat?gitHubId=\(gitHubId)") else {
             patError = "Invalid backend URL"
             return
         }
-        var req = URLRequest(url: url)
+        var req = URLRequest(url: endpoint)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try? JSONEncoder().encode(["patToken": patDraft])
