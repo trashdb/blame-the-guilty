@@ -31,50 +31,101 @@ public class PullRequestsController : ControllerBase
     {
         var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
         var token = user?.UserPatToken ?? user?.AccessToken ?? _configuration["GitHub:PatToken"];
+        Console.WriteLine($"[SyncFromGitHub] user={user?.GitHubUsername} hasPat={user?.UserPatToken != null} hasOauth={user?.AccessToken != null} tokenPrefix={token?[..Math.Min(10, token?.Length ?? 0)]}");
         if (string.IsNullOrEmpty(token))
             return Unauthorized(new { error = "No token" });
 
+        var username = user?.GitHubUsername ?? "";
         var synced = 0;
-        var page = 1;
-        const int perPage = 100;
+
+        // Step 1: Find all open PRs authored by the user via search API
+        var searchPage = 1;
+        var searchResults = new List<(long PrNumber, string RepoFullName, string Title, string HtmlUrl, bool Draft, DateTime CreatedAt)>();
 
         while (true)
         {
-            var req = new HttpRequestMessage(HttpMethod.Get,
-                $"https://api.github.com/user/pulls?state=open&per_page={perPage}&page={page}");
-            req.Headers.UserAgent.ParseAdd("BlameTheGuilty");
-            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            var searchReq = new HttpRequestMessage(HttpMethod.Get,
+                $"https://api.github.com/search/issues?q=type:pr+state:open+author:{username}&per_page=100&page={searchPage}");
+            searchReq.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+            searchReq.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+            searchReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
-            HttpResponseMessage resp;
-            try { resp = await _githubClient.SendAsync(req); }
-            catch { break; }
+            HttpResponseMessage searchResp;
+            try { searchResp = await _githubClient.SendAsync(searchReq); }
+            catch (Exception ex) { Console.WriteLine($"[SyncFromGitHub] Search exception: {ex.Message}"); break; }
 
-            if (!resp.IsSuccessStatusCode) break;
+            if (!searchResp.IsSuccessStatusCode) { Console.WriteLine($"[SyncFromGitHub] Search returned {(int)searchResp.StatusCode}"); break; }
 
-            var json = await resp.Content.ReadAsStringAsync();
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.ValueKind != JsonValueKind.Array) break;
+            var searchJson = await searchResp.Content.ReadAsStringAsync();
+            Console.WriteLine($"[SyncFromGitHub] Search response: {searchJson[..Math.Min(searchJson.Length, 300)]}");
+            using var searchDoc = JsonDocument.Parse(searchJson);
 
-            var prArray = doc.RootElement.EnumerateArray().ToList();
-            if (prArray.Count == 0) break;
+            if (!searchDoc.RootElement.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
+                break;
 
-            foreach (var pr in prArray)
+            var itemList = items.EnumerateArray().ToList();
+            if (itemList.Count == 0) break;
+
+            foreach (var item in itemList)
             {
-                var prNumber = pr.GetProperty("number").GetInt64();
-                var title = pr.TryGetProperty("title", out var t) ? t.GetString() ?? "" : "";
-                var authorLogin = pr.TryGetProperty("user", out var u) && u.TryGetProperty("login", out var l) ? l.GetString() ?? "" : "";
-                var authorId = pr.TryGetProperty("user", out var u2) && u2.TryGetProperty("id", out var id) ? id.GetInt64() : (long?)null;
-                var repoUrl = pr.TryGetProperty("head", out var head) && head.TryGetProperty("repo", out var repo) && repo.TryGetProperty("full_name", out var fn) ? fn.GetString() : null;
-                var headBranch = pr.TryGetProperty("head", out var h2) && h2.TryGetProperty("ref", out var r) ? r.GetString() : null;
-                var baseBranch = pr.TryGetProperty("base", out var b) && b.TryGetProperty("ref", out var br) ? br.GetString() : null;
-                var htmlUrl = pr.TryGetProperty("html_url", out var hu) ? hu.GetString() : null;
-                var draft = pr.TryGetProperty("draft", out var d) && d.ValueKind == JsonValueKind.True;
-                var createdAt = pr.TryGetProperty("created_at", out var ca) && DateTime.TryParse(ca.GetString(), null, System.Globalization.DateTimeStyles.AdjustToUniversal, out var cd) ? cd : DateTime.UtcNow;
+                var repoUrl = item.TryGetProperty("repository_url", out var ru) ? ru.GetString() ?? "" : "";
+                // Extract "owner/repo" from "https://api.github.com/repos/owner/repo"
+                var repoParts = repoUrl.Replace("https://api.github.com/repos/", "").Trim('/');
+                if (string.IsNullOrEmpty(repoParts)) continue;
 
-                if (string.IsNullOrEmpty(repoUrl)) continue;
+                var prNumber = item.GetProperty("number").GetInt64();
+                var title = item.TryGetProperty("title", out var t) ? t.GetString() ?? "" : "";
+                var htmlUrl = item.TryGetProperty("html_url", out var hu) ? hu.GetString() : null;
+                var draft = item.TryGetProperty("draft", out var d) && d.ValueKind == JsonValueKind.True;
+                var createdAt = item.TryGetProperty("created_at", out var ca) && DateTime.TryParse(ca.GetString(), null, System.Globalization.DateTimeStyles.AdjustToUniversal, out var cd) ? cd : DateTime.UtcNow;
+
+                searchResults.Add((prNumber, repoParts, title, htmlUrl ?? "", draft, createdAt));
+            }
+
+            if (itemList.Count < 100) break;
+            searchPage++;
+        }
+
+        // Step 2: For each unique repo, fetch full PR details via REST API
+        var repos = searchResults.Select(r => r.RepoFullName).Distinct().ToList();
+        Console.WriteLine($"[SyncFromGitHub] Found {searchResults.Count} PRs across {repos.Count} repos for user {username}");
+        foreach (var repo in repos)
+        {
+            var repoPrs = searchResults.Where(r => r.RepoFullName == repo).ToList();
+            Console.WriteLine($"[SyncFromGitHub] Fetching PRs from {repo} ({repoPrs.Count} from search)");
+            var repoReq = new HttpRequestMessage(HttpMethod.Get,
+                $"https://api.github.com/repos/{repo}/pulls?state=open&per_page=100");
+            repoReq.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+            repoReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            HttpResponseMessage repoResp;
+            try { repoResp = await _githubClient.SendAsync(repoReq); }
+            catch { Console.WriteLine($"[SyncFromGitHub] Exception fetching {repo}"); continue; }
+
+            if (!repoResp.IsSuccessStatusCode) { Console.WriteLine($"[SyncFromGitHub] {repo} returned {(int)repoResp.StatusCode}"); continue; }
+
+            var repoJson = await repoResp.Content.ReadAsStringAsync();
+            using var repoDoc = JsonDocument.Parse(repoJson);
+            if (repoDoc.RootElement.ValueKind != JsonValueKind.Array) { Console.WriteLine($"[SyncFromGitHub] {repo} response is not array: {repoDoc.RootElement.ValueKind}"); continue; }
+            Console.WriteLine($"[SyncFromGitHub] {repo} returned {repoDoc.RootElement.GetArrayLength()} PRs");
+
+            foreach (var prDetail in repoDoc.RootElement.EnumerateArray())
+            {
+                var prNumber = prDetail.GetProperty("number").GetInt64();
+                var matched = searchResults.FirstOrDefault(r => r.PrNumber == prNumber && r.RepoFullName == repo);
+                if (matched.PrNumber == 0) continue;
+
+                var title = matched.Title;
+                var authorLogin = prDetail.TryGetProperty("user", out var u) && u.TryGetProperty("login", out var l) ? l.GetString() ?? "" : "";
+                var authorId = prDetail.TryGetProperty("user", out var u2) && u2.TryGetProperty("id", out var id) ? id.GetInt64() : (long?)null;
+                var headBranch = prDetail.TryGetProperty("head", out var h) && h.TryGetProperty("ref", out var r) ? r.GetString() : null;
+                var baseBranch = prDetail.TryGetProperty("base", out var b) && b.TryGetProperty("ref", out var br) ? br.GetString() : null;
+                var htmlUrl = matched.HtmlUrl;
+                var draft = matched.Draft;
+                var createdAt = matched.CreatedAt;
 
                 var existing = await _db.PullRequestEvents
-                    .Where(e => e.PrNumber == prNumber && e.RepoFullName == repoUrl)
+                    .Where(e => e.PrNumber == prNumber && e.RepoFullName == repo)
                     .OrderByDescending(e => e.Id)
                     .FirstOrDefaultAsync();
 
@@ -97,7 +148,7 @@ public class PullRequestsController : ControllerBase
                         Title = title,
                         AuthorLogin = authorLogin,
                         AuthorGitHubId = authorId,
-                        RepoFullName = repoUrl,
+                        RepoFullName = repo,
                         HeadBranch = headBranch,
                         BaseBranch = baseBranch,
                         PrUrl = htmlUrl,
@@ -108,13 +159,9 @@ public class PullRequestsController : ControllerBase
                 }
                 synced++;
             }
-
-            await _db.SaveChangesAsync();
-
-            if (prArray.Count < perPage) break;
-            page++;
         }
 
+        await _db.SaveChangesAsync();
         return Ok(new { synced });
     }
 
