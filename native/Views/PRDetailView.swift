@@ -131,7 +131,7 @@ struct PRDetailView: View {
             }
         }
         .padding(DS.Spacing.xxl)
-        .frame(width: 320, height: 420)
+        .frame(width: 320, height: 480)
         .animation(DS.Animation.default, value: selectedTab)
         .onAppear { loadDetails() }
         .onChange(of: selectedTab) { newTab in

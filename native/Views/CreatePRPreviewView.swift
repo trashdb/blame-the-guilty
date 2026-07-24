@@ -1,5 +1,12 @@
 import SwiftUI
 
+struct PRSubscriberUser: Identifiable, Decodable {
+    var id: Int64 { gitHubId }
+    let gitHubId: Int64
+    let login: String
+    let avatarUrl: String?
+}
+
 struct CreatePRPreviewView: View {
     let repoPath: String
     let branchName: String
@@ -18,7 +25,7 @@ struct CreatePRPreviewView: View {
     @State private var errorMessage: String?
     
     // Subscriber dropdown
-    @State private var availableUsers: [SubscriberPickerView.AvailableUser] = []
+    @State private var availableUsers: [PRSubscriberUser] = []
     @State private var isLoadingUsers = false
     @State private var selectedUserIds: Set<Int64> = []
     @State private var showSubscriberPicker = false
@@ -197,6 +204,15 @@ struct CreatePRPreviewView: View {
         }
         .padding(12)
         .frame(width: 440, height: 440)
+        .popover(isPresented: $showSubscriberPicker, arrowEdge: .bottom) {
+            SubscriberPickerView(
+                availableUsers: availableUsers,
+                selectedIds: $selectedUserIds,
+                onDone: { showSubscriberPicker = false },
+                onCancel: { showSubscriberPicker = false }
+            )
+            .frame(width: 220)
+        }
         .onAppear { Task { await loadPreview() } }
     }
 
@@ -270,7 +286,7 @@ struct CreatePRPreviewView: View {
         
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
-            if let decoded = try? JSONDecoder().decode([SubscriberPickerView.AvailableUser].self, from: data) {
+            if let decoded = try? JSONDecoder().decode([PRSubscriberUser].self, from: data) {
                 await MainActor.run {
                     self.availableUsers = decoded.filter { $0.gitHubId != gitHubId }
                 }
@@ -283,17 +299,10 @@ struct CreatePRPreviewView: View {
 }
 
 struct SubscriberPickerView: View {
-    let availableUsers: [AvailableUser]
+    let availableUsers: [PRSubscriberUser]
     @Binding var selectedIds: Set<Int64>
     let onDone: () -> Void
     let onCancel: () -> Void
-    
-    struct AvailableUser: Identifiable, Decodable {
-        var id: Int64 { gitHubId }
-        let gitHubId: Int64
-        let login: String
-        let avatarUrl: String?
-    }
     
     var body: some View {
         VStack(spacing: 0) {
