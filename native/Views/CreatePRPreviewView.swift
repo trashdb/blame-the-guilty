@@ -56,97 +56,95 @@ struct CreatePRPreviewView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Create Pull Request")
-                .font(.system(size: 13, weight: .semibold))
+        ZStack {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Create Pull Request")
+                    .font(.system(size: 13, weight: .semibold))
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Title").font(.system(size: 10)).foregroundStyle(.secondary)
-                TextField("", text: $title)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 11, design: .monospaced))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Title").font(.system(size: 10)).foregroundStyle(.secondary)
+                    TextField("", text: $title)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 11, design: .monospaced))
+                        .padding(6)
+                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 5))
+                        .overlay(RoundedRectangle(cornerRadius: 5).stroke(.white.opacity(0.1), lineWidth: 1))
+                }
+
+                if isLoading {
+                    HStack(spacing: 6) {
+                        ProgressView().scaleEffect(0.5)
+                        Text("Loading template…")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if let summary, !summary.isEmpty {
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "sparkle")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.purple)
+                            Text("Copilot Summary")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(.purple)
+                        }
+                        Text(summary)
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color(white: 0.8))
+                            .padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(.purple.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 4) {
+                        Text("Description").font(.system(size: 10)).foregroundStyle(.secondary)
+                        if isLoading {
+                            ProgressView().scaleEffect(0.4)
+                        }
+                    }
+                    ScrollView {
+                        TextEditor(text: $bodyText)
+                            .font(.system(size: 10, design: .monospaced))
+                            .scrollContentBackground(.hidden)
+                            .frame(minHeight: 200)
+                    }
                     .padding(6)
                     .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 5))
                     .overlay(RoundedRectangle(cornerRadius: 5).stroke(.white.opacity(0.1), lineWidth: 1))
-            }
-
-            if isLoading {
-                HStack(spacing: 6) {
-                    ProgressView().scaleEffect(0.5)
-                    Text("Loading template…")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
                 }
-            }
 
-            if let summary, !summary.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "sparkle")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.purple)
-                        Text("Copilot Summary")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(.purple)
-                    }
-                    Text(summary)
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color(white: 0.8))
-                        .padding(8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.purple.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 4) {
-                    Text("Description").font(.system(size: 10)).foregroundStyle(.secondary)
-                    if isLoading {
-                        ProgressView().scaleEffect(0.4)
-                    }
-                }
-                ScrollView {
-                    TextEditor(text: $bodyText)
-                        .font(.system(size: 10, design: .monospaced))
-                        .scrollContentBackground(.hidden)
-                        .frame(minHeight: 200)
-                }
-                .padding(6)
-                .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 5))
-                .overlay(RoundedRectangle(cornerRadius: 5).stroke(.white.opacity(0.1), lineWidth: 1))
-            }
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Subscribers").font(.system(size: 10)).foregroundStyle(.secondary)
-                
-                // Show selected subscribers as chips
-                if !selectedUserIds.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 4) {
-                            ForEach(availableUsers.filter { selectedUserIds.contains($0.gitHubId) }) { user in
-                                HStack(spacing: 4) {
-                                    Text("@\(user.login)")
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(DS.Color.textPrimary)
-                                    Button {
-                                        selectedUserIds.remove(user.gitHubId)
-                                    } label: {
-                                        Image(systemName: "xmark.circle.fill")
+                    Text("Subscribers").font(.system(size: 10)).foregroundStyle(.secondary)
+                    
+                    if !selectedUserIds.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 4) {
+                                ForEach(availableUsers.filter { selectedUserIds.contains($0.gitHubId) }) { user in
+                                    HStack(spacing: 4) {
+                                        Text("@\(user.login)")
                                             .font(.system(size: 10))
-                                            .foregroundStyle(DS.Color.textTertiary)
+                                            .foregroundStyle(DS.Color.textPrimary)
+                                        Button {
+                                            selectedUserIds.remove(user.gitHubId)
+                                        } label: {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .font(.system(size: 10))
+                                                .foregroundStyle(DS.Color.textTertiary)
+                                        }
+                                        .buttonStyle(.plain)
                                     }
-                                    .buttonStyle(.plain)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(DS.Color.accent.opacity(0.15), in: RoundedRectangle(cornerRadius: 4))
                                 }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(DS.Color.accent.opacity(0.15), in: RoundedRectangle(cornerRadius: 4))
                             }
                         }
                     }
-                }
-                
-                // Add subscriber button with popover anchored to it
-                VStack {
+                    
                     Button {
                         Task { await loadAvailableUsers() }
                         showSubscriberPicker = true
@@ -165,55 +163,69 @@ struct CreatePRPreviewView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                .popover(isPresented: $showSubscriberPicker, arrowEdge: .bottom) {
-                    SubscriberPickerView(
-                        availableUsers: availableUsers,
-                        selectedIds: $selectedUserIds,
-                        onDone: { showSubscriberPicker = false },
-                        onCancel: { showSubscriberPicker = false }
-                    )
-                    .frame(width: 220)
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.system(size: 9))
+                        .foregroundStyle(.red)
                 }
-            }
 
-            if let errorMessage {
-                Text(errorMessage)
-                    .font(.system(size: 9))
-                    .foregroundStyle(.red)
-            }
-
-            HStack(spacing: 8) {
-                if let summary, !summary.isEmpty {
-                    HStack(spacing: 3) {
-                        Image(systemName: "sparkle")
-                            .font(.system(size: 8))
-                            .foregroundStyle(.purple)
-                        Text("Copilot summary included")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.purple)
+                HStack(spacing: 8) {
+                    if let summary, !summary.isEmpty {
+                        HStack(spacing: 3) {
+                            Image(systemName: "sparkle")
+                                .font(.system(size: 8))
+                                .foregroundStyle(.purple)
+                            Text("Copilot summary included")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.purple)
+                        }
                     }
+                    Spacer()
+                    if isCreating {
+                        ProgressView().scaleEffect(0.5).frame(width: 12)
+                    }
+                    Button("Cancel") { onCancel?() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 10))
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
+                        .cursor(.pointingHand)
+                    Button("Create PR") { Task { await createPR() } }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.green)
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(.green.opacity(0.15), in: RoundedRectangle(cornerRadius: 5))
+                        .disabled(isCreating)
+                        .cursor(.pointingHand)
                 }
-                Spacer()
-                if isCreating {
-                    ProgressView().scaleEffect(0.5).frame(width: 12)
-                }
-                Button("Cancel") { onCancel?() }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 10))
-                    .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
-                    .cursor(.pointingHand)
-                Button("Create PR") { Task { await createPR() } }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.green)
-                    .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(.green.opacity(0.15), in: RoundedRectangle(cornerRadius: 5))
-                    .disabled(isCreating)
-                    .cursor(.pointingHand)
+            }
+            .padding(12)
+            .frame(width: 440, height: 440)
+            
+            if showSubscriberPicker {
+                Color.black.opacity(0.001)
+                    .contentShape(Rectangle())
+                    .onTapGesture { showSubscriberPicker = false }
+                    .allowsHitTesting(true)
+                
+                SubscriberPickerView(
+                    availableUsers: availableUsers,
+                    selectedIds: $selectedUserIds,
+                    onDone: { showSubscriberPicker = false },
+                    onCancel: { showSubscriberPicker = false }
+                )
+                .frame(width: 220)
+                .background(Color(NSColor.windowBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.md))
+                .shadow(color: .black.opacity(0.3), radius: 12, y: 4)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .padding(.leading, 12)
+                .padding(.bottom, 80)
+                .allowsHitTesting(true)
             }
         }
-        .padding(12)
         .frame(width: 440, height: 440)
         .onAppear { Task { await loadPreview() } }
     }
