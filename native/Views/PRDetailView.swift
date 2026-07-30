@@ -1153,16 +1153,14 @@ struct SubscriberManagementView: View {
                 }
             }
             
-            // Current subscribers list (exclude owner)
-            let filteredSubscribers = subscribers.filter { $0.gitHubId != gitHubId }
-            
-            if filteredSubscribers.isEmpty && !isLoading {
+            // Current subscribers list
+            if subscribers.isEmpty && !isLoading {
                 Text("No subscribers yet")
                     .font(DS.Font.caption)
                     .foregroundStyle(DS.Color.textTertiary)
                     .padding(.vertical, DS.Spacing.xs)
             } else {
-                ForEach(filteredSubscribers) { sub in
+                ForEach(subscribers) { sub in
                     HStack(spacing: DS.Spacing.sm) {
                         AsyncImage(url: URL(string: sub.avatarUrl)) { img in
                             img.resizable()
@@ -1185,13 +1183,6 @@ struct SubscriberManagementView: View {
                         }
                     }
                     .padding(.vertical, 2)
-                }
-                
-                if subscribers.filter { $0.gitHubId == gitHubId }.isEmpty {
-                    Text("Owner cannot be removed (they are automatically subscribed)")
-                        .font(DS.Font.caption)
-                        .foregroundStyle(DS.Color.textTertiary)
-                        .padding(.top, DS.Spacing.xs)
                 }
             }
             

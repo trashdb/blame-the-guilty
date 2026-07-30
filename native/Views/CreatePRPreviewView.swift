@@ -29,7 +29,6 @@ struct CreatePRPreviewView: View {
     @State private var isLoadingUsers = false
     @State private var selectedUserIds: Set<Int64> = []
     @State private var showSubscriberPicker = false
-    @State private var subscriberButtonFrame: CGRect = .zero
 
     private let git = currentDependencies.gitService
 
@@ -146,24 +145,35 @@ struct CreatePRPreviewView: View {
                     }
                 }
                 
-                // Add subscriber button
-                Button {
-                    Task { await loadAvailableUsers() }
-                    showSubscriberPicker = true
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "person.badge.plus")
-                            .font(.system(size: 10))
-                        Text(selectedUserIds.isEmpty ? "Add subscribers" : "\(selectedUserIds.count) selected")
-                            .font(.system(size: 10, design: .monospaced))
+                // Add subscriber button with popover anchored to it
+                VStack {
+                    Button {
+                        Task { await loadAvailableUsers() }
+                        showSubscriberPicker = true
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "person.badge.plus")
+                                .font(.system(size: 10))
+                            Text(selectedUserIds.isEmpty ? "Add subscribers" : "\(selectedUserIds.count) selected")
+                                .font(.system(size: 10, design: .monospaced))
+                        }
+                        .foregroundStyle(selectedUserIds.isEmpty ? DS.Color.textSecondary : DS.Color.accent)
+                        .padding(6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 5))
+                        .overlay(RoundedRectangle(cornerRadius: 5).stroke(selectedUserIds.isEmpty ? DS.Color.textTertiary.opacity(0.3) : DS.Color.accent.opacity(0.5), lineWidth: 1))
                     }
-                    .foregroundStyle(selectedUserIds.isEmpty ? DS.Color.textSecondary : DS.Color.accent)
-                    .padding(6)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 5))
-                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(selectedUserIds.isEmpty ? DS.Color.textTertiary.opacity(0.3) : DS.Color.accent.opacity(0.5), lineWidth: 1))
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
+                .popover(isPresented: $showSubscriberPicker, arrowEdge: .bottom) {
+                    SubscriberPickerView(
+                        availableUsers: availableUsers,
+                        selectedIds: $selectedUserIds,
+                        onDone: { showSubscriberPicker = false },
+                        onCancel: { showSubscriberPicker = false }
+                    )
+                    .frame(width: 220)
+                }
             }
 
             if let errorMessage {
@@ -205,15 +215,6 @@ struct CreatePRPreviewView: View {
         }
         .padding(12)
         .frame(width: 440, height: 440)
-        .popover(isPresented: $showSubscriberPicker, arrowEdge: .bottom) {
-            SubscriberPickerView(
-                availableUsers: availableUsers,
-                selectedIds: $selectedUserIds,
-                onDone: { showSubscriberPicker = false },
-                onCancel: { showSubscriberPicker = false }
-            )
-            .frame(width: 220)
-        }
         .onAppear { Task { await loadPreview() } }
     }
 
