@@ -29,6 +29,7 @@ struct CreatePRPreviewView: View {
     @State private var isLoadingUsers = false
     @State private var selectedUserIds: Set<Int64> = []
     @State private var showSubscriberPicker = false
+    @State private var subscriberButtonFrame: CGRect = .zero
 
     private let git = currentDependencies.gitService
 
