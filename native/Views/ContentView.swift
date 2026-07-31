@@ -9,6 +9,7 @@ struct ContentView: View {
     @State private var loginError: String?
     @State private var showQuickSearch = false
     @FocusState private var quickSearchFocused: Bool
+    @State private var resignFocusToken: Any?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -151,6 +152,7 @@ struct ContentView: View {
             signalR.restoreSession()
             Task { await scanCurrentBranches() }
             setupQuickSearchShortcut()
+            setupResignFocusMonitor()
         }
         .onChange(of: signalR.activePRs) { updateMenuBarBadge($0) }
         .onChange(of: signalR.runningWorkflows.count) { _ in
@@ -254,6 +256,20 @@ struct ContentView: View {
         }
 
         return actions
+    }
+
+    private func setupResignFocusMonitor() {
+        if let t = resignFocusToken { NSEvent.removeMonitor(t) }
+        resignFocusToken = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
+            guard let window = event.window,
+                  let editor = window.firstResponder as? NSTextView else { return event }
+            let click = event.locationInWindow
+            let editorFrame = editor.convert(editor.bounds, to: nil)
+            if !editorFrame.contains(click) {
+                DispatchQueue.main.async { window.makeFirstResponder(nil) }
+            }
+            return event
+        }
     }
 
     private func setupQuickSearchShortcut() {
