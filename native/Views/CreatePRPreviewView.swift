@@ -31,7 +31,6 @@ struct CreatePRPreviewView: View {
     @State private var showSubscriberPicker = false
 
     @State private var isGeneratingAI = false
-    @State private var summaryError: String?
 
     private let git = currentDependencies.gitService
 
@@ -80,42 +79,6 @@ struct CreatePRPreviewView: View {
                         Text(isGeneratingAI ? "Generating AI summary…" : "Loading template…")
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
-                    }
-                }
-
-                if let summary, !summary.isEmpty {
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "sparkle")
-                                .font(.system(size: 9))
-                                .foregroundStyle(.purple)
-                            Text("Copilot Summary")
-                                .font(.system(size: 9, weight: .semibold))
-                                .foregroundStyle(.purple)
-                        }
-                        Text(summary)
-                            .font(.system(size: 10))
-                            .foregroundStyle(Color(white: 0.8))
-                            .padding(8)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(.purple.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
-                    }
-                } else if let summaryError, !summaryError.isEmpty {
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "sparkle.slash")
-                                .font(.system(size: 9))
-                                .foregroundStyle(.orange)
-                            Text("AI summary unavailable")
-                                .font(.system(size: 9, weight: .semibold))
-                                .foregroundStyle(.orange)
-                        }
-                        Text(summaryError)
-                            .font(.system(size: 10))
-                            .foregroundStyle(.orange)
-                            .padding(8)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
                     }
                 }
 
@@ -279,7 +242,7 @@ struct CreatePRPreviewView: View {
             return
         }
         summary = nil
-        summaryError = nil
+        errorMessage = nil
         let base = await git.baseRefName(repoPath: repoPath) ?? "main"
         let cleanBase = base.hasPrefix("origin/") ? String(base.dropFirst(7)) : base
         let repoEncoded = fullName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? fullName
@@ -310,7 +273,7 @@ struct CreatePRPreviewView: View {
             let decoded = try JSONDecoder().decode(PreviewData.self, from: data)
             summary = decoded.summary.isEmpty ? nil : decoded.summary
             if let err = decoded.summaryError, !err.isEmpty {
-                summaryError = err
+                errorMessage = err
             }
             if !decoded.suggestedBody.isEmpty {
                 bodyText = decoded.suggestedBody
