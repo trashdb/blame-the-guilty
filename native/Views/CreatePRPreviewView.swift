@@ -30,6 +30,8 @@ struct CreatePRPreviewView: View {
     @State private var selectedUserIds: Set<Int64> = []
     @State private var showSubscriberPicker = false
 
+    @State private var useAI = true
+
     private let git = currentDependencies.gitService
 
     init(repoPath: String, branchName: String, backendUrl: String, gitHubId: Int64, onComplete: @escaping (URL) -> Void, onCancel: (() -> Void)? = nil) {
@@ -69,6 +71,22 @@ struct CreatePRPreviewView: View {
                         .padding(6)
                         .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 5))
                         .overlay(RoundedRectangle(cornerRadius: 5).stroke(.white.opacity(0.1), lineWidth: 1))
+                }
+
+                Toggle(isOn: $useAI) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "sparkle")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.purple)
+                        Text("Generate description with AI (Copilot)")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .onChange(of: useAI) { _, _ in
+                    Task { await loadPreview() }
                 }
 
                 if isLoading {
@@ -241,7 +259,7 @@ struct CreatePRPreviewView: View {
         let repoEncoded = fullName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? fullName
         let headEncoded = branchName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? branchName
 
-        guard let url = URL(string: "\(backendUrl)/api/github/pr-preview?gitHubId=\(gitHubId)&repo=\(repoEncoded)&head=\(headEncoded)&baseBranch=\(cleanBase)&title=\(title.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? title)") else {
+        guard let url = URL(string: "\(backendUrl)/api/github/pr-preview?gitHubId=\(gitHubId)&repo=\(repoEncoded)&head=\(headEncoded)&baseBranch=\(cleanBase)&title=\(title.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? title)&useAI=\(useAI)") else {
             errorMessage = "Invalid URL"
             isLoading = false
             return

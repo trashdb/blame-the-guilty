@@ -242,7 +242,7 @@ public class GitHubApiController : ControllerBase
 
     [HttpPost("pr-preview")]
     public async Task<IActionResult> PrPreview([FromQuery] long gitHubId, [FromQuery] string repo,
-        [FromQuery] string head, [FromQuery] string baseBranch, [FromQuery] string title)
+        [FromQuery] string head, [FromQuery] string baseBranch, [FromQuery] string title, [FromQuery] bool useAI = true)
     {
         var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
         var token = user?.UserPatToken ?? user?.AccessToken ?? _configuration["GitHub:PatToken"];
@@ -281,7 +281,7 @@ public class GitHubApiController : ControllerBase
 
         var summary = "";
         string? summaryError = null;
-        if (commits.Count > 0)
+        if (useAI && commits.Count > 0)
         {
             var oauthToken = user?.AccessToken;
             if (!string.IsNullOrEmpty(oauthToken))
