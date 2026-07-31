@@ -201,7 +201,7 @@ struct CreatePRPreviewView: View {
                         .cursor(.pointingHand)
                 }
             }
-            .padding(12)
+            .padding(EdgeInsets(top: 20, leading: 16, bottom: 20, trailing: 16))
             .frame(width: 440, height: 440)
             
             if showSubscriberPicker {
@@ -221,8 +221,8 @@ struct CreatePRPreviewView: View {
                 .clipShape(RoundedRectangle(cornerRadius: DS.Radius.md))
                 .shadow(color: .black.opacity(0.3), radius: 12, y: 4)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                .padding(.leading, 12)
-                .padding(.bottom, 80)
+                .padding(.leading, 16)
+                .padding(.bottom, 88)
                 .allowsHitTesting(true)
             }
         }
