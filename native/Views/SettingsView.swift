@@ -40,13 +40,12 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: DS.Spacing.lg) {
-                        Image(systemName: "flame.fill")
+                        StatefalseMark()
                             .font(.system(size: 28))
-                            .foregroundStyle(DS.Color.accent)
                         VStack(alignment: .leading, spacing: DS.Spacing.xs) {
                             Text("Settings")
                                 .font(DS.Font.largeTitle)
-                            Text("Blame the Guilty")
+                            Text("statefalse")
                                 .font(DS.Font.caption)
                                 .foregroundStyle(DS.Color.textSecondary)
                         }
@@ -260,7 +259,7 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var backendSection: some View {
-        Text("The backend server URL. Only change if self-hosting the blame-the-guilty server. Must point to a running instance with /health endpoint.")
+        Text("The backend server URL. Only change if self-hosting the statefalse server. Must point to a running instance with /health endpoint.")
             .font(DS.Font.small)
             .foregroundStyle(DS.Color.textSecondary)
 
@@ -268,7 +267,7 @@ struct SettingsView: View {
             urlTextField(
                 "https://your-server.com",
                 text: $backendUrlDraft,
-                help: "Full URL of the blame-the-guilty backend server, including protocol (https://). The server must expose a /health endpoint.",
+                help: "Full URL of the statefalse backend server, including protocol (https://). The server must expose a /health endpoint.",
                 error: $backendUrlError
             )
             .onAppear { backendUrlDraft = settingsBackendUrl }

@@ -15,8 +15,8 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "2CF370D62FFA808D002F6748"
-               BuildableName = "BlameTheGuiltyTests.xctest"
-               BlueprintName = "BlameTheGuiltyTests"
+               BuildableName = "StatefalseTests.xctest"
+               BlueprintName = "StatefalseTests"
                ReferencedContainer = "container:btg.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -33,8 +33,8 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "2CF370D62FFA808D002F6748"
-               BuildableName = "BlameTheGuiltyTests.xctest"
-               BlueprintName = "BlameTheGuiltyTests"
+               BuildableName = "StatefalseTests.xctest"
+               BlueprintName = "StatefalseTests"
                ReferencedContainer = "container:btg.xcodeproj">
             </BuildableReference>
          </TestableReference>
@@ -61,8 +61,8 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "2CF370D62FFA808D002F6748"
-            BuildableName = "BlameTheGuiltyTests.xctest"
-            BlueprintName = "BlameTheGuiltyTests"
+            BuildableName = "StatefalseTests.xctest"
+            BlueprintName = "StatefalseTests"
             ReferencedContainer = "container:btg.xcodeproj">
          </BuildableReference>
       </MacroExpansion>

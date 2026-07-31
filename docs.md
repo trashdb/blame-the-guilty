@@ -18,7 +18,7 @@ curl -X POST "https://moonlike-silenced-sprung.ngrok-free.dev/api/webhook/github
 ]
 },
 "repository": {
-"full_name": "trashdb/blame-the-guilty"
+"full_name": "trashdb/statefalse"
 },
 "sender": {
 "id": 296179642,

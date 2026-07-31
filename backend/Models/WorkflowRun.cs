@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace BlameTheGuilty.Api.Models;
+namespace Statefalse.Api.Models;
 
 public class WorkflowRun
 {

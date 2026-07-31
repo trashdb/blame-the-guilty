@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using BlameTheGuilty.Api.Models;
+using Statefalse.Api.Models;
 
-namespace BlameTheGuilty.Api.Data;
+namespace Statefalse.Api.Data;
 
 public class AppDbContext : DbContext
 {

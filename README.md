@@ -1,4 +1,4 @@
-# Blame the Guilty
+# statefalse
 
 macOS menu bar app that tracks GitHub Actions workflows, notifies you on failures, lets you rerun workflows, assign targets, track open PRs with real‑time status, and manage local/remote git branches with checkout, delete, Jira integration, and direct PR creation from the app.
 
@@ -11,14 +11,14 @@ macOS menu bar app that tracks GitHub Actions workflows, notifies you on failure
 ## Install
 
 ```bash
-git clone git@github.com:trashdb/blame-the-guilty.git
-cd blame-the-guilty/native
+git clone git@github.com:trashdb/statefalse.git
+cd statefalse/native
 bash install.sh
 ```
 
 A 🔥 icon appears in your menu bar.
 
-The install script builds the project, copies it to `~/Applications/BlameTheGuilty.app`, and relaunches. If the build fails it falls back to the previous build.
+The install script builds the project, copies it to `~/Applications/Statefalse.app`, and relaunches. If the build fails it falls back to the previous build.
 
 ## First‑time setup
 

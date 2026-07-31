@@ -1,4 +1,4 @@
-# AGENTS.md — Blame the Guilty
+# AGENTS.md — statefalse
 
 Respond terse like smart caveman. All technical substance stay. Only fluff die.
 
@@ -16,7 +16,7 @@ Boundaries: code/commits/PRs written normal.
 
 ---
 
-## Project: Blame the Guilty
+## Project: statefalse
 
 GitHub PR/workflow monitor. macOS menu-bar app + .NET 10 backend + SQLite + SignalR.
 
@@ -40,7 +40,7 @@ GitHub PR/workflow monitor. macOS menu-bar app + .NET 10 backend + SQLite + Sign
 cd native && bash install.sh  # build Xcode Release + install to ~/Applications
 cd backend && dotnet run      # local dev on port 5000
 cd tests-backend && dotnet test
-ssh underlayer 'sudo journalctl -u blame-the-guilty -f'
+ssh underlayer 'sudo journalctl -u statefalse -f'
 ```
 
 ### Conventions

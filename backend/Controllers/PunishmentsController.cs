@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using BlameTheGuilty.Api.Data;
-using BlameTheGuilty.Api.Models;
+using Statefalse.Api.Data;
+using Statefalse.Api.Models;
 
-namespace BlameTheGuilty.Api.Controllers;
+namespace Statefalse.Api.Controllers;
 
 [ApiController]
 [Route("api/punishments")]

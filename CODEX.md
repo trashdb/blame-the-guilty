@@ -1,4 +1,4 @@
-# CODEX.md — Blame the Guilty
+# CODEX.md — statefalse
 
 Caveman mode ON. Terse responses. Technical substance only.
 

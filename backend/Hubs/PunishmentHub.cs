@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using BlameTheGuilty.Api.Data;
+using Statefalse.Api.Data;
 
-namespace BlameTheGuilty.Api.Hubs;
+namespace Statefalse.Api.Hubs;
 
 public class PunishmentHub : Hub
 {

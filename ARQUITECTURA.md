@@ -1,12 +1,12 @@
-# Blame the Guilty — Guía Completa de Arquitectura
+# statefalse — Guía Completa de Arquitectura
 
 ## Arquitectura General
 
 ```
 [macOS App] ←SignalR+REST→ [ngrok tunnel] → [ASP.NET Kestrel:5000] → [SQLite DB]
                               ↑                                            ↑
-                         (Hetzner VPS)                         /var/lib/blame-the-guilty/
-                                                                   blame_the_guilty.db
+                         (Hetzner VPS)                         /var/lib/statefalse/
+                                                                   statefalse.db
 ```
 
 - **Backend**: App .NET 10 self-hosted en un VPS de Hetzner con systemd
@@ -33,7 +33,7 @@
 ```
 backend/
 ├── Program.cs                          # Entry point, DI, CORS, SignalR, DB init
-├── BlameTheGuilty.Api.csproj           # .NET 10, 2 NuGet refs
+├── Statefalse.Api.csproj           # .NET 10, 2 NuGet refs
 ├── appsettings.json                    # Dev config (OAuth creds, DB path)
 ├── appsettings.Production.json         # Producción (DB en /var/lib/...)
 ├── Data/
@@ -158,7 +158,7 @@ UserPatToken (PAT propio) > AccessToken (OAuth) > GitHub:PatToken (PAT compartid
 
 ```
 native/
-├── App/BlameTheGuiltyApp.swift          # @main, MenuBarExtra, LoginItem
+├── App/StatefalseApp.swift          # @main, MenuBarExtra, LoginItem
 ├── Models/Models.swift                  # Todos los modelos + backendUrl
 ├── Services/
 │   ├── SignalRService.swift             # WebSocket SignalR + REST polling (595 lines)
@@ -234,10 +234,10 @@ native/
 
 ### Cómo se instala la app (`native/install.sh`)
 ```bash
-xcodebuild -project btg.xcodeproj -scheme BlameTheGuilty -configuration Release build
-cp BlameTheGuilty.app ~/Applications/
-lsregister -f ~/Applications/BlameTheGuilty.app
-pkill -x BlameTheGuilty; open ~/Applications/BlameTheGuilty.app
+xcodebuild -project btg.xcodeproj -scheme Statefalse -configuration Release build
+cp Statefalse.app ~/Applications/
+lsregister -f ~/Applications/Statefalse.app
+pkill -x Statefalse; open ~/Applications/Statefalse.app
 ```
 
 ---
@@ -253,22 +253,22 @@ pkill -x BlameTheGuilty; open ~/Applications/BlameTheGuilty.app
 | Usuario | `root` |
 | SSH key | `~/.ssh/underlayer_ci_deploy` |
 | OS | Linux (Debian/Ubuntu) |
-| App path | `/opt/blame-the-guilty/` |
-| DB path | `/var/lib/blame-the-guilty/blame_the_guilty.db` |
+| App path | `/opt/statefalse/` |
+| DB path | `/var/lib/statefalse/statefalse.db` |
 
 ### Servicios systemd
 
-1. **`blame-the-guilty.service`**: Ejecuta `BlameTheGuilty.Api` en `localhost:5000`
-2. **`blame-the-guilty-tunnel.service`**: Ejecuta `ngrok http --url=moonlike-silenced-sprung.ngrok-free.dev 5000`
+1. **`statefalse.service`**: Ejecuta `Statefalse.Api` en `localhost:5000`
+2. **`statefalse-tunnel.service`**: Ejecuta `ngrok http --url=moonlike-silenced-sprung.ngrok-free.dev 5000`
 
 ### Cómo desplegar (desde tu Mac)
 
 ```bash
 # Backend
 cd backend
-dotnet publish -c Release -r linux-x64 --self-contained -o /tmp/blame-publish
-rsync -az --delete /tmp/blame-publish/ underlayer:/opt/blame-the-guilty/
-ssh underlayer "sudo systemctl daemon-reload && sudo systemctl restart blame-the-guilty"
+dotnet publish -c Release -r linux-x64 --self-contained -o /tmp/statefalse-publish
+rsync -az --delete /tmp/statefalse-publish/ underlayer:/opt/statefalse/
+ssh underlayer "sudo systemctl daemon-reload && sudo systemctl restart statefalse"
 
 # Frontend (macOS)
 cd native
@@ -419,8 +419,8 @@ jobs:
       - uses: actions/checkout@v4
       - run: dotnet publish -c Release -r linux-x64 --self-contained -o publish
         working-directory: backend
-      - run: rsync -az --delete publish/ underlayer:/opt/blame-the-guilty/
-      - run: ssh underlayer "sudo systemctl restart blame-the-guilty"
+      - run: rsync -az --delete publish/ underlayer:/opt/statefalse/
+      - run: ssh underlayer "sudo systemctl restart statefalse"
 ```
 
 Necesitas añadir `SSH_PRIVATE_KEY` y `SSH_KNOWN_HOSTS` como secrets de GitHub.
@@ -437,7 +437,7 @@ FROM mcr.microsoft.com/dotnet/runtime-deps:10.0
 WORKDIR /app
 COPY --from=build /app .
 ENV ASPNETCORE_URLS=http://+:5000
-ENTRYPOINT ["./BlameTheGuilty.Api"]
+ENTRYPOINT ["./Statefalse.Api"]
 ```
 
 Combinado con docker-compose para ngrok:
@@ -450,7 +450,7 @@ services:
       - GITHUB_PAT_TOKEN=${GITHUB_PAT_TOKEN}
       - WEBHOOK_SECRET=${WEBHOOK_SECRET}
     volumes:
-      - blame-data:/var/lib/blame-the-guilty
+      - statefalse-data:/var/lib/statefalse
     restart: always
   tunnel:
     image: ngrok/ngrok:latest
@@ -460,7 +460,7 @@ services:
     depends_on:
       - app
 volumes:
-  blame-data:
+  statefalse-data:
 ```
 
 #### 7. Migraciones EF (1h)

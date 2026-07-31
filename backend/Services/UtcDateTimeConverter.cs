@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace BlameTheGuilty.Api.Services;
+namespace Statefalse.Api.Services;
 
 public class UtcDateTimeConverter : JsonConverter<DateTime>
 {

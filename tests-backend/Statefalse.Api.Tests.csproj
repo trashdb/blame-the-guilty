@@ -20,7 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../backend/BlameTheGuilty.Api.csproj" />
+    <ProjectReference Include="../backend/Statefalse.Api.csproj" />
   </ItemGroup>
 
 </Project>

@@ -103,7 +103,7 @@ struct ListMyPRsIntent: AppIntent {
 
 // MARK: - App Shortcuts
 
-struct BlameTheGuiltyShortcuts: AppShortcutsProvider {
+struct StatefalseShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
             intent: OpenPRIntent(),

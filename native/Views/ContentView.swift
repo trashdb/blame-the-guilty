@@ -16,9 +16,9 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: DS.Spacing.xl) {
                     // Header
                     HStack(spacing: DS.Spacing.md) {
-                        Image(systemName: "flame.fill")
+                        StatefalseMark()
                             .font(DS.Font.title)
-                        Text("Blame the Guilty")
+                        Text("StateFalse")
                             .font(DS.Font.largeTitle)
                     }
 
@@ -82,7 +82,7 @@ struct ContentView: View {
 
                 toolbarButton(icon: "bell.fill", help: "Send Test Notification") {
                     showNotification(
-                        title: "Blame the Guilty",
+                        title: "statefalse",
                         body: "Test notification from popover",
                         subtitle: "Works!",
                         actionURL: URL(string: "https://github.com")

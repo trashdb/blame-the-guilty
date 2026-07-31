@@ -106,11 +106,11 @@
 			<key>isa</key>
 			<string>PBXNativeTarget</string>
 			<key>name</key>
-			<string>BlameTheGuiltyTests</string>
+			<string>StatefalseTests</string>
 			<key>packageProductDependencies</key>
 			<array/>
 			<key>productName</key>
-			<string>BlameTheGuiltyTests</string>
+			<string>StatefalseTests</string>
 			<key>productReference</key>
 			<string>2CEF14583010CD1700124FCB</string>
 			<key>productType</key>
@@ -125,7 +125,7 @@
 			<key>isa</key>
 			<string>PBXFileReference</string>
 			<key>path</key>
-			<string>BlameTheGuiltyTests.xctest</string>
+			<string>StatefalseTests.xctest</string>
 			<key>sourceTree</key>
 			<string>BUILT_PRODUCTS_DIR</string>
 		</dict>
@@ -134,7 +134,7 @@
 			<key>isa</key>
 			<string>PBXFileSystemSynchronizedRootGroup</string>
 			<key>path</key>
-			<string>../BlameTheGuiltyTests</string>
+			<string>../StatefalseTests</string>
 			<key>sourceTree</key>
 			<string>&lt;group&gt;</string>
 		</dict>
@@ -149,7 +149,7 @@
 			<key>remoteGlobalIDString</key>
 			<string>2CF370BD2FFA808D002F6748</string>
 			<key>remoteInfo</key>
-			<string>BlameTheGuilty</string>
+			<string>Statefalse</string>
 		</dict>
 		<key>2CEF145D3010CD1700124FCB</key>
 		<dict>
@@ -179,7 +179,7 @@
 				<key>MARKETING_VERSION</key>
 				<string>1.0</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
-				<string>com.personal.BlameTheGuiltyTests</string>
+				<string>com.personal.StatefalseTests</string>
 				<key>PRODUCT_NAME</key>
 				<string>$(TARGET_NAME)</string>
 				<key>STRING_CATALOG_GENERATE_SYMBOLS</key>
@@ -193,7 +193,7 @@
 				<key>SWIFT_VERSION</key>
 				<string>5.0</string>
 				<key>TEST_HOST</key>
-				<string>$(BUILT_PRODUCTS_DIR)/BlameTheGuilty.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/BlameTheGuilty</string>
+				<string>$(BUILT_PRODUCTS_DIR)/Statefalse.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Statefalse</string>
 			</dict>
 			<key>isa</key>
 			<string>XCBuildConfiguration</string>
@@ -219,7 +219,7 @@
 				<key>MARKETING_VERSION</key>
 				<string>1.0</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
-				<string>com.personal.BlameTheGuiltyTests</string>
+				<string>com.personal.StatefalseTests</string>
 				<key>PRODUCT_NAME</key>
 				<string>$(TARGET_NAME)</string>
 				<key>STRING_CATALOG_GENERATE_SYMBOLS</key>
@@ -233,7 +233,7 @@
 				<key>SWIFT_VERSION</key>
 				<string>5.0</string>
 				<key>TEST_HOST</key>
-				<string>$(BUILT_PRODUCTS_DIR)/BlameTheGuilty.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/BlameTheGuilty</string>
+				<string>$(BUILT_PRODUCTS_DIR)/Statefalse.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Statefalse</string>
 			</dict>
 			<key>isa</key>
 			<string>XCBuildConfiguration</string>
@@ -413,11 +413,11 @@
 			<key>isa</key>
 			<string>PBXNativeTarget</string>
 			<key>name</key>
-			<string>BlameTheGuilty</string>
+			<string>Statefalse</string>
 			<key>packageProductDependencies</key>
 			<array/>
 			<key>productName</key>
-			<string>BlameTheGuilty</string>
+			<string>Statefalse</string>
 			<key>productReference</key>
 			<string>2CF370BE2FFA808D002F6748</string>
 			<key>productType</key>
@@ -434,7 +434,7 @@
 			<key>name</key>
 			<string>btg.app</string>
 			<key>path</key>
-			<string>BlameTheGuilty.app</string>
+			<string>Statefalse.app</string>
 			<key>sourceTree</key>
 			<string>BUILT_PRODUCTS_DIR</string>
 		</dict>
@@ -726,6 +726,8 @@
 				<string>readonly</string>
 				<key>GENERATE_INFOPLIST_FILE</key>
 				<string>YES</string>
+				<key>INFOPLIST_KEY_CFBundleDisplayName</key>
+				<string>StateFalse</string>
 				<key>INFOPLIST_KEY_LSUIElement</key>
 				<string>YES</string>
 				<key>INFOPLIST_KEY_NSHumanReadableCopyright</key>
@@ -738,9 +740,9 @@
 				<key>MARKETING_VERSION</key>
 				<string>1.0</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
-				<string>com.blametheguilty.app</string>
+				<string>com.statefalse.app</string>
 				<key>PRODUCT_NAME</key>
-				<string>BlameTheGuilty</string>
+				<string>Statefalse</string>
 				<key>REGISTER_APP_GROUPS</key>
 				<string>YES</string>
 				<key>STRING_CATALOG_GENERATE_SYMBOLS</key>
@@ -783,6 +785,8 @@
 				<string>readonly</string>
 				<key>GENERATE_INFOPLIST_FILE</key>
 				<string>YES</string>
+				<key>INFOPLIST_KEY_CFBundleDisplayName</key>
+				<string>StateFalse</string>
 				<key>INFOPLIST_KEY_LSUIElement</key>
 				<string>YES</string>
 				<key>INFOPLIST_KEY_NSHumanReadableCopyright</key>
@@ -795,9 +799,9 @@
 				<key>MARKETING_VERSION</key>
 				<string>1.0</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
-				<string>com.blametheguilty.app</string>
+				<string>com.statefalse.app</string>
 				<key>PRODUCT_NAME</key>
-				<string>BlameTheGuilty</string>
+				<string>Statefalse</string>
 				<key>REGISTER_APP_GROUPS</key>
 				<string>YES</string>
 				<key>STRING_CATALOG_GENERATE_SYMBOLS</key>

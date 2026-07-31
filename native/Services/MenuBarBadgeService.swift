@@ -28,10 +28,10 @@ class MenuBarBadgeService: ObservableObject {
 
     var iconName: String {
         switch connectionState {
-        case .disconnected:  return "flame.fill"
-        case .connected:     return "flame.fill"
-        case .hasFailures:   return "flame.trianglebadge.exclamationmark"
-        case .hasRunning:    return "flame.fill"
+        case .disconnected:  return "curlybraces"
+        case .connected:     return "curlybraces"
+        case .hasFailures:   return "curlybraces"
+        case .hasRunning:    return "curlybraces"
         }
     }
 

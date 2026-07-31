@@ -3,11 +3,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using BlameTheGuilty.Api.Data;
-using BlameTheGuilty.Api.Hubs;
-using BlameTheGuilty.Api.Models;
+using Statefalse.Api.Data;
+using Statefalse.Api.Hubs;
+using Statefalse.Api.Models;
 
-namespace BlameTheGuilty.Api.Controllers;
+namespace Statefalse.Api.Controllers;
 
 [ApiController]
 [Route("api/pullrequests")]
@@ -46,7 +46,7 @@ public class PullRequestsController : ControllerBase
         {
             var searchReq = new HttpRequestMessage(HttpMethod.Get,
                 $"https://api.github.com/search/issues?q=type:pr+state:open+author:{username}&per_page=100&page={searchPage}");
-            searchReq.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+            searchReq.Headers.UserAgent.ParseAdd("Statefalse");
             searchReq.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
             searchReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
@@ -95,7 +95,7 @@ public class PullRequestsController : ControllerBase
             Console.WriteLine($"[SyncFromGitHub] Fetching PRs from {repo} ({repoPrs.Count} from search)");
             var repoReq = new HttpRequestMessage(HttpMethod.Get,
                 $"https://api.github.com/repos/{repo}/pulls?state=open&per_page=100");
-            repoReq.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+            repoReq.Headers.UserAgent.ParseAdd("Statefalse");
             repoReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
             HttpResponseMessage repoResp;
@@ -411,7 +411,7 @@ public class PullRequestsController : ControllerBase
         {
             var request = new HttpRequestMessage(HttpMethod.Get,
                 $"https://api.github.com/repos/{repo}/pulls/{prNumber}");
-            request.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+            request.Headers.UserAgent.ParseAdd("Statefalse");
             if (!string.IsNullOrEmpty(token))
                 request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
@@ -431,7 +431,7 @@ public class PullRequestsController : ControllerBase
                 {
                     var compareReq = new HttpRequestMessage(HttpMethod.Get,
                         $"https://api.github.com/repos/{repo}/compare/{baseRef}...{headSha}");
-                    compareReq.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+                    compareReq.Headers.UserAgent.ParseAdd("Statefalse");
                     if (!string.IsNullOrEmpty(token))
                         compareReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
@@ -483,7 +483,7 @@ public class PullRequestsController : ControllerBase
         // Fetch PR to get head SHA for the merge request
         var prRequest = new HttpRequestMessage(HttpMethod.Get,
             $"https://api.github.com/repos/{repo}/pulls/{prNumber}");
-        prRequest.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        prRequest.Headers.UserAgent.ParseAdd("Statefalse");
         prRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
         HttpResponseMessage prResponse;
@@ -499,7 +499,7 @@ public class PullRequestsController : ControllerBase
 
         var mergeRequest = new HttpRequestMessage(HttpMethod.Put,
             $"https://api.github.com/repos/{repo}/pulls/{prNumber}/merge");
-        mergeRequest.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        mergeRequest.Headers.UserAgent.ParseAdd("Statefalse");
         mergeRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
         var mergeBody = new
@@ -565,7 +565,7 @@ public class PullRequestsController : ControllerBase
         {
             var getReq = new HttpRequestMessage(HttpMethod.Get,
                 $"https://api.github.com/repos/{repo}/pulls/{prNumber}");
-            getReq.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+            getReq.Headers.UserAgent.ParseAdd("Statefalse");
             getReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
             HttpResponseMessage getResp;
             try { getResp = await _githubClient.SendAsync(getReq); }
@@ -585,7 +585,7 @@ public class PullRequestsController : ControllerBase
         Console.WriteLine($"[SetDraft] GraphQL mutation: {mutationName}");
 
         var gqlReq = new HttpRequestMessage(HttpMethod.Post, "https://api.github.com/graphql");
-        gqlReq.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        gqlReq.Headers.UserAgent.ParseAdd("Statefalse");
         gqlReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
         gqlReq.Content = new StringContent(
             JsonSerializer.Serialize(new { query = gql }),
@@ -646,7 +646,7 @@ public class PullRequestsController : ControllerBase
 
         var request = new HttpRequestMessage(HttpMethod.Put,
             $"https://api.github.com/repos/{repo}/pulls/{prNumber}/update-branch");
-        request.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        request.Headers.UserAgent.ParseAdd("Statefalse");
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
         request.Content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
 
@@ -706,7 +706,7 @@ public class PullRequestsController : ControllerBase
 
         var req = new HttpRequestMessage(HttpMethod.Get,
             $"https://api.github.com/repos/{repo}/pulls/{prNumber}/commits?per_page=30");
-        req.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        req.Headers.UserAgent.ParseAdd("Statefalse");
         req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
         HttpResponseMessage resp;
@@ -744,7 +744,7 @@ public class PullRequestsController : ControllerBase
 
         var req = new HttpRequestMessage(HttpMethod.Get,
             $"https://api.github.com/repos/{repo}/pulls/{prNumber}/files?per_page=30");
-        req.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        req.Headers.UserAgent.ParseAdd("Statefalse");
         req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
         HttpResponseMessage resp;
@@ -780,7 +780,7 @@ public class PullRequestsController : ControllerBase
         // First get PR to get head SHA
         var prReq = new HttpRequestMessage(HttpMethod.Get,
             $"https://api.github.com/repos/{repo}/pulls/{prNumber}");
-        prReq.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        prReq.Headers.UserAgent.ParseAdd("Statefalse");
         prReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
         HttpResponseMessage prResp;
@@ -799,7 +799,7 @@ public class PullRequestsController : ControllerBase
         // Now fetch check runs for that SHA
         var crReq = new HttpRequestMessage(HttpMethod.Get,
             $"https://api.github.com/repos/{repo}/commits/{headSha}/check-runs?per_page=100");
-        crReq.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        crReq.Headers.UserAgent.ParseAdd("Statefalse");
         crReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
         HttpResponseMessage crResp;
@@ -832,7 +832,7 @@ public class PullRequestsController : ControllerBase
         try
         {
             var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{repoFullName}/pulls/{prNumber}");
-            request.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+            request.Headers.UserAgent.ParseAdd("Statefalse");
             if (!string.IsNullOrEmpty(token))
                 request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
@@ -881,7 +881,7 @@ public class PullRequestsController : ControllerBase
         {
             var request = new HttpRequestMessage(HttpMethod.Get,
                 $"https://api.github.com/repos/{repo}/commits/{sha}/check-runs?per_page=100");
-            request.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+            request.Headers.UserAgent.ParseAdd("Statefalse");
             request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
             var response = await _githubClient.SendAsync(request);
@@ -963,7 +963,7 @@ public class PullRequestsController : ControllerBase
         {
             var request = new HttpRequestMessage(HttpMethod.Get,
                 $"https://api.github.com/repos/{repoFullName}/pulls/{prNumber}/reviews?per_page=100");
-            request.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+            request.Headers.UserAgent.ParseAdd("Statefalse");
             request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
             var response = await _githubClient.SendAsync(request);

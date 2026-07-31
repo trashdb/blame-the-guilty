@@ -4,11 +4,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using BlameTheGuilty.Api.Data;
-using BlameTheGuilty.Api.Hubs;
-using BlameTheGuilty.Api.Models;
+using Statefalse.Api.Data;
+using Statefalse.Api.Hubs;
+using Statefalse.Api.Models;
 
-namespace BlameTheGuilty.Api.Controllers;
+namespace Statefalse.Api.Controllers;
 
 [ApiController]
 [Route("api/workflows")]
@@ -172,7 +172,7 @@ public class WorkflowsController : ControllerBase
 
         var request = new HttpRequestMessage(HttpMethod.Post,
             $"https://api.github.com/repos/{run.Repo}/actions/runs/{run.RunId}/rerun");
-        request.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        request.Headers.UserAgent.ParseAdd("Statefalse");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github.v3+json"));
 
@@ -236,7 +236,7 @@ public class WorkflowsController : ControllerBase
             return Ok(new { synced = 0, repos = 0, message = "No active PRs found." });
 
         var client = new HttpClient();
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("BlameTheGuilty");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("Statefalse");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var newCount = 0;

@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-private let conflictLog = OSLog(subsystem: "com.blametheguilty", category: "conflicts")
+private let conflictLog = OSLog(subsystem: "com.statefalse", category: "conflicts")
 
 class ConflictWatcherService: ConflictWatcherServiceProtocol {
     private weak var signalR: SignalRService?

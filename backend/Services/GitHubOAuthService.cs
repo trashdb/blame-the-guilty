@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 
-namespace BlameTheGuilty.Api.Services;
+namespace Statefalse.Api.Services;
 
 public class GitHubOAuthOptions
 {
@@ -54,7 +54,7 @@ public class GitHubOAuthService
             return null;
 
         using var userRequest = new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/user");
-        userRequest.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        userRequest.Headers.UserAgent.ParseAdd("Statefalse");
         userRequest.Headers.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
 

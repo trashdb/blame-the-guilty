@@ -1,7 +1,7 @@
 import SwiftUI
 import OSLog
 
-private let draftLog = OSLog(subsystem: "com.blametheguilty", category: "draft")
+private let draftLog = OSLog(subsystem: "com.statefalse", category: "draft")
 
 private struct PRDetailsResponse: Decodable {
     let mergeableState: String?
@@ -171,7 +171,7 @@ struct PRDetailView: View {
                 }
 
                 // Subscriber management
-                if !pr.isMerged && pr.repo != "trashdb/blame-the-guilty" {
+                if !pr.isMerged && pr.repo != "trashdb/statefalse" {
                     let isAuthor = pr.authorGitHubId != nil && pr.authorGitHubId == gitHubId
                     if isAuthor {
                         SubscriberManagementView(

@@ -2,7 +2,7 @@ import Foundation
 import Security
 
 enum KeychainService {
-    static let service = "com.blametheguilty.app"
+    static let service = "com.statefalse.app"
     private static let account = "github-session"
     private static let oldService = "com.personal.btg"
 

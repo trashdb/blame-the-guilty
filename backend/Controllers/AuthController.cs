@@ -1,11 +1,11 @@
 using System.Web;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using BlameTheGuilty.Api.Data;
-using BlameTheGuilty.Api.Models;
-using BlameTheGuilty.Api.Services;
+using Statefalse.Api.Data;
+using Statefalse.Api.Models;
+using Statefalse.Api.Services;
 
-namespace BlameTheGuilty.Api.Controllers;
+namespace Statefalse.Api.Controllers;
 
 [ApiController]
 [Route("api/auth")]

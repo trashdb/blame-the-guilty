@@ -2,7 +2,7 @@ import ServiceManagement
 import SwiftUI
 
 @main
-struct BlameTheGuiltyApp: App {
+struct StatefalseApp: App {
     @StateObject private var signalR = SignalRService(baseUrl: backendUrl)
     @State private var conflictWatcher: ConflictWatcherService?
 

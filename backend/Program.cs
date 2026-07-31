@@ -3,13 +3,13 @@ using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
 using Serilog;
 using Scalar.AspNetCore;
-using BlameTheGuilty.Api.Data;
-using BlameTheGuilty.Api.Hubs;
-using BlameTheGuilty.Api.Services;
+using Statefalse.Api.Data;
+using Statefalse.Api.Hubs;
+using Statefalse.Api.Services;
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
-    .WriteTo.File("logs/blame-api-.log", rollingInterval: RollingInterval.Day,
+    .WriteTo.File("logs/statefalse-api-.log", rollingInterval: RollingInterval.Day,
         retainedFileCountLimit: 30, restrictedToMinimumLevel: Serilog.Events.LogEventLevel.Warning)
     .CreateBootstrapLogger();
 
@@ -22,7 +22,7 @@ try
         config.ReadFrom.Configuration(context.Configuration)
             .Enrich.FromLogContext()
             .WriteTo.Console()
-            .WriteTo.File("logs/blame-api-.log", rollingInterval: RollingInterval.Day,
+            .WriteTo.File("logs/statefalse-api-.log", rollingInterval: RollingInterval.Day,
                 retainedFileCountLimit: 30);
     });
 

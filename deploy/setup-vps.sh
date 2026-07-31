@@ -2,7 +2,7 @@
 # Run this ONCE on the VPS via: ssh user@vps "sudo bash -s" < deploy/setup-vps.sh
 set -euo pipefail
 
-APP_DIR="/opt/blame-the-guilty"
+APP_DIR="/opt/statefalse"
 
 echo "=== Creating directory ==="
 sudo mkdir -p "$APP_DIR"
@@ -24,14 +24,14 @@ echo "Run this to set your ngrok token (get it from https://dashboard.ngrok.com)
 echo "  sudo ngrok config add-authtoken TU_NGROK_TOKEN"
 echo ""
 echo "After that, install the systemd services:"
-echo "  sudo cp deploy/blame-the-guilty.service          /etc/systemd/system/"
-echo "  sudo cp deploy/blame-the-guilty-tunnel.service    /etc/systemd/system/"
+echo "  sudo cp deploy/statefalse.service          /etc/systemd/system/"
+echo "  sudo cp deploy/statefalse-tunnel.service    /etc/systemd/system/"
 echo "  sudo systemctl daemon-reload"
-echo "  sudo systemctl enable blame-the-guilty blame-the-guilty-tunnel"
+echo "  sudo systemctl enable statefalse statefalse-tunnel"
 echo ""
 echo "Then deploy the binary from your Mac:"
 echo "  ./deploy.sh user@TU_VPS_IP"
 echo ""
 echo "Finally start everything:"
-echo "  sudo systemctl start blame-the-guilty blame-the-guilty-tunnel"
-echo "  sudo systemctl status blame-the-guilty blame-the-guilty-tunnel"
+echo "  sudo systemctl start statefalse statefalse-tunnel"
+echo "  sudo systemctl status statefalse statefalse-tunnel"

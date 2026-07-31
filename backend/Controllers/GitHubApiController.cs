@@ -4,11 +4,11 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using BlameTheGuilty.Api.Data;
-using BlameTheGuilty.Api.Hubs;
-using BlameTheGuilty.Api.Models;
+using Statefalse.Api.Data;
+using Statefalse.Api.Hubs;
+using Statefalse.Api.Models;
 
-namespace BlameTheGuilty.Api.Controllers;
+namespace Statefalse.Api.Controllers;
 
 [ApiController]
 [Route("api/github")]
@@ -37,7 +37,7 @@ public class GitHubApiController : ControllerBase
             return Unauthorized(new { error = "No token" });
 
         var listReq = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{repo}/branches?per_page=100");
-        listReq.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        listReq.Headers.UserAgent.ParseAdd("Statefalse");
         listReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var listResp = await _client.SendAsync(listReq);
@@ -65,7 +65,7 @@ public class GitHubApiController : ControllerBase
                 var detailReq = new HttpRequestMessage(
                     HttpMethod.Get,
                     $"https://api.github.com/repos/{repo}/branches/{branchName}");
-                detailReq.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+                detailReq.Headers.UserAgent.ParseAdd("Statefalse");
                 detailReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
                 var detailResp = await _client.SendAsync(detailReq, ct);
@@ -119,7 +119,7 @@ public class GitHubApiController : ControllerBase
         };
 
         var req = new HttpRequestMessage(HttpMethod.Post, $"https://api.github.com/repos/{repo}/pulls");
-        req.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        req.Headers.UserAgent.ParseAdd("Statefalse");
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         req.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
 
@@ -156,7 +156,7 @@ public class GitHubApiController : ControllerBase
                 var existingReq = new HttpRequestMessage(
                     HttpMethod.Get,
                     $"https://api.github.com/repos/{repo}/pulls?state=open&per_page=100");
-                existingReq.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+                existingReq.Headers.UserAgent.ParseAdd("Statefalse");
                 existingReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
                 var existingResp = await _client.SendAsync(existingReq);
@@ -427,7 +427,7 @@ Only respond with the JSON object, no other text.";
         };
 
         var req = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/chat/completions");
-        req.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        req.Headers.UserAgent.ParseAdd("Statefalse");
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
 
@@ -471,7 +471,7 @@ Only respond with the JSON object, no other text.";
         };
 
         var req = new HttpRequestMessage(HttpMethod.Post, "https://api.anthropic.com/v1/messages");
-        req.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        req.Headers.UserAgent.ParseAdd("Statefalse");
         req.Headers.Add("x-api-key", apiKey);
         req.Headers.Add("anthropic-version", "2023-06-01");
         req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
@@ -525,7 +525,7 @@ Only respond with the JSON object, no other text.";
 
         var url = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={apiKey}";
         var req = new HttpRequestMessage(HttpMethod.Post, url);
-        req.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        req.Headers.UserAgent.ParseAdd("Statefalse");
         req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
 
         try
@@ -562,7 +562,7 @@ Only respond with the JSON object, no other text.";
     {
         var req = new HttpRequestMessage(HttpMethod.Get,
             $"https://api.github.com/repos/{repo}/contents/{Uri.EscapeDataString(path)}");
-        req.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        req.Headers.UserAgent.ParseAdd("Statefalse");
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var resp = await _client.SendAsync(req);
@@ -585,7 +585,7 @@ Only respond with the JSON object, no other text.";
         var encodedHead = Uri.EscapeDataString(headRef);
         var req = new HttpRequestMessage(HttpMethod.Get,
             $"https://api.github.com/repos/{repo}/compare/{encodedBase}...{encodedHead}");
-        req.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+        req.Headers.UserAgent.ParseAdd("Statefalse");
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var resp = await _client.SendAsync(req);
@@ -625,7 +625,7 @@ Only respond with the JSON object, no other text.";
             };
 
             var req = new HttpRequestMessage(HttpMethod.Post, "https://api.githubcopilot.com/chat/completions");
-            req.Headers.UserAgent.ParseAdd("BlameTheGuilty");
+            req.Headers.UserAgent.ParseAdd("Statefalse");
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", oauthToken);
             req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
 

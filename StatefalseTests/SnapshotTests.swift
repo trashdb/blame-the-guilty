@@ -1,6 +1,6 @@
 import Testing
 import SwiftUI
-@testable import BlameTheGuilty
+@testable import Statefalse
 
 @MainActor
 struct SnapshotTests {

@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-private let branchLog = OSLog(subsystem: "com.blametheguilty", category: "branches")
+private let branchLog = OSLog(subsystem: "com.statefalse", category: "branches")
 
 struct ScannedRepo: Identifiable {
     var id: String { path }

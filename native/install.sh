@@ -1,6 +1,6 @@
 #!/bin/bash
 # install.sh
-# Builds the BlameTheGuilty Xcode project and installs it in ~/Applications.
+# Builds the Statefalse Xcode project and installs it in ~/Applications.
 #
 # Usage:
 #   bash install.sh
@@ -8,12 +8,12 @@
 
 set -e
 
-APP_NAME="BlameTheGuilty"
+APP_NAME="Statefalse"
 INSTALL_DIR="$HOME/Applications"
 APP_BUNDLE="$INSTALL_DIR/$APP_NAME.app"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-echo "🔍 Building BlameTheGuilty…"
+echo "🔍 Building Statefalse…"
 
 if ! xcodebuild -project "$SCRIPT_DIR/btg.xcodeproj" -scheme "$APP_NAME" -configuration Release build; then
   echo "  ⚠️  Xcode CLI build failed, falling back to existing build…"
@@ -27,7 +27,7 @@ XC_APP=$(find "$HOME/Library/Developer/Xcode/DerivedData" \
 done | sort -rn | head -1 | cut -d' ' -f2-)
 
 if [ -z "$XC_APP" ]; then
-  echo "❌  BlameTheGuilty.app not found. Open the project in Xcode and run Product → Archive or build Release first."
+  echo "❌  Statefalse.app not found. Open the project in Xcode and run Product → Archive or build Release first."
   exit 1
 fi
 
@@ -51,4 +51,4 @@ sleep 0.5
 open "$APP_BUNDLE"
 
 echo ""
-echo "Done. BlameTheGuilty now runs from ~/Applications as a proper .app."
+echo "Done. Statefalse now runs from ~/Applications as a proper .app."

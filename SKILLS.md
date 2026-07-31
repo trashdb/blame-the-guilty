@@ -1,4 +1,4 @@
-# SKILLS.md — Blame the Guilty
+# SKILLS.md — statefalse
 
 Specialized workflows. Load relevant skill when task matches.
 
@@ -14,10 +14,10 @@ Deploy backend to VPS.
 
 Steps:
 1. `dotnet publish` in `backend/` → Release, self-contained, linux-x64
-2. `rsync` to VPS (`underlayer`) at `/opt/blame-the-guilty/`
-3. `ssh underlayer 'sudo systemctl restart blame-the-guilty'`
+2. `rsync` to VPS (`underlayer`) at `/opt/statefalse/`
+3. `ssh underlayer 'sudo systemctl restart statefalse'`
 
-Verify: `ssh underlayer 'sudo journalctl -u blame-the-guilty -f'`
+Verify: `ssh underlayer 'sudo journalctl -u statefalse -f'`
 
 ---
 
@@ -44,7 +44,7 @@ Run all tests.
 cd tests-backend && dotnet test
 
 # Swift (from native/)
-xcodebuild test -scheme BlameTheGuiltyTests -project btg.xcodeproj \
+xcodebuild test -scheme StatefalseTests -project btg.xcodeproj \
   -destination 'platform=macOS'
 ```
 
@@ -79,7 +79,7 @@ Add new SwiftUI view.
 
 Debug webhook processing.
 
-1. Check VPS logs: `ssh underlayer 'sudo journalctl -u blame-the-guilty -f'`
+1. Check VPS logs: `ssh underlayer 'sudo journalctl -u statefalse -f'`
 2. Check recent webhooks: `curl http://localhost:5000/api/webhook/logs?limit=10`
 3. Verify HMAC: check `WebhookSecret` in systemd env
 4. Test payload: use `docs.md` curl examples

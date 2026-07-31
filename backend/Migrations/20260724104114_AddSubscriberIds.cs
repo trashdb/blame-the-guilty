@@ -2,7 +2,7 @@
 
 #nullable disable
 
-namespace BlameTheGuilty.Api.Migrations
+namespace Statefalse.Api.Migrations
 {
     /// <inheritdoc />
     public partial class AddSubscriberIds : Migration

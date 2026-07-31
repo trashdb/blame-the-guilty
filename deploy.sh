@@ -3,7 +3,7 @@
 set -euo pipefail
 
 VPS="${1:?Usage: ./deploy.sh user@vps-ip}"
-REMOTE="/opt/blame-the-guilty"
+REMOTE="/opt/statefalse"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 cd "$SCRIPT_DIR/backend"
@@ -29,12 +29,12 @@ echo "or add it to appsettings.Production.json before restarting."
 echo "Generate a secret with: openssl rand -hex 32"
 
 echo "=== Setting permissions ==="
-ssh "$VPS" "sudo chmod +x $REMOTE/BlameTheGuilty.Api"
+ssh "$VPS" "sudo chmod +x $REMOTE/Statefalse.Api"
 
 echo "=== Restarting service ==="
-ssh "$VPS" "sudo systemctl daemon-reload && sudo systemctl restart blame-the-guilty"
+ssh "$VPS" "sudo systemctl daemon-reload && sudo systemctl restart statefalse"
 
 echo ""
 echo "=== Done! ==="
-echo "Logs: ssh $VPS 'sudo journalctl -u blame-the-guilty -f'"
-echo "Status: ssh $VPS 'sudo systemctl status blame-the-guilty'"
+echo "Logs: ssh $VPS 'sudo journalctl -u statefalse -f'"
+echo "Status: ssh $VPS 'sudo systemctl status statefalse'"

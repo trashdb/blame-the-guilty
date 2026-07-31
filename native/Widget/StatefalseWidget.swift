@@ -1,30 +1,30 @@
 import WidgetKit
 import SwiftUI
 
-struct BlameTheGuiltyWidget: Widget {
-    let kind: String = "BlameTheGuiltyWidget"
+struct StatefalseWidget: Widget {
+    let kind: String = "StatefalseWidget"
 
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: BlameProvider()) { entry in
-            BlameWidgetEntryView(entry: entry)
+        StaticConfiguration(kind: kind, provider: StatefalseProvider()) { entry in
+            StatefalseWidgetEntryView(entry: entry)
         }
-        .configurationDisplayName("Blame the Guilty")
+        .configurationDisplayName("statefalse")
         .description("Shows your PR status at a glance.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
 
-struct BlameProvider: TimelineProvider {
-    func placeholder(in context: Context) -> BlameEntry {
-        BlameEntry(date: Date(), prCount: 3, status: "CI Ready", recentPR: "Fix auth bug")
+struct StatefalseProvider: TimelineProvider {
+    func placeholder(in context: Context) -> StatefalseEntry {
+        StatefalseEntry(date: Date(), prCount: 3, status: "CI Ready", recentPR: "Fix auth bug")
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (BlameEntry) -> Void) {
-        let entry = BlameEntry(date: Date(), prCount: 0, status: "Loading…", recentPR: nil)
+    func getSnapshot(in context: Context, completion: @escaping (StatefalseEntry) -> Void) {
+        let entry = StatefalseEntry(date: Date(), prCount: 0, status: "Loading…", recentPR: nil)
         completion(entry)
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<BlameEntry>) -> Void) {
+    func getTimeline(in context: Context, completion: @escaping (Timeline<StatefalseEntry>) -> Void) {
         Task {
             let entry = await fetchEntry()
             let nextUpdate = Calendar.current.date(byAdding: .minute, value: 5, to: Date())!
@@ -33,11 +33,11 @@ struct BlameProvider: TimelineProvider {
         }
     }
 
-    private func fetchEntry() async -> BlameEntry {
+    private func fetchEntry() async -> StatefalseEntry {
         let urlString = "\(TeamDefaults.backendUrl)/api/pullrequests/active?gitHubId=0"
         guard let url = URL(string: urlString),
               let (data, _) = try? await URLSession.shared.data(from: url) else {
-            return BlameEntry(date: Date(), prCount: 0, status: "Offline", recentPR: nil)
+            return StatefalseEntry(date: Date(), prCount: 0, status: "Offline", recentPR: nil)
         }
 
         struct PRResponse: Decodable {
@@ -47,26 +47,26 @@ struct BlameProvider: TimelineProvider {
         }
 
         guard let prs = try? JSONDecoder().decode([PRResponse].self, from: data) else {
-            return BlameEntry(date: Date(), prCount: 0, status: "Error", recentPR: nil)
+            return StatefalseEntry(date: Date(), prCount: 0, status: "Error", recentPR: nil)
         }
 
         let failing = prs.filter { $0.ciStatus == "failed" }.count
         let status = failing > 0 ? "\(failing) failing" : "\(prs.count) active"
         let recent = prs.first.map { "PR #\($0.prNumber): \($0.title)" }
 
-        return BlameEntry(date: Date(), prCount: prs.count, status: status, recentPR: recent)
+        return StatefalseEntry(date: Date(), prCount: prs.count, status: status, recentPR: recent)
     }
 }
 
-struct BlameEntry: TimelineEntry {
+struct StatefalseEntry: TimelineEntry {
     let date: Date
     let prCount: Int
     let status: String
     let recentPR: String?
 }
 
-struct BlameWidgetEntryView: View {
-    var entry: BlameEntry
+struct StatefalseWidgetEntryView: View {
+    var entry: StatefalseEntry
     @Environment(\.widgetFamily) var family
 
     var body: some View {
@@ -74,9 +74,9 @@ struct BlameWidgetEntryView: View {
             Color.black
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Image(systemName: "flame.fill")
-                        .foregroundStyle(.red)
-                    Text("Blame the Guilty")
+                    StatefalseMark(color: .red, markColor: .red)
+                        .font(.caption)
+                    Text("statefalse")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -111,8 +111,8 @@ struct BlameWidgetEntryView: View {
 }
 
 #Preview(as: .systemSmall) {
-    BlameTheGuiltyWidget()
+    StatefalseWidget()
 } timeline: {
-    BlameEntry(date: Date(), prCount: 5, status: "CI Ready", recentPR: "Fix auth bug")
-    BlameEntry(date: Date(), prCount: 3, status: "2 failing", recentPR: "Update deps")
+    StatefalseEntry(date: Date(), prCount: 5, status: "CI Ready", recentPR: "Fix auth bug")
+    StatefalseEntry(date: Date(), prCount: 3, status: "2 failing", recentPR: "Update deps")
 }

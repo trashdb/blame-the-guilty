@@ -608,6 +608,24 @@ extension DS.Color {
     }
 }
 
+// MARK: - App Mark
+/// App identity mark: `{ ✕ }` — build state false.
+struct StatefalseMark: View {
+    var color: SwiftUI.Color = DS.Color.accent
+    var markColor: SwiftUI.Color = DS.Color.statusRed
+
+    var body: some View {
+        ZStack {
+            Image(systemName: "curlybraces")
+            Image(systemName: "xmark")
+                .fontWeight(.heavy)
+                .scaleEffect(0.34)
+                .foregroundStyle(markColor)
+        }
+        .foregroundStyle(color)
+    }
+}
+
 // MARK: - Notification Names
 extension Notification.Name {
     static let prSubscriptionChanged = Notification.Name("prSubscriptionChanged")

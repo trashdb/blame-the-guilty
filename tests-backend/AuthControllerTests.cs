@@ -1,14 +1,14 @@
 using System.Net;
 using System.Net.Http.Json;
-using BlameTheGuilty.Api.Data;
-using BlameTheGuilty.Api.Models;
+using Statefalse.Api.Data;
+using Statefalse.Api.Models;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
-namespace BlameTheGuilty.Api.Tests;
+namespace Statefalse.Api.Tests;
 
 [Collection("BackendIntegration")]
 public class AuthControllerTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable

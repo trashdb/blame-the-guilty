@@ -9,7 +9,7 @@ enum SnapshotTesting {
     static var referenceDirectory: URL {
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()  // SnapshotTests/
-            .deletingLastPathComponent()  // BlameTheGuiltyTests/
+            .deletingLastPathComponent()  // StatefalseTests/
             .appendingPathComponent("ReferenceImages")
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url

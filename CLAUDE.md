@@ -1,4 +1,4 @@
-# CLAUDE.md — Blame the Guilty
+# CLAUDE.md — statefalse
 
 <!-- caveman:activate -->
 Respond terse like smart caveman. All technical substance stay. Only fluff die.
@@ -19,7 +19,7 @@ Boundaries: code/commits/PRs written normal.
 
 ---
 
-## Project: Blame the Guilty
+## Project: statefalse
 
 GitHub PR/workflow monitor. macOS menu-bar app + .NET backend + SQLite + SignalR.
 
@@ -28,7 +28,7 @@ GitHub PR/workflow monitor. macOS menu-bar app + .NET backend + SQLite + SignalR
 ```
 [macOS App (SwiftUI)] ←SignalR+REST→ [ngrok tunnel] → [ASP.NET Kestrel:5000]
                                        (Hetzner VPS)       ↓
-                                                    SQLite /var/lib/blame-the-guilty/
+                                                    SQLite /var/lib/statefalse/
 ```
 
 ### Stack
@@ -60,7 +60,7 @@ backend/
   Migrations/                     ← EF migrations
 
 native/
-  App/BlameTheGuiltyApp.swift     ← NSStatusItem, no Dock
+  App/StatefalseApp.swift     ← NSStatusItem, no Dock
   Models/Models.swift             ← Swift DTOs
   Services/
     SignalRService.swift          ← WebSocket, reconnect, event parsing
@@ -92,7 +92,7 @@ cd backend && dotnet run
 cd tests-backend && dotnet test
 
 # Logs
-ssh underlayer 'sudo journalctl -u blame-the-guilty -f'
+ssh underlayer 'sudo journalctl -u statefalse -f'
 ```
 
 ### Conventions
