@@ -16,8 +16,6 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: DS.Spacing.xl) {
                     // Header
                     HStack(spacing: DS.Spacing.md) {
-                        StatefalseMark()
-                            .font(DS.Font.title)
                         Text("StateFalse")
                             .font(DS.Font.largeTitle)
                     }
