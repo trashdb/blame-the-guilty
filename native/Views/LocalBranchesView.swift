@@ -76,15 +76,26 @@ struct LocalBranchesView: View {
                 .transition(.opacity)
             }
 
-            ScrollView {
-                LazyVStack(spacing: DS.Spacing.xs) {
-                    ForEach(repos) { repo in
-                        repoRow(repo)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: DS.Spacing.xs) {
+                        ForEach(repos) { repo in
+                            repoRow(repo)
+                        }
                     }
+                    .animation(DS.Animation.default, value: repos.count)
                 }
-                .animation(DS.Animation.default, value: repos.count)
+                .frame(height: 180)
+                .onChange(of: repos.contains { $0.isExpanded }) { _, _ in
+                    scrollTopIfCollapsed(proxy)
+                }
+                .onChange(of: selectedTab) { _, _ in
+                    scrollTopIfCollapsed(proxy)
+                }
+                .onChange(of: repos.count) { _, _ in
+                    scrollTopIfCollapsed(proxy)
+                }
             }
-            .frame(height: 180)
         }
         .animation(DS.Animation.default, value: showDeleteConfirmation)
         .overlay(alignment: .center) {
@@ -346,6 +357,11 @@ struct LocalBranchesView: View {
             .padding(.trailing, DS.Spacing.md)
             .padding(.vertical, DS.Spacing.xs)
         }
+    }
+
+    private func scrollTopIfCollapsed(_ proxy: ScrollViewProxy) {
+        guard !repos.contains(where: { $0.isExpanded }), let first = repos.first else { return }
+        proxy.scrollTo(first.id, anchor: .top)
     }
 
     private func scan() async {
