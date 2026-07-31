@@ -30,7 +30,8 @@ struct CreatePRPreviewView: View {
     @State private var selectedUserIds: Set<Int64> = []
     @State private var showSubscriberPicker = false
 
-    @State private var useAI = true
+    @State private var isGeneratingAI = false
+    @State private var summaryError: String?
 
     private let git = currentDependencies.gitService
 
@@ -73,26 +74,10 @@ struct CreatePRPreviewView: View {
                         .overlay(RoundedRectangle(cornerRadius: 5).stroke(.white.opacity(0.1), lineWidth: 1))
                 }
 
-                Toggle(isOn: $useAI) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "sparkle")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.purple)
-                        Text("Generate description with AI (Copilot)")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .toggleStyle(.switch)
-                .controlSize(.mini)
-                .onChange(of: useAI) { _, _ in
-                    Task { await loadPreview() }
-                }
-
                 if isLoading {
                     HStack(spacing: 6) {
                         ProgressView().scaleEffect(0.5)
-                        Text("Loading template…")
+                        Text(isGeneratingAI ? "Generating AI summary…" : "Loading template…")
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
                     }
@@ -115,6 +100,23 @@ struct CreatePRPreviewView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(.purple.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
                     }
+                } else if let summaryError, !summaryError.isEmpty {
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "sparkle.slash")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.orange)
+                            Text("AI summary unavailable")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(.orange)
+                        }
+                        Text(summaryError)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.orange)
+                            .padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 3) {
@@ -122,6 +124,28 @@ struct CreatePRPreviewView: View {
                         Text("Description").font(.system(size: 10)).foregroundStyle(.secondary)
                         if isLoading {
                             ProgressView().scaleEffect(0.4)
+                        }
+                        Spacer()
+                        if isGeneratingAI {
+                            ProgressView().scaleEffect(0.5).frame(width: 12)
+                        } else if (summary?.isEmpty ?? true) {
+                            Button {
+                                Task { await generateWithAI() }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "sparkle")
+                                        .font(.system(size: 9))
+                                    Text("Generate with AI")
+                                        .font(.system(size: 9, weight: .medium))
+                                }
+                                .foregroundStyle(.purple)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(.purple.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(isLoading)
+                            .cursor(.pointingHand)
                         }
                     }
                     ScrollView {
@@ -245,15 +269,17 @@ struct CreatePRPreviewView: View {
             }
         }
         .frame(width: 440, height: 440)
-        .onAppear { Task { await loadPreview() } }
+        .onAppear { Task { await loadPreview(useAI: false) } }
     }
 
-    private func loadPreview() async {
+    private func loadPreview(useAI: Bool) async {
         guard let fullName = await git.repoFullName(repoPath: repoPath) else {
             errorMessage = "Could not determine repo owner/name"
             isLoading = false
             return
         }
+        summary = nil
+        summaryError = nil
         let base = await git.baseRefName(repoPath: repoPath) ?? "main"
         let cleanBase = base.hasPrefix("origin/") ? String(base.dropFirst(7)) : base
         let repoEncoded = fullName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? fullName
@@ -284,7 +310,7 @@ struct CreatePRPreviewView: View {
             let decoded = try JSONDecoder().decode(PreviewData.self, from: data)
             summary = decoded.summary.isEmpty ? nil : decoded.summary
             if let err = decoded.summaryError, !err.isEmpty {
-                errorMessage = err
+                summaryError = err
             }
             if !decoded.suggestedBody.isEmpty {
                 bodyText = decoded.suggestedBody
@@ -294,6 +320,13 @@ struct CreatePRPreviewView: View {
             errorMessage = error.localizedDescription
         }
         isLoading = false
+    }
+
+    private func generateWithAI() async {
+        isGeneratingAI = true
+        errorMessage = nil
+        await loadPreview(useAI: true)
+        isGeneratingAI = false
     }
 
     private func createPR() async {
