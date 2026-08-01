@@ -1,46 +1,12 @@
 import Combine
 import Foundation
 
-private struct ApiWorkflowRun: Decodable {
-    let id: Int
-    let runId: Int64
-    let workflowName: String?
-    let repo: String
-    let actor: String
-    let headBranch: String?
-    let trigger: String?
-    let prNumber: Int?
-    let prTitle: String?
-    let status: String
-    let htmlUrl: String?
-    let startedAt: Date
-    let targetGitHubIds: [Int64]?
-
-    func toWorkflowRun() -> WorkflowRun {
-        WorkflowRun(
-            id: UUID(),
-            dbId: id,
-            runId: runId,
-            workflowName: workflowName ?? "Workflow",
-            repo: repo,
-            actor: actor,
-            headBranch: headBranch,
-            trigger: trigger,
-            prNumber: prNumber,
-            prTitle: prTitle,
-            status: status,
-            htmlUrl: htmlUrl ?? "",
-            startedAt: startedAt,
-            completedAt: nil,
-            targetGitHubIds: targetGitHubIds ?? []
-        )
-    }
-}
-
 enum RunStatus: Equatable {
     case idle, running, success, failure
 }
 
+/// Facade orchestrator: owns observable UI state and domain rules, delegates
+/// transport to `ApiClient` (REST) and `SignalRClient` (websocket).
 class SignalRService: ObservableObject, SignalRServiceProtocol {
     @Published var isConnected = false
     @Published var isLoggedIn = false
@@ -56,6 +22,8 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
     var onMainBranchUpdated: ((String, Int, String, String?) -> Void)?
 
     let baseUrl: String
+    private let api: ApiClientProtocol
+    private let signalRClient: SignalRClientProtocol
     private var task: Task<Void, Never>?
     private var gitHubId: Int64 = 0
     private var pollTask: Task<Void, Never>?
@@ -70,11 +38,20 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
     private let persistence: PersistenceServiceProtocol
     private let oauth: OAuthServiceProtocol
 
-    init(baseUrl: String, keychain: KeychainServiceProtocol = LiveKeychainService(), persistence: PersistenceServiceProtocol = LivePersistenceService(), oauth: OAuthServiceProtocol = LiveOAuthService()) {
+    init(
+        baseUrl: String,
+        keychain: KeychainServiceProtocol = LiveKeychainService(),
+        persistence: PersistenceServiceProtocol = LivePersistenceService(),
+        oauth: OAuthServiceProtocol = LiveOAuthService(),
+        api: ApiClientProtocol? = nil,
+        signalRClient: SignalRClientProtocol? = nil
+    ) {
         self.baseUrl = baseUrl
         self.keychain = keychain
         self.persistence = persistence
         self.oauth = oauth
+        self.api = api ?? LiveApiClient(baseUrl: baseUrl)
+        self.signalRClient = signalRClient ?? LiveSignalRClient(baseUrl: baseUrl)
     }
 
     func restoreSession() {
@@ -94,7 +71,7 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
             await syncFromApi(gitHubId: gid)
             await syncPRsFromApi(gitHubId: gid)
 
-            if let fresh = await fetchMe(gitHubId: gid), let url = fresh.avatarUrl {
+            if let fresh = await api.fetchMe(gitHubId: gid), let url = fresh.avatarUrl {
                 await MainActor.run { avatarUrl = url }
                 keychain.save(gitHubId: gid, username: session.username, avatarUrl: url)
             }
@@ -102,18 +79,6 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
 
         guard task == nil else { return }
         connect(gitHubId: gid, username: session.username)
-    }
-
-    private struct MeResponse: Decodable {
-        let id: Int64
-        let username: String
-        let avatarUrl: String?
-    }
-
-    private func fetchMe(gitHubId: Int64) async -> MeResponse? {
-        guard let url = URL(string: "\(baseUrl)/api/auth/me?gitHubId=\(gitHubId)") else { return nil }
-        guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
-        return try? JSONDecoder().decode(MeResponse.self, from: data)
     }
 
     func login(keepSignedIn: Bool) async throws {
@@ -158,7 +123,9 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
 
             while !Task.isCancelled {
                 do {
-                    try await connectAndListen(gitHubId: gitHubId, username: username)
+                    try await self.signalRClient.connectAndListen(gitHubId: gitHubId, username: username) { [weak self] event in
+                        self?.handle(event)
+                    }
                 } catch {
                     await MainActor.run { self.isConnected = false }
                     try? await Task.sleep(nanoseconds: 5_000_000_000)
@@ -168,278 +135,156 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
     }
 
     func syncFromApi(gitHubId: Int64) async {
-        guard let url = URL(string: "\(baseUrl)/api/workflows/runs?gitHubId=\(gitHubId)&limit=20") else {
+        guard let runs = await api.fetchWorkflowRuns(gitHubId: gitHubId, limit: 20) else {
             await MainActor.run { loadPersistedHistory() }
             return
         }
-        do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            let decoder = JSONDecoder()
-            let withFrac = ISO8601DateFormatter()
-            withFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            let withoutFrac = ISO8601DateFormatter()
-            withoutFrac.formatOptions = .withInternetDateTime
-            decoder.dateDecodingStrategy = .custom { d in
-                let container = try d.singleValueContainer()
-                var str = try container.decode(String.self)
-                // Normalize: replace space separator with T, append Z if no timezone
-                str = str.replacingOccurrences(of: " ", with: "T")
-                if !str.contains("Z") && !str.contains("+") {
-                    // No timezone indicator — assume UTC
-                    str += "Z"
-                }
-                guard let date = withFrac.date(from: str) ?? withoutFrac.date(from: str) else {
-                    throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid date: \(str)")
-                }
-                return date
-            }
-            if let runs = try? decoder.decode([ApiWorkflowRun].self, from: data) {
-                let mapped = runs.map { $0.toWorkflowRun() }
-                await MainActor.run {
-                    runningWorkflows = mapped.filter { $0.status == "in_progress" }
-                    recentWorkflows = mapped
-                    persistHistory()
-                }
-                return
-            }
-        } catch {}
-        await MainActor.run { loadPersistedHistory() }
-    }
-
-    private func syncPRsFromApi(gitHubId: Int64) async {
-        guard let url = URL(string: "\(baseUrl)/api/pullrequests/active?gitHubId=\(gitHubId)") else { return }
-        do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            struct ApiPR: Decodable {
-                let prNumber: Int64
-                let title: String
-                let repo: String
-                let headBranch: String?
-                let baseBranch: String?
-                let htmlUrl: String?
-                let status: String?
-                let conclusion: String?
-                let draft: Bool?
-                let mergeableState: String?
-                let ciStatus: String?
-                let reviewApproved: Bool?
-                let lastCommentBy: String?
-                let lastCommentBody: String?
-                let lastCommentAt: Date?
-                let isSubscribed: Bool?
-                let subscriberIds: [Int64]?
-                let authorGitHubId: Int64?
-            }
-            if let prs = try? JSONDecoder().decode([ApiPR].self, from: data) {
-                var seen = Set<String>()
-                let unique = prs.filter { seen.insert("\($0.repo)#\($0.prNumber)").inserted }
-                await MainActor.run {
-                    let newPRs = unique.map { pr in
-                        PullRequest(
-                            prNumber: pr.prNumber, title: pr.title,
-                            repo: pr.repo,
-                            headBranch: pr.headBranch ?? "",
-                            baseBranch: pr.baseBranch ?? "",
-                            htmlUrl: URL(string: pr.htmlUrl ?? ""),
-                            status: pr.status ?? "open",
-                            conclusion: pr.conclusion,
-                            draft: pr.draft ?? false,
-                            mergeableState: pr.mergeableState,
-                            ciStatus: pr.ciStatus ?? "ready",
-                            reviewApproved: pr.reviewApproved ?? false,
-                            lastCommentBy: pr.lastCommentBy,
-                            lastCommentBody: pr.lastCommentBody,
-                            lastCommentAt: pr.lastCommentAt,
-                            lastCommentUrl: nil,
-                            lastReviewFilePath: nil,
-                            lastReviewLine: nil,
-                            isSubscribed: pr.isSubscribed ?? false,
-                            subscriberIds: pr.subscriberIds ?? [],
-                            authorGitHubId: pr.authorGitHubId
-                        )
-                    }
-                    notifyNewlyReadyPRs(current: newPRs)
-                    activePRs = newPRs
-                    persistence.save(prs: newPRs)
-                }
-            }
-        } catch {}
-    }
-
-    /// A PR is "ready to merge" when it's open, not a draft, and CI + review are
-    /// green (`ciStatus == "ready"` means approved + checks passing), and GitHub
-    /// doesn't report conflicts.
-    private func isReadyToMerge(_ pr: PullRequest) -> Bool {
-        guard pr.status == "open", !pr.draft, !pr.isMerged else { return false }
-        guard pr.ciStatus == "ready" else { return false }
-        // If GitHub gives us a mergeable state, don't fire on conflicts/behind base.
-        if let state = pr.mergeableState, state == "dirty" || state == "behind" { return false }
-        return true
-    }
-
-    /// Fires a notification when a PR transitions INTO a ready-to-merge state.
-    /// Runs on every PR sync (30s poll + SignalR events). The first sync only
-    /// seeds the set so we don't spam notifications for already-ready PRs on launch.
-    @MainActor
-    private func notifyNewlyReadyPRs(current: [PullRequest]) {
-        let currentIds = Set(current.map { $0.id })
-
-        if !didSeedReadyPRs {
-            didSeedReadyPRs = true
-            readyNotifiedPRs = Set(current.filter { isReadyToMerge($0) }.map { $0.id })
-            return
-        }
-
-        for pr in current where isReadyToMerge(pr) {
-            if readyNotifiedPRs.insert(pr.id).inserted {
-                showNotification(
-                    title: "PR #\(pr.prNumber) ready to merge 🚀",
-                    body: pr.title,
-                    subtitle: shortRepo(pr.repo),
-                    actionURL: pr.prUrl,
-                    style: .info
-                )
-            }
-        }
-        // Allow re-notification if a PR stops being ready (e.g. new commits), and
-        // forget PRs that are gone (merged/closed).
-        readyNotifiedPRs = readyNotifiedPRs.intersection(currentIds)
-        for pr in current where !isReadyToMerge(pr) {
-            readyNotifiedPRs.remove(pr.id)
+        let mapped = runs.map { toWorkflowRun($0) }
+        await MainActor.run {
+            runningWorkflows = mapped.filter { $0.status == "in_progress" }
+            recentWorkflows = mapped
+            persistHistory()
         }
     }
 
-    private func loadPersistedHistory() {
-        let saved = persistence.loadWorkflows()
-        if !saved.isEmpty {
-            recentWorkflows = saved.map { run in
-                if run.status == "in_progress" {
-                    return WorkflowRun(
-                        id: run.id, dbId: run.dbId,
-                        runId: run.runId,
-                        workflowName: run.workflowName,
-                        repo: run.repo, actor: run.actor,
-                        headBranch: run.headBranch,
-                        trigger: run.trigger,
-                        prNumber: run.prNumber,
-                        prTitle: run.prTitle,
-                        status: "cancelled",
-                        htmlUrl: run.htmlUrl, startedAt: run.startedAt,
-                        completedAt: nil,
-                        targetGitHubIds: run.targetGitHubIds
-                    )
-                }
-                return run
+    func syncPRsFromApi(gitHubId: Int64) async {
+        guard let prs = await api.fetchActivePRs(gitHubId: gitHubId) else { return }
+        var seen = Set<String>()
+        let unique = prs.filter { seen.insert("\($0.repo)#\($0.prNumber)").inserted }
+        await MainActor.run {
+            let newPRs = unique.map(toPullRequest)
+            notifyNewlyReadyPRs(current: newPRs)
+            activePRs = newPRs
+            persistence.save(prs: newPRs)
+        }
+    }
+
+    func syncPRsFromGitHub(gitHubId: Int64) async -> Int {
+        await api.syncPRsFromGitHub(gitHubId: gitHubId)
+    }
+
+    func subscribeToPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool {
+        let ok = await api.subscribeToPR(prNumber: prNumber, repo: repo, gitHubId: gitHubId)
+        if ok { await syncFromApi(gitHubId: gitHubId) }
+        return ok
+    }
+
+    func unsubscribeFromPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool {
+        let ok = await api.unsubscribeFromPR(prNumber: prNumber, repo: repo, gitHubId: gitHubId)
+        if ok { await syncFromApi(gitHubId: gitHubId) }
+        return ok
+    }
+
+    func syncActiveWorkflows(gitHubId: Int64) async -> Int {
+        let synced = await api.syncActiveWorkflows(gitHubId: gitHubId)
+        if synced > 0 {
+            await syncFromApi(gitHubId: gitHubId)
+            await syncPRsFromApi(gitHubId: gitHubId)
+        }
+        return synced
+    }
+
+    func disconnect() {
+        pollTask?.cancel()
+        pollTask = nil
+        task?.cancel()
+        task = nil
+        readyNotifiedPRs = []
+        didSeedReadyPRs = false
+        Task { @MainActor in
+            isConnected = false
+            runStatus = .idle
+            lastEvent = nil
+            runningWorkflows = []
+            activePRs = []
+        }
+    }
+
+    func startPolling(gitHubId: Int64) {
+        pollTask?.cancel()
+        pollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                guard !Task.isCancelled, let self else { return }
+                await self.syncPRsFromApi(gitHubId: gitHubId)
             }
         }
     }
 
-    private func persistHistory() {
-        persistence.save(workflows: recentWorkflows)
+    // MARK: - Mapping
+
+    private func toWorkflowRun(_ r: ApiWorkflowRun) -> WorkflowRun {
+        WorkflowRun(
+            id: UUID(),
+            dbId: r.id,
+            runId: r.runId,
+            workflowName: r.workflowName ?? "Workflow",
+            repo: r.repo,
+            actor: r.actor,
+            headBranch: r.headBranch,
+            trigger: r.trigger,
+            prNumber: r.prNumber,
+            prTitle: r.prTitle,
+            status: r.status,
+            htmlUrl: r.htmlUrl ?? "",
+            startedAt: r.startedAt,
+            completedAt: nil,
+            targetGitHubIds: r.targetGitHubIds ?? []
+        )
     }
 
-    private var hubWebSocketUrl: URL {
-        let wsUrl = baseUrl
-            .replacingOccurrences(of: "https://", with: "wss://")
-            .replacingOccurrences(of: "http://", with: "ws://")
-        return URL(string: "\(wsUrl)/hub/punishment")!
+    private func toPullRequest(_ pr: ApiPullRequest) -> PullRequest {
+        PullRequest(
+            prNumber: pr.prNumber, title: pr.title,
+            repo: pr.repo,
+            headBranch: pr.headBranch ?? "",
+            baseBranch: pr.baseBranch ?? "",
+            htmlUrl: URL(string: pr.htmlUrl ?? ""),
+            status: pr.status ?? "open",
+            conclusion: pr.conclusion,
+            draft: pr.draft ?? false,
+            mergeableState: pr.mergeableState,
+            ciStatus: pr.ciStatus ?? "ready",
+            reviewApproved: pr.reviewApproved ?? false,
+            lastCommentBy: pr.lastCommentBy,
+            lastCommentBody: pr.lastCommentBody,
+            lastCommentAt: pr.lastCommentAt,
+            lastCommentUrl: nil,
+            lastReviewFilePath: nil,
+            lastReviewLine: nil,
+            isSubscribed: pr.isSubscribed ?? false,
+            subscriberIds: pr.subscriberIds ?? [],
+            authorGitHubId: pr.authorGitHubId
+        )
     }
 
-    private func connectAndListen(gitHubId: Int64, username: String) async throws {
-        await syncFromApi(gitHubId: gitHubId)
-        await syncPRsFromApi(gitHubId: gitHubId)
-        let url = hubWebSocketUrl
-        let ws = URLSession.shared.webSocketTask(with: url)
-        ws.resume()
-        defer { ws.cancel(with: .normalClosure, reason: nil) }
+    // MARK: - SignalR events
 
-        try await ws.send(.string("{\"protocol\":\"json\",\"version\":1}\u{1e}"))
-        guard case .string = try await ws.receive() else { throw SignalRError.handshakeFailed }
-
-        let register = "{\"type\":1,\"target\":\"RegisterConnection\",\"arguments\":[\(gitHubId),\"\(username)\"],\"invocationId\":\"1\"}\u{1e}"
-        try await ws.send(.string(register))
-
-        await MainActor.run { self.isConnected = true }
-
-        try await listen(ws)
-    }
-
-    private func listen(_ ws: URLSessionWebSocketTask) async throws {
-        while !Task.isCancelled {
-            let message = try await ws.receive()
-            handleMessage(message, webSocket: ws)
-        }
-    }
-
-    private func handleMessage(_ message: URLSessionWebSocketTask.Message, webSocket ws: URLSessionWebSocketTask) {
-        guard case .string(let text) = message else { return }
-
-        for part in text.components(separatedBy: "\u{1e}").filter({ !$0.isEmpty }) {
-            guard let data = part.data(using: .utf8),
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let type = json["type"] as? Int else { continue }
-
-            switch type {
-            case 1:
-                handleInvocation(json)
-            case 6:
-                Task { try? await ws.send(.string("{\"type\":6}\u{1e}")) }
-            case 7:
-                Task { @MainActor in self.isConnected = false }
-            default:
-                break
-            }
-        }
-    }
-
-    private func handleInvocation(_ json: [String: Any]) {
-        guard let target = json["target"] as? String else { return }
-
-        switch target {
-        case "WorkflowRunStarted", "WorkflowRunCompleted":
-            guard let args = json["arguments"] as? [[String: Any]],
-                  let data = args.first else { return }
-            if target == "WorkflowRunStarted" { handleWorkflowStarted(data) }
-            else { handleWorkflowCompleted(data) }
-        case "PullRequestsUpdated":
+    private func handle(_ event: HubEvent) {
+        switch event {
+        case .workflowStarted(let e): handleWorkflowStarted(e)
+        case .workflowCompleted(let e): handleWorkflowCompleted(e)
+        case .pullRequestsUpdated:
             Task { await self.syncPRsFromApi(gitHubId: self.gitHubId) }
-        case "PrApproved":
-            guard let args = json["arguments"] as? [[String: Any]],
-                  let data = args.first else { return }
-            handlePrApproved(data)
-        case "PrCommented":
-            guard let args = json["arguments"] as? [[String: Any]],
-                  let data = args.first else { return }
-            handlePrCommented(data)
-        case "MainBranchUpdated":
-            guard let args = json["arguments"] as? [[String: Any]],
-                  let data = args.first else { return }
-            handleMainBranchUpdated(data)
-        default: break
+        case .prApproved(let e): handlePrApproved(e)
+        case .prCommented(let e): handlePrCommented(e)
+        case .mainBranchUpdated(let e): handleMainBranchUpdated(e)
+        case .connectionClosed:
+            Task { @MainActor in self.isConnected = false }
         }
     }
 
-    private func handleWorkflowStarted(_ data: [String: Any]) {
-        let runId      = data["runId"] as? Int64 ?? 0
-        let dbId       = data["id"] as? Int
-        let name       = data["workflowName"] as? String ?? "Unknown"
-        let repo       = data["repo"] as? String ?? "unknown"
-        let actor      = data["actor"] as? String ?? "someone"
-        let htmlUrl    = data["htmlUrl"] as? String ?? ""
-        let startedAt  = (data["startedAt"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) } ?? Date()
-        let branch     = data["branch"] as? String
-        let trigger    = data["trigger"] as? String
-
+    private func handleWorkflowStarted(_ e: WorkflowStartedEvent) {
         Task { @MainActor in
             runStatus = .running
 
             let run = WorkflowRun(
-                id: UUID(), dbId: dbId,
-                runId: runId, workflowName: name, repo: repo,
-                actor: actor, headBranch: branch,
-                trigger: trigger, prNumber: nil, prTitle: nil,
+                id: UUID(), dbId: e.id,
+                runId: e.runId, workflowName: e.workflowName ?? "Workflow", repo: e.repo,
+                actor: e.actor ?? "someone", headBranch: e.branch,
+                trigger: e.trigger, prNumber: nil, prTitle: nil,
                 status: "in_progress",
-                htmlUrl: htmlUrl, startedAt: startedAt, completedAt: nil, targetGitHubIds: []
+                htmlUrl: e.htmlUrl ?? "", startedAt: startedAt(from: e.startedAt), completedAt: nil, targetGitHubIds: []
             )
 
             runningWorkflows.insert(run, at: 0)
@@ -448,15 +293,15 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
         }
     }
 
-    private func handleWorkflowCompleted(_ data: [String: Any]) {
-        let runId      = data["runId"] as? Int64 ?? 0
-        let succeeded  = data["succeeded"] as? Bool ?? false
-        let conclusion = data["conclusion"] as? String
-        let name       = data["workflowName"] as? String
-        let repo       = data["repo"] as? String ?? "unknown"
-        let actor      = data["actor"] as? String ?? "someone"
-        let htmlUrl    = data["htmlUrl"] as? String
-        let trigger    = data["trigger"] as? String
+    private func handleWorkflowCompleted(_ e: WorkflowCompletedEvent) {
+        let runId = e.runId
+        let succeeded = e.succeeded ?? false
+        let conclusion = e.conclusion
+        let name = e.workflowName
+        let repo = e.repo
+        let actor = e.actor ?? "someone"
+        let htmlUrl = e.htmlUrl
+        let trigger = e.trigger
         let workflowURL: URL? = URL(string: htmlUrl ?? "https://github.com/\(repo)/actions/runs/\(runId)")
 
         let isActualFailure = !succeeded && (conclusion == nil || conclusion == "failure")
@@ -529,11 +374,11 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
         }
     }
 
-    private func handlePrApproved(_ data: [String: Any]) {
-        let prNumber = data["prNumber"] as? Int ?? 0
-        let repo = data["repo"] as? String ?? "unknown"
-        let reviewerLogin = data["reviewerLogin"] as? String ?? "someone"
-        let title = data["title"] as? String ?? ""
+    private func handlePrApproved(_ e: PrEvent) {
+        let prNumber = e.prNumber ?? 0
+        let repo = e.repo ?? "unknown"
+        let reviewerLogin = e.reviewerLogin ?? "someone"
+        let title = e.title ?? ""
 
         Task { @MainActor in
             let body = "\(title) — approved by \(reviewerLogin)"
@@ -544,20 +389,19 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
                 actionURL: URL(string: "https://github.com/\(repo)/pull/\(prNumber)"),
                 style: .info
             )
-            await syncPRsFromApi(gitHubId: gitHubId)
+            await self.syncPRsFromApi(gitHubId: self.gitHubId)
         }
     }
 
-    private func handlePrCommented(_ data: [String: Any]) {
-        let prNumber = data["prNumber"] as? Int ?? 0
-        let repo = data["repo"] as? String ?? "unknown"
-        let commenterLogin = data["commenterLogin"] as? String ?? "someone"
-        let title = data["title"] as? String ?? ""
-        let commentBody = data["commentBody"] as? String ?? ""
-        let commentUrl = (data["commentUrl"] as? String).flatMap { URL(string: $0) }
+    private func handlePrCommented(_ e: PrCommentedEvent) {
+        let prNumber = e.prNumber ?? 0
+        let repo = e.repo ?? "unknown"
+        let commenterLogin = e.commenterLogin ?? "someone"
+        let title = e.title ?? ""
+        let commentUrl = e.commentUrl.flatMap { URL(string: $0) }
 
         Task { @MainActor in
-            let preview = String(commentBody.prefix(120)).replacingOccurrences(of: "\n", with: " ")
+            let preview = String((e.commentBody ?? "").prefix(120)).replacingOccurrences(of: "\n", with: " ")
             let body = "\(title) — \(commenterLogin): \(preview)"
             showNotification(
                 title: "PR #\(prNumber) Commented 💬",
@@ -566,15 +410,15 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
                 actionURL: commentUrl ?? URL(string: "https://github.com/\(repo)/pull/\(prNumber)"),
                 style: .info
             )
-            await syncPRsFromApi(gitHubId: gitHubId)
+            await self.syncPRsFromApi(gitHubId: self.gitHubId)
         }
     }
 
-    private func handleMainBranchUpdated(_ data: [String: Any]) {
-        let repo = data["repo"] as? String ?? ""
-        let prNumber = data["prNumber"] as? Int ?? 0
-        let mergedBy = data["mergedBy"] as? String ?? ""
-        let headSha = data["headSha"] as? String
+    private func handleMainBranchUpdated(_ e: MainBranchUpdatedEvent) {
+        let repo = e.repo ?? ""
+        let prNumber = e.prNumber ?? 0
+        let mergedBy = e.mergedBy ?? ""
+        let headSha = e.headSha
 
         Task { @MainActor in
             mainBranchUpdate = (repo, prNumber, mergedBy, headSha)
@@ -582,15 +426,52 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
         }
     }
 
-    private var resetTask: Task<Void, Never>?
-    private func scheduleStatusReset() {
-        resetTask?.cancel()
-        resetTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 8_000_000_000)
-            guard !Task.isCancelled else { return }
-            runStatus = .idle
+    // MARK: - Ready-to-merge notifications
+
+    /// A PR is "ready to merge" when it's open, not a draft, and CI + review are
+    /// green (`ciStatus == "ready"` means approved + checks passing), and GitHub
+    /// doesn't report conflicts.
+    private func isReadyToMerge(_ pr: PullRequest) -> Bool {
+        guard pr.status == "open", !pr.draft, !pr.isMerged else { return false }
+        guard pr.ciStatus == "ready" else { return false }
+        // If GitHub gives us a mergeable state, don't fire on conflicts/behind base.
+        if let state = pr.mergeableState, state == "dirty" || state == "behind" { return false }
+        return true
+    }
+
+    /// Fires a notification when a PR transitions INTO a ready-to-merge state.
+    /// Runs on every PR sync (30s poll + SignalR events). The first sync only
+    /// seeds the set so we don't spam notifications for already-ready PRs on launch.
+    @MainActor
+    private func notifyNewlyReadyPRs(current: [PullRequest]) {
+        let currentIds = Set(current.map { $0.id })
+
+        if !didSeedReadyPRs {
+            didSeedReadyPRs = true
+            readyNotifiedPRs = Set(current.filter { isReadyToMerge($0) }.map { $0.id })
+            return
+        }
+
+        for pr in current where isReadyToMerge(pr) {
+            if readyNotifiedPRs.insert(pr.id).inserted {
+                showNotification(
+                    title: "PR #\(pr.prNumber) ready to merge 🚀",
+                    body: pr.title,
+                    subtitle: shortRepo(pr.repo),
+                    actionURL: pr.prUrl,
+                    style: .info
+                )
+            }
+        }
+        // Allow re-notification if a PR stops being ready (e.g. new commits), and
+        // forget PRs that are gone (merged/closed).
+        readyNotifiedPRs = readyNotifiedPRs.intersection(currentIds)
+        for pr in current where !isReadyToMerge(pr) {
+            readyNotifiedPRs.remove(pr.id)
         }
     }
+
+    // MARK: - Persistence
 
     func setTargetGitHubIds(for dbId: Int, targetIds: [Int64]) {
         Task { @MainActor in
@@ -625,86 +506,50 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
         }
     }
 
-    func syncPRsFromGitHub(gitHubId: Int64) async -> Int {
-        guard let url = URL(string: "\(baseUrl)/api/pullrequests/sync?gitHubId=\(gitHubId)") else { return 0 }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        do {
-            let (data, _) = try await URLSession.shared.data(for: request)
-            struct SyncResult: Decodable { let synced: Int }
-            if let result = try? JSONDecoder().decode(SyncResult.self, from: data) {
-                return result.synced
+    private func loadPersistedHistory() {
+        let saved = persistence.loadWorkflows()
+        if !saved.isEmpty {
+            recentWorkflows = saved.map { run in
+                if run.status == "in_progress" {
+                    return WorkflowRun(
+                        id: run.id, dbId: run.dbId,
+                        runId: run.runId,
+                        workflowName: run.workflowName,
+                        repo: run.repo, actor: run.actor,
+                        headBranch: run.headBranch,
+                        trigger: run.trigger,
+                        prNumber: run.prNumber,
+                        prTitle: run.prTitle,
+                        status: "cancelled",
+                        htmlUrl: run.htmlUrl, startedAt: run.startedAt,
+                        completedAt: nil,
+                        targetGitHubIds: run.targetGitHubIds
+                    )
+                }
+                return run
             }
-        } catch {}
-        return 0
+        }
     }
 
-    func subscribeToPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool {
-        let repoEncoded = repo.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? repo
-        guard let url = URL(string: "\(baseUrl)/api/pullrequests/\(prNumber)/subscribe?repo=\(repoEncoded)&gitHubId=\(gitHubId)") else { return false }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        guard let (_, resp) = try? await URLSession.shared.data(for: req),
-              let http = resp as? HTTPURLResponse, http.statusCode == 200 else { return false }
-        await syncFromApi(gitHubId: gitHubId)
-        return true
+    private func persistHistory() {
+        persistence.save(workflows: recentWorkflows)
     }
 
-    func unsubscribeFromPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool {
-        let repoEncoded = repo.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? repo
-        guard let url = URL(string: "\(baseUrl)/api/pullrequests/\(prNumber)/unsubscribe?repo=\(repoEncoded)&gitHubId=\(gitHubId)") else { return false }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        guard let (_, resp) = try? await URLSession.shared.data(for: req),
-              let http = resp as? HTTPURLResponse, http.statusCode == 200 else { return false }
-        await syncFromApi(gitHubId: gitHubId)
-        return true
-    }
+    // MARK: - Status reset
 
-    func syncActiveWorkflows(gitHubId: Int64) async -> Int {
-        guard let url = URL(string: "\(baseUrl)/api/workflows/sync-active?gitHubId=\(gitHubId)") else { return 0 }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        do {
-            let (data, _) = try await URLSession.shared.data(for: request)
-            struct SyncResult: Decodable { let synced: Int }
-            if let result = try? JSONDecoder().decode(SyncResult.self, from: data) {
-                await syncFromApi(gitHubId: gitHubId)
-                await syncPRsFromApi(gitHubId: gitHubId)
-                return result.synced
-            }
-        } catch {}
-        return 0
-    }
-
-    func disconnect() {
-        pollTask?.cancel()
-        pollTask = nil
-        task?.cancel()
-        task = nil
-        readyNotifiedPRs = []
-        didSeedReadyPRs = false
-        Task { @MainActor in
-            isConnected = false
+    private var resetTask: Task<Void, Never>?
+    private func scheduleStatusReset() {
+        resetTask?.cancel()
+        resetTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            guard !Task.isCancelled else { return }
             runStatus = .idle
-            lastEvent = nil
-            runningWorkflows = []
-            activePRs = []
         }
     }
 
-    func startPolling(gitHubId: Int64) {
-        pollTask?.cancel()
-        pollTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 30_000_000_000)
-                guard !Task.isCancelled, let self else { return }
-                await syncPRsFromApi(gitHubId: gitHubId)
-            }
-        }
-    }
+    // MARK: - Helpers
 
-    enum SignalRError: Error {
-        case handshakeFailed
+    private func startedAt(from string: String?) -> Date {
+        (string).flatMap { ISO8601DateFormatter().date(from: $0) } ?? Date()
     }
 }
