@@ -15,7 +15,8 @@ func prID() {
         mergeableState: nil, ciStatus: "", reviewApproved: false,
         lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
         lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
-        isSubscribed: false, subscriberIds: [])
+        isSubscribed: false, subscriberIds: [],
+        authorGitHubId: nil)
     #expect(pr.id == "owner/repo#42")
     #expect(!pr.isMerged)
 }
@@ -28,7 +29,8 @@ func prMerged() {
         mergeableState: nil, ciStatus: "", reviewApproved: false,
         lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
         lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
-        isSubscribed: false, subscriberIds: [])
+        isSubscribed: false, subscriberIds: [],
+        authorGitHubId: nil)
     #expect(pr.isMerged)
 }
 
@@ -41,7 +43,8 @@ func prUrlWithHtml() {
         mergeableState: nil, ciStatus: "", reviewApproved: false,
         lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
         lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
-        isSubscribed: false, subscriberIds: [])
+        isSubscribed: false, subscriberIds: [],
+        authorGitHubId: nil)
     #expect(pr.prUrl.absoluteString == "https://github.com/r/pull/1")
 }
 
@@ -54,7 +57,8 @@ func prUrlFallback() {
         mergeableState: nil, ciStatus: "", reviewApproved: false,
         lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
         lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
-        isSubscribed: false, subscriberIds: [])
+        isSubscribed: false, subscriberIds: [],
+        authorGitHubId: nil)
     #expect(pr.prUrl.absoluteString == "https://github.com/owner/repo/pull/42")
 }
 
@@ -66,14 +70,16 @@ func prEquality() {
         mergeableState: nil, ciStatus: "", reviewApproved: false,
         lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
         lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
-        isSubscribed: false, subscriberIds: [])
+        isSubscribed: false, subscriberIds: [],
+        authorGitHubId: nil)
     let b = PullRequest(
         prNumber: 1, title: "different", repo: "r", headBranch: "", baseBranch: "",
         htmlUrl: nil, status: "open", conclusion: nil, draft: false,
         mergeableState: nil, ciStatus: "", reviewApproved: false,
         lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
         lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
-        isSubscribed: false, subscriberIds: [])
+        isSubscribed: false, subscriberIds: [],
+        authorGitHubId: nil)
     #expect(a == b)
 }
 
@@ -85,14 +91,16 @@ func prInequality() {
         mergeableState: nil, ciStatus: "", reviewApproved: false,
         lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
         lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
-        isSubscribed: false, subscriberIds: [])
+        isSubscribed: false, subscriberIds: [],
+        authorGitHubId: nil)
     let c = PullRequest(
         prNumber: 2, title: "", repo: "r", headBranch: "", baseBranch: "",
         htmlUrl: nil, status: "open", conclusion: nil, draft: false,
         mergeableState: nil, ciStatus: "", reviewApproved: false,
         lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
         lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
-        isSubscribed: false, subscriberIds: [])
+        isSubscribed: false, subscriberIds: [],
+        authorGitHubId: nil)
     #expect(a != c)
 }
 
@@ -104,14 +112,16 @@ func prInequalityRepo() {
         mergeableState: nil, ciStatus: "", reviewApproved: false,
         lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
         lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
-        isSubscribed: false, subscriberIds: [])
+        isSubscribed: false, subscriberIds: [],
+        authorGitHubId: nil)
     let d = PullRequest(
         prNumber: 1, title: "", repo: "other", headBranch: "", baseBranch: "",
         htmlUrl: nil, status: "open", conclusion: nil, draft: false,
         mergeableState: nil, ciStatus: "", reviewApproved: false,
         lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
         lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
-        isSubscribed: false, subscriberIds: [])
+        isSubscribed: false, subscriberIds: [],
+        authorGitHubId: nil)
     #expect(a != d)
 }
 
@@ -127,7 +137,8 @@ func prCoding() throws {
         lastCommentBody: "LGTM", lastCommentAt: Date(),
         lastCommentUrl: "https://...", lastReviewFilePath: "file.swift",
         lastReviewLine: 10,
-        isSubscribed: true, subscriberIds: [123, 456])
+        isSubscribed: true, subscriberIds: [123, 456],
+        authorGitHubId: nil)
     let data = try JSONEncoder().encode(pr)
     let decoded = try JSONDecoder().decode(PullRequest.self, from: data)
     #expect(decoded.prNumber == 42)
@@ -513,7 +524,8 @@ func remoteBranchID() {
             mergeableState: nil, ciStatus: "", reviewApproved: false,
             lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
             lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
-        isSubscribed: false, subscriberIds: [])
+        isSubscribed: false, subscriberIds: [],
+        authorGitHubId: nil)
         PersistenceService.save(prs: [pr])
         let loaded = PersistenceService.loadPRs()
         #expect(loaded.count == 1)
@@ -535,14 +547,16 @@ func remoteBranchID() {
             mergeableState: nil, ciStatus: "", reviewApproved: false,
             lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
             lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
-        isSubscribed: false, subscriberIds: [])
+        isSubscribed: false, subscriberIds: [],
+        authorGitHubId: nil)
         let pr2 = PullRequest(
             prNumber: 2, title: "", repo: "r", headBranch: "", baseBranch: "",
             htmlUrl: nil, status: "open", conclusion: nil, draft: false,
             mergeableState: nil, ciStatus: "", reviewApproved: false,
             lastCommentBy: nil, lastCommentBody: nil, lastCommentAt: nil,
             lastCommentUrl: nil, lastReviewFilePath: nil, lastReviewLine: nil,
-        isSubscribed: false, subscriberIds: [])
+        isSubscribed: false, subscriberIds: [],
+        authorGitHubId: nil)
         PersistenceService.save(prs: [pr1])
         PersistenceService.save(prs: [pr2])
         #expect(PersistenceService.loadPRs().count == 1)
@@ -587,10 +601,10 @@ func badgeInit() {
     #expect(badge.connectionState == .disconnected)
 }
 
-@Test("MenuBarBadgeService iconName is always curlybraces")
+@Test("MenuBarBadgeService iconName is flame.fill")
 func badgeIconName() {
     let badge = MenuBarBadgeService()
-    #expect(badge.iconName == "curlybraces")
+    #expect(badge.iconName == "flame.fill")
 }
 
 // ──────────────────────────────────────────────

@@ -30,7 +30,7 @@ cd tests-backend && dotnet test  # backend tests
 
 ## Conventions
 
-- Dark mode only. Menu bar: `{X}` (curlybraces + red xmark), braces color = connection state.
+- Dark mode only. Menu bar: `flame.fill` red, fixed.
 - No Docker, no nginx. Kestrel :5000 direct.
 - All DB queries scoped by GitHub user (multi-tenant).
 - EF migrations auto-run on startup.

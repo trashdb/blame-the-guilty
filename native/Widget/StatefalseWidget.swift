@@ -74,7 +74,8 @@ struct StatefalseWidgetEntryView: View {
             Color.black
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    StatefalseMark(color: .red, markColor: .red)
+                    Image(systemName: "flame.fill")
+                        .foregroundStyle(.red)
                         .font(.caption)
                     Text("statefalse")
                         .font(.caption2)
