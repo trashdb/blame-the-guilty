@@ -23,4 +23,10 @@
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Pin transitives to patched versions (GHSA-v5pm-xwqc-g5wc, GHSA-2m69-gcr7-jv3q) -->
+    <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.12" />
+  </ItemGroup>
+
 </Project>

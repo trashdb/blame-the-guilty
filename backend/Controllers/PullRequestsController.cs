@@ -925,7 +925,7 @@ public class PullRequestsController : ControllerBase
                     // Run not in DB — create it (webhook was missed)
                     var actor = cr.TryGetProperty("app", out var app)
                         && app.TryGetProperty("slug", out var slug)
-                        ? slug.GetString() : "unknown";
+                        ? slug.GetString() ?? "unknown" : "unknown";
                     var workflowName = cr.TryGetProperty("name", out var wn) ? wn.GetString() : name;
 
                     _db.WorkflowRuns.Add(new WorkflowRun

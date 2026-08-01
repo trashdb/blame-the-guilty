@@ -136,7 +136,7 @@ public class WebhookController : ControllerBase
 
         var repo = payload.GetProperty("repository").GetProperty("full_name").GetString() ?? "unknown";
         var name = run.TryGetProperty("name", out var wn) ? wn.GetString() : "Workflow";
-        var isIgnored = IgnoredWorkflows.Contains(name);
+        var isIgnored = name != null && IgnoredWorkflows.Contains(name);
         var branch = run.TryGetProperty("head_branch", out var hb) ? hb.GetString() : null;
         var headSha = run.TryGetProperty("head_sha", out var hs) ? hs.GetString() : null;
         var url = run.TryGetProperty("html_url", out var hu) ? hu.GetString() : null;

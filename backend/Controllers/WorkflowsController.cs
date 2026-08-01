@@ -106,7 +106,7 @@ public class WorkflowsController : ControllerBase
             var repoList = branchKeys.Select(b => b.Repo).ToList();
             var branchList = branchKeys.Select(b => b.HeadBranch!).ToList();
             var prEvents = await _db.PullRequestEvents
-                .Where(e => e.Status == "open" && repoList.Contains(e.RepoFullName) && branchList.Contains(e.HeadBranch))
+                .Where(e => e.Status == "open" && repoList.Contains(e.RepoFullName) && e.HeadBranch != null && branchList.Contains(e.HeadBranch))
                 .Select(e => new { e.RepoFullName, e.HeadBranch, e.PrNumber, e.Title })
                 .ToListAsync();
             prs = prEvents
@@ -252,13 +252,13 @@ public class WorkflowsController : ControllerBase
             {
                 var runId = run.GetProperty("id").GetInt64();
                 var name = run.TryGetProperty("name", out var wn) ? wn.GetString() : "Workflow";
-                var isIgnored = IgnoredWorkflows.Contains(name);
+                var isIgnored = name != null && IgnoredWorkflows.Contains(name);
 
                 var exists = await _db.WorkflowRuns.AnyAsync(w => w.RunId == runId && w.Status == "in_progress");
                 if (exists) continue;
 
                 var actor = run.TryGetProperty("actor", out var act)
-                    ? act.GetProperty("login").GetString()
+                    ? act.GetProperty("login").GetString() ?? "unknown"
                     : "unknown";
                 var branch = run.TryGetProperty("head_branch", out var hb) ? hb.GetString() : null;
                 var htmlUrl = run.TryGetProperty("html_url", out var hu) ? hu.GetString() : null;
