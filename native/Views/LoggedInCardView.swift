@@ -8,19 +8,9 @@ struct LoggedInCardView: View {
     var body: some View {
         HStack(spacing: DS.Spacing.md) {
             if let avatarUrl, let url = URL(string: avatarUrl) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .frame(width: 36, height: 36)
-                            .clipShape(Circle())
-                    default:
-                        Image(systemName: "person.circle.fill")
-                            .font(.system(size: 24))
-                            .foregroundStyle(DS.Color.textSecondary)
-                    }
-                }
+                RemoteImageView(url: url)
+                    .frame(width: 36, height: 36)
+                    .clipShape(Circle())
             } else {
                 Image(systemName: "person.circle.fill")
                     .font(.system(size: 24))
