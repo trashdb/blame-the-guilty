@@ -40,15 +40,8 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: DS.Spacing.lg) {
-                        StatefalseMark()
-                            .font(.system(size: 28))
-                        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
-                            Text("Settings")
-                                .font(DS.Font.largeTitle)
-                            Text("statefalse")
-                                .font(DS.Font.caption)
-                                .foregroundStyle(DS.Color.textSecondary)
-                        }
+                        Text("Settings")
+                            .font(DS.Font.largeTitle)
                     }
                     .padding(.bottom, DS.Spacing.xl)
 

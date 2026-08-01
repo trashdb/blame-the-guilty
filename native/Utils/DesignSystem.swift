@@ -615,14 +615,14 @@ struct StatefalseMark: View {
     var markColor: SwiftUI.Color = DS.Color.statusRed
 
     var body: some View {
-        ZStack {
-            Image(systemName: "curlybraces")
-            Image(systemName: "xmark")
-                .fontWeight(.heavy)
-                .scaleEffect(0.5)
-                .foregroundStyle(markColor)
-        }
-        .foregroundStyle(color)
+        Text("{X}")
+            .fontWeight(.bold)
+            .foregroundStyle(color)
+            .overlay {
+                Text("X")
+                    .fontWeight(.heavy)
+                    .foregroundStyle(markColor)
+            }
     }
 }
 
