@@ -16,14 +16,6 @@ namespace Statefalse.Api.Services;
 /// </summary>
 public class WebhookService
 {
-    private static readonly HashSet<string> IgnoredWorkflows = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "CodeQL High Severity",
-        "Dependency Review",
-        "Label PR by Team Member",
-        "Verify ForgeRock Secrets"
-    };
-
     private static readonly ConcurrentQueue<WebhookLogEntry> _recentLogs = new();
 
     private readonly IHubContext<PunishmentHub> _hub;
@@ -134,7 +126,7 @@ public class WebhookService
 
         var repo = payload.GetProperty("repository").GetProperty("full_name").GetString() ?? "unknown";
         var name = run.TryGetProperty("name", out var wn) ? wn.GetString() : "Workflow";
-        var isIgnored = name != null && IgnoredWorkflows.Contains(name);
+        var isIgnored = IgnoredWorkflows.IsIgnored(name);
         var branch = run.TryGetProperty("head_branch", out var hb) ? hb.GetString() : null;
         var headSha = run.TryGetProperty("head_sha", out var hs) ? hs.GetString() : null;
         var url = run.TryGetProperty("html_url", out var hu) ? hu.GetString() : null;
@@ -231,7 +223,7 @@ public class WebhookService
         var repoFullName = payload.GetProperty("repository").GetProperty("full_name").GetString() ?? "unknown";
         var runId = workflowRun.GetProperty("id").GetInt64();
         var workflowName = workflowRun.TryGetProperty("name", out var wn) ? wn.GetString() : null;
-        var isIgnored = workflowName != null && IgnoredWorkflows.Contains(workflowName);
+        var isIgnored = IgnoredWorkflows.IsIgnored(workflowName);
         var workflowUrl = workflowRun.TryGetProperty("html_url", out var wu) ? wu.GetString() : null;
 
         // Update the latest in_progress row for this runId

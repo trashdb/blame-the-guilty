@@ -16,14 +16,6 @@ public class SetTargetRequest
 /// </summary>
 public class WorkflowService
 {
-    private static readonly HashSet<string> IgnoredWorkflows = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "CodeQL High Severity",
-        "Dependency Review",
-        "Label PR by Team Member",
-        "Verify ForgeRock Secrets"
-    };
-
     private readonly AppDbContext _db;
     private readonly GitHubClient _github;
     private readonly GitHubTokenResolver _tokens;
@@ -236,7 +228,7 @@ public class WorkflowService
             {
                 var runId = run.GetProperty("id").GetInt64();
                 var name = run.TryGetProperty("name", out var wn) ? wn.GetString() : "Workflow";
-                var isIgnored = name != null && IgnoredWorkflows.Contains(name);
+                var isIgnored = IgnoredWorkflows.IsIgnored(name);
 
                 var exists = await _db.WorkflowRuns.AnyAsync(w => w.RunId == runId && w.Status == "in_progress");
                 if (exists) continue;
