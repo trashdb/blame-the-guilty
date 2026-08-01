@@ -5,12 +5,12 @@ on:
     branches: [main]
     paths:
       - 'native/**'
-      - 'BlameTheGuiltyTests/**'
+      - 'StatefalseTests/**'
   pull_request:
     branches: [main]
     paths:
       - 'native/**'
-      - 'BlameTheGuiltyTests/**'
+      - 'StatefalseTests/**'
 
 jobs:
   test:
@@ -26,15 +26,15 @@ jobs:
       - name: Build
         run: |
           cd native
-          xcodebuild build -scheme BlameTheGuilty -project btg.xcodeproj \
+          xcodebuild build -scheme Statefalse -project statefalse.xcodeproj \
             -destination 'platform=macOS' \
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO \
-            -derivedDataPath /tmp/btg-build | xcpretty && exit ${PIPESTATUS[0]}
+            -derivedDataPath /tmp/statefalse-build | xcpretty && exit ${PIPESTATUS[0]}
 
       - name: Run Tests
         run: |
           cd native
-          xcodebuild test -scheme BlameTheGuiltyTests -project btg.xcodeproj \
+          xcodebuild test -scheme StatefalseTests -project statefalse.xcodeproj \
             -destination 'platform=macOS' \
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO \
-            -derivedDataPath /tmp/btg-test | xcpretty && exit ${PIPESTATUS[0]}
+            -derivedDataPath /tmp/statefalse-test | xcpretty && exit ${PIPESTATUS[0]}

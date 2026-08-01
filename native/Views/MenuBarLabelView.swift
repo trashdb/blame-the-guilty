@@ -4,7 +4,7 @@ struct MenuBarLabelView: View {
     @ObservedObject private var badge = MenuBarBadgeService.shared
 
     var body: some View {
-        StatefalseMark(color: badge.iconColor, markColor: badge.iconColor)
+        StatefalseMark(color: badge.iconColor)
             .help(tooltip)
     }
 

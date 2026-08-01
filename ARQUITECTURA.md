@@ -234,7 +234,7 @@ native/
 
 ### Cómo se instala la app (`native/install.sh`)
 ```bash
-xcodebuild -project btg.xcodeproj -scheme Statefalse -configuration Release build
+xcodebuild -project statefalse.xcodeproj -scheme Statefalse -configuration Release build
 cp Statefalse.app ~/Applications/
 lsregister -f ~/Applications/Statefalse.app
 pkill -x Statefalse; open ~/Applications/Statefalse.app

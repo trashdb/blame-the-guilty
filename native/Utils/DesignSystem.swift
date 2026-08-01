@@ -619,7 +619,7 @@ struct StatefalseMark: View {
             Image(systemName: "curlybraces")
             Image(systemName: "xmark")
                 .fontWeight(.heavy)
-                .scaleEffect(0.34)
+                .scaleEffect(0.5)
                 .foregroundStyle(markColor)
         }
         .foregroundStyle(color)

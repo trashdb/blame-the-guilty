@@ -17,7 +17,7 @@ final class SettingsPanelManager {
         )
 
         p.contentViewController = hostingController
-        p.title = "Settings"
+        p.title = "StateFalse"
         p.center()
         p.level = .floating
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]

@@ -16,7 +16,7 @@ final class WebhookLogPanelManager {
             )
 
             panel?.contentViewController = hostingController
-            panel?.title = "Webhook Log"
+            panel?.title = "StateFalse"
             panel?.center()
             panel?.level = .floating
             panel?.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]

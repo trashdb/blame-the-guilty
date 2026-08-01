@@ -15,7 +15,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "🔍 Building Statefalse…"
 
-if ! xcodebuild -project "$SCRIPT_DIR/btg.xcodeproj" -scheme "$APP_NAME" -configuration Release build; then
+if ! xcodebuild -project "$SCRIPT_DIR/statefalse.xcodeproj" -scheme "$APP_NAME" -configuration Release build; then
   echo "  ⚠️  Xcode CLI build failed, falling back to existing build…"
 fi
 

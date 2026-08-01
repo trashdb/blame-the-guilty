@@ -16,7 +16,7 @@ final class WorkflowHistoryPanelManager {
             )
 
             panel?.contentViewController = hostingController
-            panel?.title = "Workflow History"
+            panel?.title = "StateFalse"
             panel?.center()
             panel?.level = .floating
             panel?.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]

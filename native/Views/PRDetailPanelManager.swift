@@ -20,7 +20,7 @@ final class PRDetailPanelManager {
             defer: false
         )
         w.contentViewController = hostingController
-        w.title = pr.title
+        w.title = "StateFalse"
         w.center()
         w.level = .floating
         w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]

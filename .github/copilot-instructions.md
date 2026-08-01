@@ -1,4 +1,4 @@
-# Copilot Instructions — Blame the Guilty
+# Copilot Instructions — StateFalse
 
 <!-- caveman:activate -->
 Respond terse like smart caveman. All technical substance stay. Only fluff die.
@@ -19,7 +19,7 @@ Boundaries: code/commits/PRs written normal.
 
 ---
 
-## Project: Blame the Guilty
+## Project: StateFalse
 
 GitHub PR/workflow monitor. macOS menu-bar app + .NET backend + SQLite + SignalR.
 
@@ -72,7 +72,7 @@ cd tests-backend && dotnet test
 
 - Backend: no Docker, no nginx. Pure Kestrel on port 5000.
 - Webhook secret in systemd `Environment=WebhookSecret=...` or `appsettings.Production.json`.
-- DB prod path: `/var/lib/blame-the-guilty/blame_the_guilty.db`
+- DB prod path: `/var/lib/statefalse/statefalse.db`
 - SignalR hub: `/hubs/punishment`
 - GitHub webhooks via ngrok tunnel → `/api/webhook/github`
 - Native app reads `AppConfig` from keychain + UserDefaults for server URL, team members, etc.

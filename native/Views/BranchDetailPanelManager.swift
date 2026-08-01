@@ -23,7 +23,7 @@ final class BranchDetailPanelManager {
             defer: false
         )
         w.contentViewController = hostingController
-        w.title = info.name
+        w.title = "StateFalse"
         w.center()
         w.level = .floating
         w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]

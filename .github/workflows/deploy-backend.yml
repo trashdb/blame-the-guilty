@@ -31,7 +31,7 @@ jobs:
       - name: Publish
         run: |
           dotnet publish -c Release -r linux-x64 --self-contained \
-            -o /tmp/publish backend/BlameTheGuilty.Api.csproj
+            -o /tmp/publish backend/Statefalse.Api.csproj
 
       - name: Upload to VPS
         env:
@@ -45,12 +45,12 @@ jobs:
           ssh-keyscan -H ${{ vars.VPS_HOST || '49.13.88.205' }} >> ~/.ssh/known_hosts 2>/dev/null
 
           rsync -az --delete -e "ssh -i ~/.ssh/id_ed25519" /tmp/publish/ \
-            ${{ vars.VPS_USER || 'root' }}@${{ vars.VPS_HOST || '49.13.88.205' }}:/opt/blame-the-guilty/
+            ${{ vars.VPS_USER || 'root' }}@${{ vars.VPS_HOST || '49.13.88.205' }}:/opt/statefalse/
 
       - name: Restart service
         run: |
           ssh -i ~/.ssh/id_ed25519 ${{ vars.VPS_USER || 'root' }}@${{ vars.VPS_HOST || '49.13.88.205' }} \
-            "sudo systemctl restart blame-the-guilty"
+            "sudo systemctl restart statefalse"
 
       - name: Health check
         run: |

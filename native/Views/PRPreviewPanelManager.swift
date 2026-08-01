@@ -28,7 +28,7 @@ final class PRPreviewPanelManager {
             defer: false
         )
         w.contentViewController = hostingController
-        w.title = "Create Pull Request"
+        w.title = "StateFalse"
         if let screen = NSScreen.main {
             let sf = screen.visibleFrame
             let x = sf.maxX - w.frame.width - 40

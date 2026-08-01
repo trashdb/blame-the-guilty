@@ -587,10 +587,10 @@ func badgeInit() {
     #expect(badge.connectionState == .disconnected)
 }
 
-@Test("MenuBarBadgeService iconName is always flame.fill")
+@Test("MenuBarBadgeService iconName is always curlybraces")
 func badgeIconName() {
     let badge = MenuBarBadgeService()
-    #expect(badge.iconName == "flame.fill")
+    #expect(badge.iconName == "curlybraces")
 }
 
 // ──────────────────────────────────────────────

@@ -26,10 +26,10 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Restore
-        run: dotnet restore BlameTheGuilty.slnx
+        run: dotnet restore Statefalse.slnx
 
       - name: Build
-        run: dotnet build --no-restore BlameTheGuilty.slnx
+        run: dotnet build --no-restore Statefalse.slnx
 
       - name: Test
         run: dotnet test --no-build --logger trx --results-directory /tmp/test-results

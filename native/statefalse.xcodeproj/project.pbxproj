@@ -17,7 +17,7 @@
 			<key>lastKnownFileType</key>
 			<string>wrapper.pb-project</string>
 			<key>path</key>
-			<string>btg.xcodeproj</string>
+			<string>statefalse.xcodeproj</string>
 			<key>sourceTree</key>
 			<string>&lt;group&gt;</string>
 		</dict>
@@ -37,7 +37,7 @@
 			<key>lastKnownFileType</key>
 			<string>wrapper.pb-project</string>
 			<key>path</key>
-			<string>btg.xcodeproj</string>
+			<string>statefalse.xcodeproj</string>
 			<key>sourceTree</key>
 			<string>&lt;group&gt;</string>
 		</dict>
@@ -432,7 +432,7 @@
 			<key>isa</key>
 			<string>PBXFileReference</string>
 			<key>name</key>
-			<string>btg.app</string>
+			<string>Statefalse.app</string>
 			<key>path</key>
 			<string>Statefalse.app</string>
 			<key>sourceTree</key>
@@ -829,7 +829,7 @@
 			<key>lastKnownFileType</key>
 			<string>wrapper.pb-project</string>
 			<key>path</key>
-			<string>btg.xcodeproj</string>
+			<string>statefalse.xcodeproj</string>
 			<key>sourceTree</key>
 			<string>&lt;group&gt;</string>
 		</dict>

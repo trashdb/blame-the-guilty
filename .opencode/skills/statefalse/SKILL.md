@@ -1,9 +1,9 @@
 ---
-name: blame-the-guilty
-description: Use when working on the Blame the Guilty repo (backend, native macOS app, tests, deploy, or commits). Enforces repo workflow: build/install native, run tests, deploy on push, and always commit after changes.
+name: statefalse
+description: Use when working on the statefalse repo (backend, native macOS app, tests, deploy, or commits). Enforces repo workflow: build/install native, run tests, deploy on push, and always commit after changes.
 ---
 
-# Blame the Guilty — Dev Workflow
+# StateFalse — Dev Workflow
 
 Project: GitHub PR/workflow monitor. macOS menu-bar SwiftUI app + .NET 10 backend + SQLite + SignalR.
 
@@ -25,7 +25,7 @@ Always terse caveman. No articles, no filler, no hedging. Technical terms exact.
 - Build + install native: `bash native/install.sh`
 - Backend local dev: `cd backend && dotnet run`
 - Backend tests: `cd tests-backend && dotnet test`
-- Live logs: `ssh underlayer 'sudo journalctl -u blame-the-guilty -f'`
+- Live logs: `ssh underlayer 'sudo journalctl -u statefalse -f'`
 - Deploy manual: `./deploy.sh underlayer`
 
 ## Multi-tenant rule

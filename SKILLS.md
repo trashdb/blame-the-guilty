@@ -44,7 +44,7 @@ Run all tests.
 cd tests-backend && dotnet test
 
 # Swift (from native/)
-xcodebuild test -scheme StatefalseTests -project btg.xcodeproj \
+xcodebuild test -scheme StatefalseTests -project statefalse.xcodeproj \
   -destination 'platform=macOS'
 ```
 
