@@ -1,23 +1,48 @@
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Statefalse.Api.Data;
-using Statefalse.Api.Models;
 
-namespace Statefalse.Api.Controllers;
+namespace Statefalse.Api.Services;
 
-[ApiController]
-[Route("api/punishments")]
-public class PunishmentsController : ControllerBase
+public class PunishmentSummary
+{
+    public List<CulpritRanking> TopCulprits { get; set; } = new();
+    public List<WorkflowRanking> TopWorkflows { get; set; } = new();
+    public List<RepoRanking> TopRepos { get; set; } = new();
+}
+
+public class CulpritRanking
+{
+    public string Login { get; set; } = string.Empty;
+    public int Count { get; set; }
+    public DateTime LastFailure { get; set; }
+}
+
+public class WorkflowRanking
+{
+    public string Name { get; set; } = string.Empty;
+    public string Repo { get; set; } = string.Empty;
+    public int Count { get; set; }
+}
+
+public class RepoRanking
+{
+    public string FullName { get; set; } = string.Empty;
+    public int Count { get; set; }
+}
+
+/// <summary>
+/// Punishment (failed workflow) leaderboards + recent event feed.
+/// </summary>
+public class PunishmentService
 {
     private readonly AppDbContext _db;
 
-    public PunishmentsController(AppDbContext db)
+    public PunishmentService(AppDbContext db)
     {
         _db = db;
     }
 
-    [HttpGet]
-    public async Task<IActionResult> GetRecent([FromQuery] int days = 7, [FromQuery] int limit = 50)
+    public async Task<ApiResult> GetRecentAsync(int days = 7, int limit = 50)
     {
         var since = DateTime.UtcNow.AddDays(-days);
 
@@ -37,11 +62,10 @@ public class PunishmentsController : ControllerBase
             })
             .ToListAsync();
 
-        return Ok(events);
+        return ApiResult.Ok(events);
     }
 
-    [HttpGet("summary")]
-    public async Task<IActionResult> GetSummary([FromQuery] int days = 7)
+    public async Task<ApiResult> GetSummaryAsync(int days = 7)
     {
         var since = DateTime.UtcNow.AddDays(-days);
 
@@ -83,38 +107,11 @@ public class PunishmentsController : ControllerBase
             .Take(5)
             .ToListAsync();
 
-        return Ok(new PunishmentSummary
+        return ApiResult.Ok(new PunishmentSummary
         {
             TopCulprits = topCulprits,
             TopWorkflows = topWorkflows,
             TopRepos = topRepos
         });
     }
-}
-
-public class PunishmentSummary
-{
-    public List<CulpritRanking> TopCulprits { get; set; } = new();
-    public List<WorkflowRanking> TopWorkflows { get; set; } = new();
-    public List<RepoRanking> TopRepos { get; set; } = new();
-}
-
-public class CulpritRanking
-{
-    public string Login { get; set; } = string.Empty;
-    public int Count { get; set; }
-    public DateTime LastFailure { get; set; }
-}
-
-public class WorkflowRanking
-{
-    public string Name { get; set; } = string.Empty;
-    public string Repo { get; set; } = string.Empty;
-    public int Count { get; set; }
-}
-
-public class RepoRanking
-{
-    public string FullName { get; set; } = string.Empty;
-    public int Count { get; set; }
 }

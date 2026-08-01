@@ -1,50 +1,46 @@
 using System.Web;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Statefalse.Api.Data;
 using Statefalse.Api.Models;
-using Statefalse.Api.Services;
 
-namespace Statefalse.Api.Controllers;
+namespace Statefalse.Api.Services;
 
-[ApiController]
-[Route("api/auth")]
-public class AuthController : ControllerBase
+public class PatRequest
+{
+    public string? PatToken { get; set; }
+}
+
+public sealed record AuthCallbackResponse(ApiResult? Error, string? RedirectUrl, object? OkBody);
+
+/// <summary>
+/// GitHub OAuth login flow + session endpoints (me, PAT, token resolution).
+/// </summary>
+public class AuthService
 {
     private readonly GitHubOAuthService _oauth;
     private readonly AppDbContext _db;
     private readonly IConfiguration _configuration;
 
-    public AuthController(GitHubOAuthService oauth, AppDbContext db, IConfiguration configuration)
+    public AuthService(GitHubOAuthService oauth, AppDbContext db, IConfiguration configuration)
     {
         _oauth = oauth;
         _db = db;
         _configuration = configuration;
     }
 
-    [HttpGet("login")]
-    public IActionResult Login([FromQuery] string? redirect_uri = null)
-    {
-        var url = _oauth.GetAuthorizationUrl(redirect_uri);
-        return Redirect(url);
-    }
+    public string LoginUrl(string? redirectUri) => _oauth.GetAuthorizationUrl(redirectUri);
 
-    [HttpGet("callback")]
-    public async Task<IActionResult> Callback(
-        [FromQuery] string code,
-        [FromQuery] string? state = null)
+    public async Task<AuthCallbackResponse> HandleCallbackAsync(string code, string? state)
     {
         if (string.IsNullOrEmpty(code))
-            return BadRequest("No authorization code provided.");
+            return new AuthCallbackResponse(ApiResult.BadRequest("No authorization code provided."), null, null);
 
         var userInfo = await _oauth.ExchangeCodeForUserInfoAsync(code);
-
         if (userInfo == null)
-            return BadRequest("Failed to authenticate with GitHub.");
+            return new AuthCallbackResponse(ApiResult.BadRequest("Failed to authenticate with GitHub."), null, null);
 
         // Upsert by immutable GitHubId, update username in case it changed
-        var existing = await _db.GitHubUsers
-            .FirstOrDefaultAsync(u => u.GitHubId == userInfo.Id);
+        var existing = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == userInfo.Id);
 
         if (existing == null)
         {
@@ -73,50 +69,42 @@ public class AuthController : ControllerBase
         {
             var avatar = userInfo.AvatarUrl is not null ? $"&avatar={HttpUtility.UrlEncode(userInfo.AvatarUrl)}" : "";
             var redirectUri = $"{state}?id={userInfo.Id}&username={HttpUtility.UrlEncode(userInfo.Login)}{avatar}";
-            return Redirect(redirectUri);
+            return new AuthCallbackResponse(null, redirectUri, null);
         }
 
-        return Ok(new { id = userInfo.Id, username = userInfo.Login, avatarUrl = userInfo.AvatarUrl });
+        return new AuthCallbackResponse(null, null, new { id = userInfo.Id, username = userInfo.Login, avatarUrl = userInfo.AvatarUrl });
     }
 
-    [HttpGet("me")]
-    public async Task<IActionResult> GetMe([FromQuery] long gitHubId)
+    public async Task<ApiResult> GetMeAsync(long gitHubId)
     {
         var user = await _db.GitHubUsers
             .Where(u => u.GitHubId == gitHubId)
             .Select(u => new { u.GitHubId, u.GitHubUsername, u.AvatarUrl, u.UserPatToken })
             .FirstOrDefaultAsync();
 
-        if (user == null) return NotFound();
+        if (user == null) return ApiResult.NotFound();
 
-        return Ok(new { id = user.GitHubId, username = user.GitHubUsername, avatarUrl = user.AvatarUrl, hasPat = user.UserPatToken != null });
+        return ApiResult.Ok(new { id = user.GitHubId, username = user.GitHubUsername, avatarUrl = user.AvatarUrl, hasPat = user.UserPatToken != null });
     }
 
-    [HttpPost("pat")]
-    public async Task<IActionResult> SavePat([FromQuery] long gitHubId, [FromBody] PatRequest body)
+    public async Task<ApiResult> SavePatAsync(long gitHubId, string? patToken)
     {
         var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
-        if (user == null) return NotFound();
+        if (user == null) return ApiResult.NotFound();
 
-        user.UserPatToken = string.IsNullOrWhiteSpace(body.PatToken) ? null : body.PatToken;
+        user.UserPatToken = string.IsNullOrWhiteSpace(patToken) ? null : patToken;
         await _db.SaveChangesAsync();
-        return Ok(new { saved = true });
+        return ApiResult.Ok(new { saved = true });
     }
 
-    [HttpGet("token")]
-    public async Task<IActionResult> GetToken([FromQuery] long gitHubId)
+    public async Task<ApiResult> GetTokenAsync(long gitHubId)
     {
         var user = await _db.GitHubUsers.FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
         // Mirror the fallback chain used by create-pr / merge so the client can obtain
         // the same token that already works server-side (incl. the shared global PAT).
         var token = user?.UserPatToken ?? user?.AccessToken ?? _configuration["GitHub:PatToken"];
         if (string.IsNullOrEmpty(token))
-            return Unauthorized(new { error = "No access token found" });
-        return Ok(new { token });
+            return ApiResult.Unauthorized(new { error = "No access token found" });
+        return ApiResult.Ok(new { token });
     }
-}
-
-public class PatRequest
-{
-    public string? PatToken { get; set; }
 }

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
 using Serilog;
 using Scalar.AspNetCore;
+using Statefalse.Api;
 using Statefalse.Api.Data;
 using Statefalse.Api.Hubs;
 using Statefalse.Api.Services;
@@ -47,17 +48,18 @@ try
     builder.Services.AddScoped<AiService>();
     builder.Services.AddScoped<GitHubApiService>();
     builder.Services.AddScoped<WorkflowService>();
+    builder.Services.AddScoped<AuthService>();
+    builder.Services.AddScoped<PunishmentService>();
 
     // GitHub OAuth config
     builder.Services.Configure<GitHubOAuthOptions>(
         builder.Configuration.GetSection("GitHubOAuth"));
 
-    // Controllers + JSON serialization
-    builder.Services.AddControllers()
-        .AddJsonOptions(options =>
-        {
-            options.JsonSerializerOptions.Converters.Add(new UtcDateTimeConverter());
-        });
+    // JSON serialization (used by Minimal API results + body binding)
+    builder.Services.ConfigureHttpJsonOptions(options =>
+    {
+        options.SerializerOptions.Converters.Add(new UtcDateTimeConverter());
+    });
 
     // OpenAPI / Swagger
     builder.Services.AddOpenApi();
@@ -141,7 +143,7 @@ try
     app.MapScalarApiReference();
 
     app.MapHub<PunishmentHub>("/hub/punishment");
-    app.MapControllers();
+    app.MapApiEndpoints();
 
     await app.RunAsync();
 
