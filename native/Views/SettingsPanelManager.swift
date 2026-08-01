@@ -7,26 +7,13 @@ final class SettingsPanelManager {
     var backendUrl: String = ""
 
     func show() {
-        let hostingController = NSHostingController(rootView: SettingsView(gitHubId: gitHubId, backendUrl: backendUrl))
-
-        let p = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 540, height: 400),
-            styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
-
-        p.contentViewController = hostingController
-        p.title = "StateFalse"
-        p.center()
-        p.level = .floating
-        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        p.isReleasedWhenClosed = false
-        p.backgroundColor = .clear
-        p.isOpaque = false
-        p.hasShadow = true
-        panel = p
-        p.makeKeyAndOrderFront(nil)
+        if panel == nil {
+            let hostingController = NSHostingController(rootView: SettingsView(gitHubId: gitHubId, backendUrl: backendUrl))
+            let p = PanelFactory.makePanel(size: CGSize(width: 540, height: 400), title: "Settings")
+            p.contentViewController = hostingController
+            panel = p
+        }
+        panel?.makeKeyAndOrderFront(nil)
     }
 
     func close() {

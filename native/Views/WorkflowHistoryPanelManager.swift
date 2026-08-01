@@ -7,25 +7,10 @@ final class WorkflowHistoryPanelManager {
     func show(signalR: SignalRService, gitHubId: Int64) {
         if panel == nil {
             let hostingController = NSHostingController(rootView: WorkflowHistoryView(signalR: signalR, gitHubId: gitHubId))
-
-            panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 600, height: 500),
-                styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
-                backing: .buffered,
-                defer: false
-            )
-
-            panel?.contentViewController = hostingController
-            panel?.title = "StateFalse"
-            panel?.center()
-            panel?.level = .floating
-            panel?.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            panel?.isReleasedWhenClosed = false
-            panel?.backgroundColor = .clear
-            panel?.isOpaque = false
-            panel?.hasShadow = true
+            let p = PanelFactory.makePanel(size: CGSize(width: 600, height: 500), title: "Workflow History")
+            p.contentViewController = hostingController
+            panel = p
         }
-
         panel?.makeKeyAndOrderFront(nil)
     }
 

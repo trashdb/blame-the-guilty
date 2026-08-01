@@ -15,23 +15,8 @@ final class BranchDetailPanelManager {
             onCheckout: onCheckout
         )
         let hostingController = NSHostingController(rootView: view)
-
-        let w = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
-            styleMask: [.titled, .closable, .fullSizeContentView],
-            backing: .buffered,
-            defer: false
-        )
+        let w = PanelFactory.makeWindow(size: CGSize(width: 320, height: 240), title: "Branch")
         w.contentViewController = hostingController
-        w.title = "StateFalse"
-        w.center()
-        w.level = .floating
-        w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        w.isReleasedWhenClosed = false
-        w.backgroundColor = NSColor.windowBackgroundColor
-        w.isOpaque = true
-        w.hasShadow = true
-        w.hidesOnDeactivate = false
         w.makeKeyAndOrderFront(nil)
         panel = w
     }
