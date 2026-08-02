@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Statefalse.Api.Contracts;
 using Statefalse.Api.Data;
 using Statefalse.Api.Services;
 
@@ -58,46 +59,46 @@ public static class ApiEndpoints
 
     private static void MapPullRequests(WebApplication app)
     {
-        app.MapPost("/api/pullrequests/sync", async (long gitHubId, PullRequestService service)
+        app.MapPost("/api/pullrequests/sync", async (long gitHubId, PullRequestSyncService service)
             => await MapAsync(service.SyncFromGitHubAsync(gitHubId))).RequireRateLimiting("api");
 
-        app.MapGet("/api/pullrequests/active", async (PullRequestService service, long gitHubId, int page = 1, int pageSize = 50)
+        app.MapGet("/api/pullrequests/active", async (PullRequestQueryService service, long gitHubId, int page = 1, int pageSize = 50)
             => await MapAsync(service.GetActiveAsync(gitHubId, page, pageSize))).RequireRateLimiting("api");
 
-        app.MapGet("/api/pullrequests/{prNumber}/detail", async (long prNumber, string repo, long gitHubId, PullRequestService service)
+        app.MapGet("/api/pullrequests/{prNumber}/detail", async (long prNumber, string repo, long gitHubId, PullRequestQueryService service)
             => await MapAsync(service.GetDetailAsync(prNumber, repo, gitHubId))).RequireRateLimiting("api");
 
-        app.MapPost("/api/pullrequests/{prNumber}/merge", async (PullRequestService service, long prNumber, string repo, long gitHubId, string method = "squash")
+        app.MapPost("/api/pullrequests/{prNumber}/merge", async (PullRequestActionService service, long prNumber, string repo, long gitHubId, string method = "squash")
             => await MapAsync(service.MergeAsync(prNumber, repo, gitHubId, method)));
 
-        app.MapPost("/api/pullrequests/{prNumber}/draft", async (long prNumber, string repo, long gitHubId, bool draft, PullRequestService service)
+        app.MapPost("/api/pullrequests/{prNumber}/draft", async (long prNumber, string repo, long gitHubId, bool draft, PullRequestActionService service)
             => await MapAsync(service.SetDraftAsync(prNumber, repo, gitHubId, draft)));
 
-        app.MapPost("/api/pullrequests/{prNumber}/update-branch", async (long prNumber, string repo, long gitHubId, PullRequestService service)
+        app.MapPost("/api/pullrequests/{prNumber}/update-branch", async (long prNumber, string repo, long gitHubId, PullRequestActionService service)
             => await MapAsync(service.UpdateBranchAsync(prNumber, repo, gitHubId)));
 
-        app.MapGet("/api/pullrequests/{prNumber}/commits", async (long prNumber, string repo, long gitHubId, PullRequestService service)
+        app.MapGet("/api/pullrequests/{prNumber}/commits", async (long prNumber, string repo, long gitHubId, PullRequestQueryService service)
             => await MapAsync(service.GetCommitsAsync(prNumber, repo, gitHubId)));
 
-        app.MapGet("/api/pullrequests/{prNumber}/files", async (long prNumber, string repo, long gitHubId, PullRequestService service)
+        app.MapGet("/api/pullrequests/{prNumber}/files", async (long prNumber, string repo, long gitHubId, PullRequestQueryService service)
             => await MapAsync(service.GetFilesAsync(prNumber, repo, gitHubId)));
 
-        app.MapGet("/api/pullrequests/{prNumber}/checks", async (long prNumber, string repo, long gitHubId, PullRequestService service)
+        app.MapGet("/api/pullrequests/{prNumber}/checks", async (long prNumber, string repo, long gitHubId, PullRequestQueryService service)
             => await MapAsync(service.GetChecksAsync(prNumber, repo, gitHubId)));
 
-        app.MapPost("/api/pullrequests/{prNumber}/subscribe", async (long prNumber, string repo, long gitHubId, PullRequestService service)
+        app.MapPost("/api/pullrequests/{prNumber}/subscribe", async (long prNumber, string repo, long gitHubId, PullRequestSubscriptionService service)
             => await MapAsync(service.SubscribeAsync(prNumber, repo, gitHubId))).RequireRateLimiting("api");
 
-        app.MapPost("/api/pullrequests/{prNumber}/unsubscribe", async (long prNumber, string repo, long gitHubId, PullRequestService service)
+        app.MapPost("/api/pullrequests/{prNumber}/unsubscribe", async (long prNumber, string repo, long gitHubId, PullRequestSubscriptionService service)
             => await MapAsync(service.UnsubscribeAsync(prNumber, repo, gitHubId))).RequireRateLimiting("api");
 
-        app.MapGet("/api/pullrequests/{prNumber}/subscribers", async (long prNumber, string repo, PullRequestService service)
+        app.MapGet("/api/pullrequests/{prNumber}/subscribers", async (long prNumber, string repo, PullRequestSubscriptionService service)
             => await MapAsync(service.GetSubscribersAsync(prNumber, repo))).RequireRateLimiting("api");
 
-        app.MapPost("/api/pullrequests/{prNumber}/add-subscriber", async (long prNumber, string repo, long gitHubId, string? username, long? subscriberId, PullRequestService service)
+        app.MapPost("/api/pullrequests/{prNumber}/add-subscriber", async (long prNumber, string repo, long gitHubId, string? username, long? subscriberId, PullRequestSubscriptionService service)
             => await MapAsync(service.AddSubscriberAsync(prNumber, repo, gitHubId, username, subscriberId))).RequireRateLimiting("api");
 
-        app.MapPost("/api/pullrequests/{prNumber}/remove-subscriber", async (long prNumber, string repo, long gitHubId, long subscriberId, PullRequestService service)
+        app.MapPost("/api/pullrequests/{prNumber}/remove-subscriber", async (long prNumber, string repo, long gitHubId, long subscriberId, PullRequestSubscriptionService service)
             => await MapAsync(service.RemoveSubscriberAsync(prNumber, repo, gitHubId, subscriberId))).RequireRateLimiting("api");
     }
 
@@ -168,12 +169,7 @@ public static class ApiEndpoints
         app.MapGet("/api/users", async (AppDbContext db) =>
         {
             var users = await db.GitHubUsers
-                .Select(u => new
-                {
-                    u.GitHubId,
-                    Login = u.GitHubUsername,
-                    u.AvatarUrl
-                })
+                .Select(u => new UserDto(u.GitHubId, u.GitHubUsername, u.AvatarUrl))
                 .ToListAsync();
             return Results.Ok(users);
         });

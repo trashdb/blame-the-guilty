@@ -1,14 +1,10 @@
 using System.Web;
 using Microsoft.EntityFrameworkCore;
+using Statefalse.Api.Contracts;
 using Statefalse.Api.Data;
 using Statefalse.Api.Models;
 
 namespace Statefalse.Api.Services;
-
-public class PatRequest
-{
-    public string? PatToken { get; set; }
-}
 
 public sealed record AuthCallbackResponse(ApiResult? Error, string? RedirectUrl, object? OkBody);
 
@@ -84,7 +80,7 @@ public class AuthService
 
         if (user == null) return ApiResult.NotFound();
 
-        return ApiResult.Ok(new { id = user.GitHubId, username = user.GitHubUsername, avatarUrl = user.AvatarUrl, hasPat = user.UserPatToken != null });
+        return ApiResult.Ok(new UserProfileDto(user.GitHubId, user.GitHubUsername, user.AvatarUrl, user.UserPatToken != null));
     }
 
     public async Task<ApiResult> SavePatAsync(long gitHubId, string? patToken)
@@ -105,6 +101,6 @@ public class AuthService
         var token = user?.UserPatToken ?? user?.AccessToken ?? _configuration["GitHub:PatToken"];
         if (string.IsNullOrEmpty(token))
             return ApiResult.Unauthorized(new { error = "No access token found" });
-        return ApiResult.Ok(new { token });
+        return ApiResult.Ok(new TokenDto(token));
     }
 }

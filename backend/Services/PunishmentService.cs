@@ -1,34 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using Statefalse.Api.Contracts;
 using Statefalse.Api.Data;
 
 namespace Statefalse.Api.Services;
-
-public class PunishmentSummary
-{
-    public List<CulpritRanking> TopCulprits { get; set; } = new();
-    public List<WorkflowRanking> TopWorkflows { get; set; } = new();
-    public List<RepoRanking> TopRepos { get; set; } = new();
-}
-
-public class CulpritRanking
-{
-    public string Login { get; set; } = string.Empty;
-    public int Count { get; set; }
-    public DateTime LastFailure { get; set; }
-}
-
-public class WorkflowRanking
-{
-    public string Name { get; set; } = string.Empty;
-    public string Repo { get; set; } = string.Empty;
-    public int Count { get; set; }
-}
-
-public class RepoRanking
-{
-    public string FullName { get; set; } = string.Empty;
-    public int Count { get; set; }
-}
 
 /// <summary>
 /// Punishment (failed workflow) leaderboards + recent event feed.
@@ -50,16 +24,14 @@ public class PunishmentService
             .Where(e => e.OccurredAt >= since)
             .OrderByDescending(e => e.OccurredAt)
             .Take(limit)
-            .Select(e => new
-            {
+            .Select(e => new PunishmentEventDto(
                 e.RunId,
                 e.CulpritLogin,
                 e.RepoFullName,
                 e.WorkflowName,
                 e.WorkflowUrl,
                 e.OccurredAt,
-                e.WasNotified
-            })
+                e.WasNotified))
             .ToListAsync();
 
         return ApiResult.Ok(events);
@@ -69,45 +41,34 @@ public class PunishmentService
     {
         var since = DateTime.UtcNow.AddDays(-days);
 
-        var topCulprits = await _db.PunishmentEvents
+        var events = await _db.PunishmentEvents
             .Where(e => e.OccurredAt >= since)
+            .Select(e => new { e.CulpritLogin, e.WorkflowName, e.RepoFullName, e.OccurredAt })
+            .ToListAsync();
+
+        var topCulprits = events
             .GroupBy(e => e.CulpritLogin)
-            .Select(g => new CulpritRanking
-            {
-                Login = g.Key,
-                Count = g.Count(),
-                LastFailure = g.Max(e => e.OccurredAt)
-            })
+            .Select(g => new CulpritRankingDto(g.Key, g.Count(), g.Max(e => e.OccurredAt)))
             .OrderByDescending(c => c.Count)
             .Take(5)
-            .ToListAsync();
+            .ToList();
 
-        var topWorkflows = await _db.PunishmentEvents
-            .Where(e => e.OccurredAt >= since && e.WorkflowName != null)
+        var topWorkflows = events
+            .Where(e => e.WorkflowName != null)
             .GroupBy(e => new { e.WorkflowName, e.RepoFullName })
-            .Select(g => new WorkflowRanking
-            {
-                Name = g.Key.WorkflowName!,
-                Repo = g.Key.RepoFullName,
-                Count = g.Count()
-            })
+            .Select(g => new WorkflowRankingDto(g.Key.WorkflowName!, g.Key.RepoFullName, g.Count()))
             .OrderByDescending(w => w.Count)
             .Take(5)
-            .ToListAsync();
+            .ToList();
 
-        var topRepos = await _db.PunishmentEvents
-            .Where(e => e.OccurredAt >= since)
+        var topRepos = events
             .GroupBy(e => e.RepoFullName)
-            .Select(g => new RepoRanking
-            {
-                FullName = g.Key,
-                Count = g.Count()
-            })
+            .Select(g => new RepoRankingDto(g.Key, g.Count()))
             .OrderByDescending(r => r.Count)
             .Take(5)
-            .ToListAsync();
+            .ToList();
 
-        return ApiResult.Ok(new PunishmentSummary
+        return ApiResult.Ok(new PunishmentSummaryDto
         {
             TopCulprits = topCulprits,
             TopWorkflows = topWorkflows,

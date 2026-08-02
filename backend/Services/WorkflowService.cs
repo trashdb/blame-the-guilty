@@ -1,15 +1,11 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Statefalse.Api.Contracts;
 using Statefalse.Api.Data;
 using Statefalse.Api.Hubs;
 using Statefalse.Api.Models;
 
 namespace Statefalse.Api.Services;
-
-public class SetTargetRequest
-{
-    public long[]? TargetGitHubIds { get; set; }
-}
 
 /// <summary>
 /// Workflow run queries + rerun/sync/target operations.
@@ -110,8 +106,7 @@ public class WorkflowService
                 .ToList();
         }
 
-        return ApiResult.Ok(allRuns.Select(w => new
-        {
+        return ApiResult.Ok(allRuns.Select(w => new WorkflowRunDto(
             w.Id,
             w.RunId,
             w.WorkflowName,
@@ -122,14 +117,13 @@ public class WorkflowService
             w.Status,
             w.HtmlUrl,
             w.StartedAt,
-            TargetGitHubIds = IdListSerializer.Deserialize(w.TargetGitHubIds),
-            PrNumber = w.HeadBranch != null
+            IdListSerializer.Deserialize(w.TargetGitHubIds),
+            w.HeadBranch != null
                 ? (int?)prs.FirstOrDefault(p => p.repo == w.Repo && p.branch == w.HeadBranch).prNumber
                 : null,
-            PrTitle = w.HeadBranch != null
+            w.HeadBranch != null
                 ? prs.FirstOrDefault(p => p.repo == w.Repo && p.branch == w.HeadBranch).title
-                : null
-        }));
+                : null)));
     }
 
     public async Task<ApiResult> SetTargetAsync(int id, SetTargetRequest request)

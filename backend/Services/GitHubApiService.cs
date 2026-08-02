@@ -1,8 +1,7 @@
 using System.Text.Json;
-using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Statefalse.Api.Contracts;
 using Statefalse.Api.Data;
-using Statefalse.Api.Hubs;
 using Statefalse.Api.Models;
 
 namespace Statefalse.Api.Services;
@@ -18,7 +17,7 @@ public class GitHubApiService
     private readonly GitHubTokenResolver _tokens;
     private readonly AiService _ai;
     private readonly ILogger<GitHubApiService> _logger;
-    private readonly IHubContext<PunishmentHub> _hub;
+    private readonly SignalRNotifier _notifier;
 
     public GitHubApiService(
         AppDbContext db,
@@ -26,14 +25,14 @@ public class GitHubApiService
         GitHubTokenResolver tokens,
         AiService ai,
         ILogger<GitHubApiService> logger,
-        IHubContext<PunishmentHub> hub)
+        SignalRNotifier notifier)
     {
         _db = db;
         _github = github;
         _tokens = tokens;
         _ai = ai;
         _logger = logger;
-        _hub = hub;
+        _notifier = notifier;
     }
 
     public async Task<ApiResult> GetMyBranchesAsync(long gitHubId, string repo)
@@ -79,7 +78,7 @@ public class GitHubApiService
                 {
                     lock (myBranches)
                     {
-                        myBranches.Add(new { name = branchName });
+                        myBranches.Add(new BranchDto(branchName));
                     }
                 }
             }
@@ -200,13 +199,13 @@ public class GitHubApiService
                     Status = "open",
                     Draft = false,
                     OccurredAt = DateTime.UtcNow,
-                    SubscriberIds = subscriberIds.Length > 0 ? JsonSerializer.Serialize(subscriberIds) : null
+                    SubscriberIds = IdListSerializer.Serialize(subscriberIds)
                 };
                 _db.PullRequestEvents.Add(ev);
                 await _db.SaveChangesAsync();
                 _logger.LogInformation("CreatePr: inserted PullRequestEvent for pr={PrNumber} subscribers={Subscribers}", prNumber, subscriberIds.Length);
             }
-            await _hub.Clients.All.SendAsync("PullRequestsUpdated");
+            await _notifier.NotifyPullRequestsUpdatedAsync();
         }
         catch (Exception ex)
         {
@@ -225,14 +224,12 @@ public class GitHubApiService
 
         var preview = await _ai.BuildPreviewAsync(repo, baseBranch, head, title, useAI, user?.AccessToken);
 
-        return ApiResult.Ok(new
-        {
-            template = preview.Template,
-            commits = preview.Commits,
-            summary = preview.Summary,
-            suggestedBody = preview.SuggestedBody,
-            summaryError = preview.SummaryError
-        });
+        return ApiResult.Ok(new PrPreviewDto(
+            preview.Template,
+            preview.Commits,
+            preview.Summary,
+            preview.SuggestedBody,
+            preview.SummaryError));
     }
 
     public async Task<ApiResult> InterpretAsync(InterpretRequest request)

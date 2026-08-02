@@ -43,13 +43,26 @@ try
 
     // Application services
     builder.Services.AddScoped<GitHubTokenResolver>();
-    builder.Services.AddScoped<PullRequestService>();
+    builder.Services.AddScoped<SignalRNotifier>();
+    builder.Services.AddScoped<PullRequestQueries>();
+    builder.Services.AddScoped<PullRequestSyncService>();
+    builder.Services.AddScoped<PullRequestQueryService>();
+    builder.Services.AddScoped<PullRequestActionService>();
+    builder.Services.AddScoped<PullRequestSubscriptionService>();
     builder.Services.AddScoped<WebhookService>();
     builder.Services.AddScoped<AiService>();
     builder.Services.AddScoped<GitHubApiService>();
     builder.Services.AddScoped<WorkflowService>();
     builder.Services.AddScoped<AuthService>();
     builder.Services.AddScoped<PunishmentService>();
+
+    // Webhook handlers (dispatched by WebhookService via X-GitHub-Event)
+    builder.Services.AddScoped<IWebhookHandler, WorkflowRunWebhookHandler>();
+    builder.Services.AddScoped<IWebhookHandler, CheckSuiteWebhookHandler>();
+    builder.Services.AddScoped<IWebhookHandler, PullRequestWebhookHandler>();
+    builder.Services.AddScoped<IWebhookHandler, PullRequestReviewWebhookHandler>();
+    builder.Services.AddScoped<IWebhookHandler, IssueCommentWebhookHandler>();
+    builder.Services.AddScoped<IWebhookHandler, PullRequestReviewCommentWebhookHandler>();
 
     // GitHub OAuth config
     builder.Services.Configure<GitHubOAuthOptions>(

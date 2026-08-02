@@ -1,24 +1,9 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using Statefalse.Api.Contracts;
 
 namespace Statefalse.Api.Services;
-
-public class InterpretRequest
-{
-    public string Query { get; set; } = "";
-    public long GitHubId { get; set; }
-    public string? ApiKey { get; set; }
-    public string? AiProvider { get; set; }
-    public string? Model { get; set; }
-}
-
-public class InterpretResponse
-{
-    public string Action { get; set; } = "";
-    public string? Message { get; set; }
-    public Dictionary<string, string>? Params { get; set; }
-}
 
 /// <summary>
 /// AI provider orchestration (OpenAI-compatible / Copilot / Anthropic / Gemini)
