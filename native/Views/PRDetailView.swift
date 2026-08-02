@@ -53,6 +53,7 @@ struct PRDetailView: View {
     let pr: PullRequest
     let gitHubId: Int64
     let onDraftChanged: ((Bool) -> Void)?
+    @Environment(\.dependencies) private var deps
 
     @State private var behindBy: Int?
     @State private var aheadBy: Int?
@@ -733,12 +734,12 @@ struct PRDetailView: View {
     }
 
     private func performSubscribe() async {
-        let service = currentDependencies.signalRService
+        let service = deps.signalRService
         _ = await service.subscribeToPR(prNumber: pr.prNumber, repo: pr.repo, gitHubId: gitHubId)
     }
 
     private func performUnsubscribe() async {
-        let service = currentDependencies.signalRService
+        let service = deps.signalRService
         _ = await service.unsubscribeFromPR(prNumber: pr.prNumber, repo: pr.repo, gitHubId: gitHubId)
     }
 
@@ -816,7 +817,7 @@ struct PRDetailView: View {
 
     private func openInRider(file: String, line: Int?) {
         Task {
-            let gitService = currentDependencies.gitService
+            let gitService = deps.gitService
             guard let repoPath = await gitService.findRepoPath(ownerRepo: pr.repo, workspacePath: workspacePath) else {
                 return
             }

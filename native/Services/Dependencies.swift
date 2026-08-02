@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 struct Dependencies {
     let gitService: GitServiceProtocol
@@ -7,14 +8,18 @@ struct Dependencies {
     let persistenceService: PersistenceServiceProtocol
     let oAuthService: OAuthServiceProtocol
 
-    static func live() -> Dependencies {
+    static func live(signalRService: SignalRServiceProtocol) -> Dependencies {
         Dependencies(
             gitService: GitService(),
-            signalRService: SignalRService(baseUrl: backendUrl),
+            signalRService: signalRService,
             keychainService: LiveKeychainService(),
             persistenceService: LivePersistenceService(),
             oAuthService: OAuthService()
         )
+    }
+
+    static func live() -> Dependencies {
+        live(signalRService: SignalRService(baseUrl: backendUrl))
     }
 
     static func mock(
@@ -34,4 +39,15 @@ struct Dependencies {
     }
 }
 
-nonisolated(unsafe) var currentDependencies = Dependencies.live()
+// MARK: - Environment injection
+
+private struct DependenciesKey: EnvironmentKey {
+    static let defaultValue: Dependencies = .live()
+}
+
+extension EnvironmentValues {
+    var dependencies: Dependencies {
+        get { self[DependenciesKey.self] }
+        set { self[DependenciesKey.self] = newValue }
+    }
+}

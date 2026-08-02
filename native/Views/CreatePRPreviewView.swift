@@ -31,8 +31,9 @@ struct CreatePRPreviewView: View {
     @State private var showSubscriberPicker = false
 
     @State private var isGeneratingAI = false
+    @Environment(\.dependencies) private var deps
 
-    private let git = currentDependencies.gitService
+    private var git: GitServiceProtocol { deps.gitService }
 
     init(repoPath: String, branchName: String, backendUrl: String, gitHubId: Int64, onComplete: @escaping (URL) -> Void, onCancel: (() -> Void)? = nil) {
         self.repoPath = repoPath

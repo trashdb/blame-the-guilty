@@ -6,19 +6,20 @@ struct BranchDetailView: View {
     let backendUrl: String
     var onCheckout: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dependencies) private var deps
 
     @State private var deleting = false
     @State private var checkingOut = false
     @State private var checkoutSuccess = false
-    @State private var deleteError: String?
+    @State private var hasUpstream = false
     @State private var showCreatePR = false
     @State private var showCreateBranch = false
     @State private var newBranchName = ""
     @State private var creatingBranch = false
     @State private var createBranchError: String?
     @State private var createBranchSuccess = false
-    @State private var hasUpstream = false
-    private let git = currentDependencies.gitService
+    @State private var deleteError: String?
+    private var git: GitServiceProtocol { deps.gitService }
 
     var body: some View {
         if showCreatePR {

@@ -5,14 +5,15 @@ private let conflictLog = OSLog(subsystem: "com.statefalse", category: "conflict
 
 class ConflictWatcherService: ConflictWatcherServiceProtocol {
     private weak var signalR: SignalRService?
-    private let gitService = currentDependencies.gitService
+    private let gitService: GitServiceProtocol
     private var pollTask: Task<Void, Never>?
     private var lastKnownMainSha: [String: String] = [:]
     private var recentlyNotified: Set<String> = []
     private var notifyResetTask: Task<Void, Never>?
 
-    init(signalR: SignalRService) {
+    init(signalR: SignalRService, gitService: GitServiceProtocol) {
         self.signalR = signalR
+        self.gitService = gitService
     }
 
     func start() {

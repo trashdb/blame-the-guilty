@@ -40,6 +40,7 @@ struct QuickSearchView: View {
     let signalR: SignalRService
     let gitHubId: Int64
     let backendUrl: String
+    @Environment(\.dependencies) private var deps
 
     @State private var query = ""
     @State private var selectedIndex = 0
@@ -97,7 +98,7 @@ struct QuickSearchView: View {
                         subtitle: b.repoPath, icon: "arrow.triangle.branch", category: .branch
                     ) {
                         Task {
-                            let git = currentDependencies.gitService
+                            let git = deps.gitService
                             try? await git.checkoutBranch(repoPath: b.repoPath, name: b.name)
                             try? await git.pullCurrentBranch(repoPath: b.repoPath, token: nil)
                         }
@@ -118,7 +119,9 @@ struct QuickSearchView: View {
                         title: "Create PR from \(b.name)",
                         subtitle: "\(b.repoName) → open PR preview", icon: "plus.circle", category: .branch
                     ) {
-                        BranchDetailPanelManager.shared.show(info: info, gitHubId: self.gitHubId, backendUrl: self.backendUrl, onCheckout: nil)
+                        BranchDetailPanelManager.shared.show(
+                            deps: deps, info: info, gitHubId: self.gitHubId, backendUrl: self.backendUrl, onCheckout: nil
+                        )
                     })
                 }
             }

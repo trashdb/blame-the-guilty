@@ -3,6 +3,7 @@ import SwiftUI
 struct LocalBranchesView: View {
     let gitHubId: Int64
     let backendUrl: String
+    @Environment(\.dependencies) private var deps
 
     @State private var repos: [ScannedRepo] = []
     @State private var isLoading = true
@@ -17,7 +18,7 @@ struct LocalBranchesView: View {
     @AppStorage("favoriteRepo") private var favoriteRepo = TeamDefaults.favoriteRepo
     @AppStorage("workspacePath") private var workspacePath = TeamDefaults.workspacePath
 
-    private let git = currentDependencies.gitService
+    private var git: GitServiceProtocol { deps.gitService }
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.md) {

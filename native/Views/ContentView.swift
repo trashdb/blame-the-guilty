@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ContentView: View {
     @ObservedObject var signalR: SignalRService
+    @Environment(\.dependencies) private var deps
 
     @State private var keepSignedIn = true
     @State private var isLoading = false
@@ -209,6 +210,7 @@ struct ContentView: View {
                     isMerged: false, isDefault: false
                 )
                 BranchDetailPanelManager.shared.show(
+                    deps: deps,
                     info: info,
                     gitHubId: self.signalR.userGitHubId,
                     backendUrl: self.signalR.baseUrl,
@@ -245,7 +247,7 @@ struct ContentView: View {
                 icon: "arrow.triangle.branch", category: .branch
             ) {
                 Task {
-                    let git = currentDependencies.gitService
+                    let git = deps.gitService
                     try? await git.checkoutBranch(repoPath: fav.repoPath, name: "main")
                     try? await git.pullCurrentBranch(repoPath: fav.repoPath, token: nil)
                     await self.scanCurrentBranches()
