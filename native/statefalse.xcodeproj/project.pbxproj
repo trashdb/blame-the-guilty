@@ -172,6 +172,8 @@
 				<string>1</string>
 				<key>ENABLE_USER_SCRIPT_SANDBOXING</key>
 				<string>YES</string>
+				<key>ENABLE_TESTING_SEARCH_PATHS</key>
+				<string>YES</string>
 				<key>GENERATE_INFOPLIST_FILE</key>
 				<string>YES</string>
 				<key>LD_RUNPATH_SEARCH_PATHS</key>
@@ -211,6 +213,8 @@
 				<key>CURRENT_PROJECT_VERSION</key>
 				<string>1</string>
 				<key>ENABLE_USER_SCRIPT_SANDBOXING</key>
+				<string>YES</string>
+				<key>ENABLE_TESTING_SEARCH_PATHS</key>
 				<string>YES</string>
 				<key>GENERATE_INFOPLIST_FILE</key>
 				<string>YES</string>
