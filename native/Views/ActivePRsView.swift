@@ -3,6 +3,7 @@ import SwiftUI
 struct ActivePRsView: View {
     let prs: [PullRequest]
     let gitHubId: Int64
+    let deps: Dependencies
     @State private var selectedPR: PullRequest?
     @State private var optimisticDrafts: [String: Bool] = [:]
     @State private var searchQuery = ""
@@ -53,6 +54,17 @@ struct ActivePRsView: View {
         let draft = optimisticDrafts[pr.id] ?? pr.draft
         return (DS.Color.statusLabel(for: pr, draft: draft),
                 DS.Color.statusColor(for: pr, draft: draft))
+    }
+
+    private func detailPopover(for pr: PullRequest) -> PRDetailView {
+        PRDetailView(
+            pr: pr,
+            gitHubId: gitHubId,
+            optimisticDraft: optimisticDrafts[pr.id],
+            deps: deps
+        ) { newDraft in
+            optimisticDrafts[pr.id] = newDraft
+        }
     }
 
     var body: some View {
@@ -137,13 +149,7 @@ struct ActivePRsView: View {
                                     set: { if !$0 { selectedPR = nil } }
                                 ),
                                 action: { selectedPR = pr },
-                                popover: PRDetailView(
-                                    pr: pr,
-                                    gitHubId: gitHubId,
-                                    optimisticDraft: optimisticDrafts[pr.id]
-                                ) { newDraft in
-                                    optimisticDrafts[pr.id] = newDraft
-                                }
+                                popover: detailPopover(for: pr)
                             )
                             .transition(.opacity.combined(with: .move(edge: .top)))
                         }

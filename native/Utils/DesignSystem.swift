@@ -577,6 +577,32 @@ extension DS.Color {
         default:        return "READY"
         }
     }
+
+    static func ciStatusColor(_ ciStatus: String?) -> SwiftUI.Color {
+        switch ciStatus {
+        case "failed":  return statusRed
+        case "waiting": return statusOrange
+        case "review":  return statusBlue
+        default:        return statusGreen
+        }
+    }
+
+    static func ciStatusLabel(_ ciStatus: String?) -> String {
+        switch ciStatus {
+        case "waiting": return "CI WAITING"
+        case "failed":  return "CI FAIL"
+        default:        return "CI READY"
+        }
+    }
+
+    static func fileStatusColor(_ status: String?) -> SwiftUI.Color {
+        switch status {
+        case "added":    return success
+        case "removed":  return destructive
+        case "modified": return accent
+        default:         return textSecondary
+        }
+    }
 }
 
 // MARK: - PR Mergeable / CI Status

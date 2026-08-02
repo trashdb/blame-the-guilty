@@ -1,98 +1,29 @@
 import SwiftUI
-import OSLog
-
-private let draftLog = OSLog(subsystem: "com.statefalse", category: "draft")
-
-private struct PRDetailsResponse: Decodable {
-    let mergeableState: String?
-    let behindBy: Int?
-    let aheadBy: Int?
-    let draft: Bool?
-}
-
-private struct MergeResponse: Decodable {
-    let merged: Bool
-    let sha: String?
-    let message: String?
-    let error: String?
-}
-
-private struct UpdateBranchResponse: Decodable {
-    let message: String?
-}
-
-private struct CommitInfo: Decodable, Identifiable {
-    var id: String { sha ?? UUID().uuidString }
-    let sha: String?
-    let message: String?
-    let authorName: String?
-    let authorLogin: String?
-    let date: String?
-    let url: String?
-}
-
-private struct FileInfo: Decodable, Identifiable {
-    var id: String { filename ?? UUID().uuidString }
-    let filename: String?
-    let status: String?
-    let additions: Int?
-    let deletions: Int?
-}
-
-private struct CheckInfo: Decodable, Identifiable {
-    var id: String { name ?? UUID().uuidString }
-    let name: String?
-    let status: String?
-    let conclusion: String?
-    let startedAt: String?
-    let completedAt: String?
-    let url: String?
-}
 
 struct PRDetailView: View {
     let pr: PullRequest
     let gitHubId: Int64
-    let onDraftChanged: ((Bool) -> Void)?
-    @Environment(\.dependencies) private var deps
-
-    @State private var behindBy: Int?
-    @State private var aheadBy: Int?
-    @State private var detailError: String?
-    @State private var merging = false
-    @State private var mergeResult: String?
-    @State private var mergeError: String?
-
-    @State private var updatingBranch = false
-    @State private var branchUpdateResult: String?
-    @State private var branchUpdateError: String?
-
-    @State private var togglingDraft = false
-    @State private var draftError: String?
-    @State private var localDraft: Bool
-
-    @State private var selectedTab = 0
-
-    @State private var commits: [CommitInfo] = []
-    @State private var files: [FileInfo] = []
-    @State private var checks: [CheckInfo] = []
-    @State private var loadingCommits = false
-    @State private var loadingFiles = false
-    @State private var loadingChecks = false
-    @State private var commitsError: String?
-    @State private var filesError: String?
-    @State private var checksError: String?
-
-    init(pr: PullRequest, gitHubId: Int64, optimisticDraft: Bool? = nil, onDraftChanged: ((Bool) -> Void)? = nil) {
-        self.pr = pr
-        self.gitHubId = gitHubId
-        self.onDraftChanged = onDraftChanged
-        _localDraft = State(initialValue: optimisticDraft ?? pr.draft)
-    }
+    private let deps: Dependencies
+    @StateObject private var model: PRDetailViewModel
 
     @AppStorage("workspacePath") private var workspacePath = TeamDefaults.workspacePath
 
-    var canMerge: Bool {
-        !localDraft && pr.ciStatus == "ready" && pr.reviewApproved
+    init(pr: PullRequest,
+         gitHubId: Int64,
+         optimisticDraft: Bool? = nil,
+         deps: Dependencies,
+         onDraftChanged: ((Bool) -> Void)? = nil) {
+        self.pr = pr
+        self.gitHubId = gitHubId
+        self.deps = deps
+        _model = StateObject(wrappedValue: PRDetailViewModel(
+            pr: pr,
+            gitHubId: gitHubId,
+            optimisticDraft: optimisticDraft,
+            api: deps.apiClient,
+            signalR: deps.signalRService,
+            onDraftChanged: onDraftChanged
+        ))
     }
 
     var compareUrl: URL {
@@ -103,15 +34,9 @@ struct PRDetailView: View {
         URL(string: "\(pr.prUrl)/checks")!
     }
 
-    @State private var mergeMethod = "squash"
-
-    var hasComment: Bool {
-        pr.lastCommentBy != nil && pr.lastCommentBody != nil
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.md) {
-            Picker("", selection: $selectedTab) {
+            Picker("", selection: $model.selectedTab) {
                 Text("Details").tag(0)
                 Text("Commits").tag(1)
                 Text("Files").tag(2)
@@ -123,7 +48,7 @@ struct PRDetailView: View {
             .accessibilityLabel("PR detail tabs")
             .accessibilityHint("Double tap to switch between Details, Commits, Files, and Checks tabs")
 
-            switch selectedTab {
+            switch model.selectedTab {
             case 0: detailsTab
             case 1: commitsTab
             case 2: filesTab
@@ -133,13 +58,13 @@ struct PRDetailView: View {
         }
         .padding(DS.Spacing.xxl)
         .frame(width: 320, height: 480)
-        .animation(DS.Animation.default, value: selectedTab)
-        .onAppear { loadDetails() }
-        .onChange(of: selectedTab) { newTab in
+        .animation(DS.Animation.default, value: model.selectedTab)
+        .onAppear { model.loadDetails() }
+        .onChange(of: model.selectedTab) { newTab in
             switch newTab {
-            case 1 where commits.isEmpty && !loadingCommits: loadCommits()
-            case 2 where files.isEmpty && !loadingFiles: loadFiles()
-            case 3 where checks.isEmpty && !loadingChecks: loadChecks()
+            case 1 where model.commits.isEmpty && !model.loadingCommits: model.loadCommits()
+            case 2 where model.files.isEmpty && !model.loadingFiles: model.loadFiles()
+            case 3 where model.checks.isEmpty && !model.loadingChecks: model.loadChecks()
             default: break
             }
         }
@@ -178,7 +103,7 @@ struct PRDetailView: View {
                         SubscriberManagementView(
                             pr: pr,
                             gitHubId: gitHubId,
-                            backendUrl: backendUrl
+                            deps: deps
                         )
                     } else {
                         // Self-subscribe for non-authors
@@ -192,7 +117,7 @@ struct PRDetailView: View {
                                     .foregroundStyle(DS.Color.accent)
                                 Spacer()
                                 solidButton("Unsubscribe", color: .secondary, help: "Stop receiving notifications for this PR") {
-                                    Task { await performUnsubscribe() }
+                                    Task { await model.performUnsubscribe() }
                                 }
                             } else {
                                 Image(systemName: "bell")
@@ -203,7 +128,7 @@ struct PRDetailView: View {
                                     .foregroundStyle(DS.Color.textTertiary)
                                 Spacer()
                                 solidButton("Subscribe", color: DS.Color.accent, help: "Get notified of comments, reviews, and status changes") {
-                                    Task { await performSubscribe() }
+                                    Task { await model.performSubscribe() }
                                 }
                             }
                         }
@@ -247,30 +172,30 @@ struct PRDetailView: View {
 
                 if !pr.isMerged {
                     PRDetailDraftSection(
-                        localDraft: $localDraft,
-                        togglingDraft: togglingDraft,
-                        draftError: draftError,
-                        onToggle: performToggleDraft
+                        localDraft: $model.localDraft,
+                        togglingDraft: model.togglingDraft,
+                        draftError: model.draftError,
+                        onToggle: model.performToggleDraft
                     )
                     .transition(.opacity.combined(with: .move(edge: .top)))
 
                     PRDetailBehindAhead(
-                        behindBy: behindBy,
-                        aheadBy: aheadBy,
-                        detailError: detailError,
-                        updatingBranch: updatingBranch,
-                        branchUpdateResult: branchUpdateResult,
-                        branchUpdateError: branchUpdateError,
-                        onUpdateBranch: performUpdateBranch
+                        behindBy: model.behindBy,
+                        aheadBy: model.aheadBy,
+                        detailError: model.detailError,
+                        updatingBranch: model.updatingBranch,
+                        branchUpdateResult: model.branchUpdateResult,
+                        branchUpdateError: model.branchUpdateError,
+                        onUpdateBranch: model.performUpdateBranch
                     )
 
-                    if canMerge {
+                    if model.canMerge {
                         PRDetailMergeSection(
-                            merging: merging,
-                            mergeResult: mergeResult,
-                            mergeError: mergeError,
-                            mergeMethod: $mergeMethod,
-                            onMerge: performMerge
+                            merging: model.merging,
+                            mergeResult: model.mergeResult,
+                            mergeError: model.mergeError,
+                            mergeMethod: $model.mergeMethod,
+                            onMerge: model.performMerge
                         )
                         .transition(.opacity.combined(with: .move(edge: .top)))
                     }
@@ -308,8 +233,8 @@ struct PRDetailView: View {
                     }
                 }
             }
-            .animation(DS.Animation.default, value: canMerge)
-            .animation(DS.Animation.default, value: localDraft)
+            .animation(DS.Animation.default, value: model.canMerge)
+            .animation(DS.Animation.default, value: model.localDraft)
         }
     }
 
@@ -317,11 +242,11 @@ struct PRDetailView: View {
     @ViewBuilder
     private var commitsTab: some View {
         Group {
-            if loadingCommits {
+            if model.loadingCommits {
                 Spacer()
                 ProgressView()
                 Spacer()
-            } else if let error = commitsError {
+            } else if let error = model.commitsError {
                 VStack(spacing: DS.Spacing.md) {
                     Spacer()
                     Image(systemName: "exclamationmark.circle")
@@ -332,12 +257,12 @@ struct PRDetailView: View {
                         .foregroundStyle(DS.Color.destructive)
                         .multilineTextAlignment(.center)
                     solidButton("Retry", color: .blue) {
-                        commitsError = nil
-                        loadCommits()
+                        model.commitsError = nil
+                        model.loadCommits()
                     }
                     Spacer()
                 }
-            } else if commits.isEmpty {
+            } else if model.commits.isEmpty {
                 VStack(spacing: DS.Spacing.sm) {
                     Spacer()
                     Image(systemName: "git.commit")
@@ -349,7 +274,7 @@ struct PRDetailView: View {
                     Spacer()
                 }
             } else {
-                List(commits) { commit in
+                List(model.commits) { commit in
                     Button {
                         if let urlStr = commit.url, let url = URL(string: urlStr) {
                             NSWorkspace.shared.open(url)
@@ -397,11 +322,11 @@ struct PRDetailView: View {
     @ViewBuilder
     private var filesTab: some View {
         Group {
-            if loadingFiles {
+            if model.loadingFiles {
                 Spacer()
                 ProgressView()
                 Spacer()
-            } else if let error = filesError {
+            } else if let error = model.filesError {
                 VStack(spacing: DS.Spacing.md) {
                     Spacer()
                     Image(systemName: "exclamationmark.circle")
@@ -412,12 +337,12 @@ struct PRDetailView: View {
                         .foregroundStyle(DS.Color.destructive)
                         .multilineTextAlignment(.center)
                     solidButton("Retry", color: .blue) {
-                        filesError = nil
-                        loadFiles()
+                        model.filesError = nil
+                        model.loadFiles()
                     }
                     Spacer()
                 }
-            } else if files.isEmpty {
+            } else if model.files.isEmpty {
                 VStack(spacing: DS.Spacing.sm) {
                     Spacer()
                     Image(systemName: "doc.text")
@@ -429,16 +354,16 @@ struct PRDetailView: View {
                     Spacer()
                 }
             } else {
-                List(files) { file in
+                List(model.files) { file in
                     Button {
                         if let filename = file.filename {
                             openInRider(file: filename, line: nil)
                         }
                     } label: {
                         HStack(spacing: DS.Spacing.sm) {
-                            Image(systemName: statusIcon(file.status))
+                            Image(systemName: fileStatusIcon(file.status))
                                 .font(DS.Font.caption)
-                                .foregroundStyle(statusColor(file.status))
+                                .foregroundStyle(DS.Color.fileStatusColor(file.status))
                             Text(file.filename ?? "")
                                 .font(DS.Font.small)
                                 .foregroundStyle(DS.Color.textPrimary)
@@ -472,11 +397,11 @@ struct PRDetailView: View {
     @ViewBuilder
     private var checksTab: some View {
         Group {
-            if loadingChecks {
+            if model.loadingChecks {
                 Spacer()
                 ProgressView()
                 Spacer()
-            } else if let error = checksError {
+            } else if let error = model.checksError {
                 VStack(spacing: DS.Spacing.md) {
                     Spacer()
                     Image(systemName: "exclamationmark.circle")
@@ -487,12 +412,12 @@ struct PRDetailView: View {
                         .foregroundStyle(DS.Color.destructive)
                         .multilineTextAlignment(.center)
                     solidButton("Retry", color: .blue) {
-                        checksError = nil
-                        loadChecks()
+                        model.checksError = nil
+                        model.loadChecks()
                     }
                     Spacer()
                 }
-            } else if checks.isEmpty {
+            } else if model.checks.isEmpty {
                 VStack(spacing: DS.Spacing.sm) {
                     Spacer()
                     Image(systemName: "checkmark.circle")
@@ -504,7 +429,7 @@ struct PRDetailView: View {
                     Spacer()
                 }
             } else {
-                List(checks) { check in
+                List(model.checks) { check in
                     Button {
                         if let urlStr = check.url, let url = URL(string: urlStr) {
                             NSWorkspace.shared.open(url)
@@ -551,22 +476,13 @@ struct PRDetailView: View {
     }
 
     // MARK: - Helpers
-    private func statusIcon(_ status: String?) -> String {
+    private func fileStatusIcon(_ status: String?) -> String {
         switch status {
         case "added": return "plus.circle"
         case "modified": return "pencil.circle"
         case "removed": return "minus.circle"
         case "renamed": return "arrow.right.circle"
         default: return "doc.circle"
-        }
-    }
-
-    private func statusColor(_ status: String?) -> Color {
-        switch status {
-        case "added": return DS.Color.success
-        case "removed": return DS.Color.destructive
-        case "modified": return DS.Color.accent
-        default: return DS.Color.textSecondary
         }
     }
 
@@ -598,223 +514,7 @@ struct PRDetailView: View {
         return formatter.date(from: str)
     }
 
-    // MARK: - Actions
-    private func performMerge() {
-        merging = true
-        mergeResult = nil
-        mergeError = nil
-        let repoEscaped = pr.repo.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? pr.repo
-        guard let url = URL(string: "\(backendUrl)/api/pullrequests/\(pr.prNumber)/merge?repo=\(repoEscaped)&gitHubId=\(gitHubId)&method=\(mergeMethod)") else {
-            mergeError = "Invalid URL"
-            merging = false
-            return
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        URLSession.shared.dataTask(with: request) { data, _, err in
-            DispatchQueue.main.async {
-                merging = false
-                if let err { mergeError = err.localizedDescription; return }
-                guard let data else { return }
-                if let resp = try? JSONDecoder().decode(MergeResponse.self, from: data) {
-                    if resp.merged {
-                        mergeResult = resp.message ?? "Merged"
-                    } else {
-                        mergeError = resp.error ?? resp.message ?? "Merge failed"
-                    }
-                } else {
-                    mergeError = "Invalid response"
-                }
-            }
-        }.resume()
-    }
-
-    private func performToggleDraft(_ makeDraft: Bool) {
-        let previousDraft = localDraft
-        localDraft = makeDraft
-        onDraftChanged?(makeDraft)
-        draftError = nil
-        togglingDraft = true
-
-        let repoStr = pr.repo
-        let repoEscaped = repoStr.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? repoStr
-        let urlStr = "\(backendUrl)/api/pullrequests/\(pr.prNumber)/draft?repo=\(repoEscaped)&gitHubId=\(gitHubId)&draft=\(makeDraft ? "true" : "false")"
-        guard let url = URL(string: urlStr) else {
-            localDraft = previousDraft
-            onDraftChanged?(previousDraft)
-            draftError = "Invalid URL"
-            togglingDraft = false
-            return
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        URLSession.shared.dataTask(with: request) { data, resp, err in
-            DispatchQueue.main.async {
-                self.togglingDraft = false
-                if let err {
-                    self.localDraft = previousDraft
-                    self.onDraftChanged?(previousDraft)
-                    self.draftError = err.localizedDescription
-                    return
-                }
-                let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
-                if status >= 400 {
-                    self.localDraft = previousDraft
-                    self.onDraftChanged?(previousDraft)
-                    self.draftError = "HTTP \(status)"
-                }
-            }
-        }.resume()
-    }
-
-    private func performUpdateBranch() {
-        updatingBranch = true
-        branchUpdateResult = nil
-        branchUpdateError = nil
-        let repoEscaped = pr.repo.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? pr.repo
-        guard let url = URL(string: "\(backendUrl)/api/pullrequests/\(pr.prNumber)/update-branch?repo=\(repoEscaped)&gitHubId=\(gitHubId)") else {
-            branchUpdateError = "Invalid URL"
-            updatingBranch = false
-            return
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        URLSession.shared.dataTask(with: request) { data, resp, err in
-            DispatchQueue.main.async {
-                self.updatingBranch = false
-                if let err { self.branchUpdateError = err.localizedDescription; return }
-                guard let data else { return }
-                if let decoded = try? JSONDecoder().decode(UpdateBranchResponse.self, from: data) {
-                    self.branchUpdateResult = decoded.message ?? "Branch updated"
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.loadDetails() }
-                } else {
-                    let raw = String(data: data, encoding: .utf8) ?? "non-utf8"
-                    let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
-                    if status >= 200 && status < 300 {
-                        self.branchUpdateResult = "Update sent (check PR on GitHub)"
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.loadDetails() }
-                    } else {
-                        self.branchUpdateError = "\(raw.prefix(200))"
-                    }
-                }
-            }
-        }.resume()
-    }
-
-    private func loadDetails() {
-        let repoEscaped = pr.repo.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? pr.repo
-        guard let url = URL(string: "\(backendUrl)/api/pullrequests/\(pr.prNumber)/detail?repo=\(repoEscaped)&gitHubId=\(gitHubId)") else { return }
-        var req = URLRequest(url: url)
-        req.timeoutInterval = 15
-        URLSession.shared.dataTask(with: req) { data, resp, err in
-            DispatchQueue.main.async {
-                if let err { self.detailError = err.localizedDescription; return }
-                guard let data else { return }
-                if let decoded = try? JSONDecoder().decode(PRDetailsResponse.self, from: data) {
-                    withAnimation(DS.Animation.default) {
-                        self.behindBy = decoded.behindBy
-                        self.aheadBy = decoded.aheadBy
-                    }
-                    if decoded.behindBy == 0 {
-                        self.branchUpdateResult = nil
-                        self.branchUpdateError = nil
-                    }
-                    if let backendDraft = decoded.draft, !self.togglingDraft {
-                        if backendDraft != self.localDraft {
-                            self.localDraft = backendDraft
-                            self.onDraftChanged?(backendDraft)
-                        }
-                    }
-                } else {
-                    let raw = String(data: data, encoding: .utf8) ?? "non-utf8"
-                    self.detailError = "Parse error: \(raw.prefix(200))"
-                }
-            }
-        }.resume()
-    }
-
-    private func performSubscribe() async {
-        let service = deps.signalRService
-        _ = await service.subscribeToPR(prNumber: pr.prNumber, repo: pr.repo, gitHubId: gitHubId)
-    }
-
-    private func performUnsubscribe() async {
-        let service = deps.signalRService
-        _ = await service.unsubscribeFromPR(prNumber: pr.prNumber, repo: pr.repo, gitHubId: gitHubId)
-    }
-
-    private func loadCommits() {
-        loadingCommits = true
-        commitsError = nil
-        let repoEscaped = pr.repo.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? pr.repo
-        guard let url = URL(string: "\(backendUrl)/api/pullrequests/\(pr.prNumber)/commits?repo=\(repoEscaped)&gitHubId=\(gitHubId)") else {
-            loadingCommits = false; commitsError = "Invalid URL"; return
-        }
-        var req = URLRequest(url: url)
-        req.timeoutInterval = 15
-        URLSession.shared.dataTask(with: req) { data, _, err in
-            DispatchQueue.main.async {
-                loadingCommits = false
-                if let err { commitsError = err.localizedDescription; return }
-                guard let data else { commitsError = "No data"; return }
-                do {
-                    let decoded = try JSONDecoder().decode([CommitInfo].self, from: data)
-                    commits = decoded
-                } catch {
-                    commitsError = "Parse error: \(error.localizedDescription)"
-                }
-            }
-        }.resume()
-    }
-
-    private func loadFiles() {
-        loadingFiles = true
-        filesError = nil
-        let repoEscaped = pr.repo.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? pr.repo
-        guard let url = URL(string: "\(backendUrl)/api/pullrequests/\(pr.prNumber)/files?repo=\(repoEscaped)&gitHubId=\(gitHubId)") else {
-            loadingFiles = false; filesError = "Invalid URL"; return
-        }
-        var req = URLRequest(url: url)
-        req.timeoutInterval = 15
-        URLSession.shared.dataTask(with: req) { data, _, err in
-            DispatchQueue.main.async {
-                loadingFiles = false
-                if let err { filesError = err.localizedDescription; return }
-                guard let data else { filesError = "No data"; return }
-                do {
-                    let decoded = try JSONDecoder().decode([FileInfo].self, from: data)
-                    files = decoded
-                } catch {
-                    filesError = "Parse error: \(error.localizedDescription)"
-                }
-            }
-        }.resume()
-    }
-
-    private func loadChecks() {
-        loadingChecks = true
-        checksError = nil
-        let repoEscaped = pr.repo.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? pr.repo
-        guard let url = URL(string: "\(backendUrl)/api/pullrequests/\(pr.prNumber)/checks?repo=\(repoEscaped)&gitHubId=\(gitHubId)") else {
-            loadingChecks = false; checksError = "Invalid URL"; return
-        }
-        var req = URLRequest(url: url)
-        req.timeoutInterval = 15
-        URLSession.shared.dataTask(with: req) { data, _, err in
-            DispatchQueue.main.async {
-                loadingChecks = false
-                if let err { checksError = err.localizedDescription; return }
-                guard let data else { checksError = "No data"; return }
-                do {
-                    let decoded = try JSONDecoder().decode([CheckInfo].self, from: data)
-                    checks = decoded
-                } catch {
-                    checksError = "Parse error: \(error.localizedDescription)"
-                }
-            }
-        }.resume()
-    }
-
+    // MARK: - IDE
     private func openInRider(file: String, line: Int?) {
         Task {
             let gitService = deps.gitService
@@ -838,14 +538,8 @@ struct PRDetailBadges: View {
             Text(DS.Color.mergeableLabel(pr.mergeableState))
                 .badge(DS.Color.mergeableLabel(pr.mergeableState), color: mergeColor)
 
-            let ciColor: SwiftUI.Color = pr.ciStatus == "failed" ? DS.Color.statusRed
-                : pr.ciStatus == "waiting" ? DS.Color.statusOrange
-                : pr.ciStatus == "review" ? DS.Color.statusBlue
-                : DS.Color.statusGreen
-            let ciLabel: String = pr.ciStatus == "waiting" ? "CI WAITING"
-                : pr.ciStatus == "failed" ? "CI FAIL"
-                : pr.ciStatus == "review" ? "CI READY"
-                : "CI READY"
+            let ciColor = DS.Color.ciStatusColor(pr.ciStatus)
+            let ciLabel = DS.Color.ciStatusLabel(pr.ciStatus)
             Text(ciLabel)
                 .badge(ciLabel, color: ciColor)
 
@@ -1103,28 +797,20 @@ private func shortFile(_ path: String) -> String {
 struct SubscriberManagementView: View {
     let pr: PullRequest
     let gitHubId: Int64
-    let backendUrl: String
-    
+    private let api: ApiClientProtocol
+
     @State private var isLoading = false
     @State private var isLoadingUsers = false
     @State private var errorMessage: String?
-    @State private var subscribers: [SubscriberInfo] = []
-    @State private var availableUsers: [AvailableUser] = []
+    @State private var subscribers: [ApiSubscriberInfo] = []
+    @State private var availableUsers: [ApiAvailableUser] = []
     @State private var selectedUserIds: Set<Int64> = []
     @State private var showUserPicker = false
-    
-    struct SubscriberInfo: Identifiable, Decodable {
-        var id: Int64 { gitHubId }
-        let gitHubId: Int64
-        let gitHubUsername: String
-        let avatarUrl: String
-    }
-    
-    struct AvailableUser: Identifiable, Decodable {
-        var id: Int64 { gitHubId }
-        let gitHubId: Int64
-        let login: String
-        let avatarUrl: String?
+
+    init(pr: PullRequest, gitHubId: Int64, deps: Dependencies) {
+        self.pr = pr
+        self.gitHubId = gitHubId
+        self.api = deps.apiClient
     }
     
     var body: some View {
@@ -1205,36 +891,22 @@ struct SubscriberManagementView: View {
     
     private func loadSubscribers() async {
         isLoading = true
-        let repoEscaped = pr.repo.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? pr.repo
-        guard let url = URL(string: "\(backendUrl)/api/pullrequests/\(pr.prNumber)/subscribers?repo=\(repoEscaped)") else { return }
-        
-        do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            struct SubscriberResponse: Decodable {
-                let subscribers: [SubscriberInfo]
-            }
-            if let decoded = try? JSONDecoder().decode(SubscriberResponse.self, from: data) {
-                await MainActor.run { self.subscribers = decoded.subscribers }
-            }
-        } catch {
-            await MainActor.run { self.errorMessage = "Failed to load subscribers" }
+        let result = await api.fetchSubscribers(prNumber: pr.prNumber, repo: pr.repo)
+        switch result {
+        case .success(let subs): subscribers = subs
+        case .failure: errorMessage = "Failed to load subscribers"
         }
         isLoading = false
     }
     
     private func loadAvailableUsers() async {
         isLoadingUsers = true
-        guard let url = URL(string: "\(backendUrl)/api/users") else { return }
-        
-        do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            if let decoded = try? JSONDecoder().decode([AvailableUser].self, from: data) {
-                await MainActor.run {
-                    self.availableUsers = decoded.filter { $0.gitHubId != gitHubId }
-                }
-            }
-        } catch {
-            // Ignore
+        let result = await api.fetchAvailableUsers()
+        switch result {
+        case .success(let users):
+            availableUsers = users.filter { $0.gitHubId != gitHubId }
+        case .failure:
+            break
         }
         isLoadingUsers = false
     }
@@ -1244,58 +916,24 @@ struct SubscriberManagementView: View {
         errorMessage = nil
         
         for subscriberId in selectedUserIds {
-            let repoEscaped = pr.repo.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? pr.repo
-            guard let url = URL(string: "\(backendUrl)/api/pullrequests/\(pr.prNumber)/add-subscriber?repo=\(repoEscaped)&gitHubId=\(gitHubId)&subscriberId=\(subscriberId)") else { continue }
-            
-            var req = URLRequest(url: url)
-            req.httpMethod = "POST"
-            
-            do {
-                let (data, resp) = try await URLSession.shared.data(for: req)
-                if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
-                    struct ErrResp: Decodable { let error: String? }
-                    if let err = try? JSONDecoder().decode(ErrResp.self, from: data), let msg = err.error {
-                        await MainActor.run { self.errorMessage = msg }
-                    }
-                }
-            } catch {
-                await MainActor.run { self.errorMessage = error.localizedDescription }
+            if let error = await api.addSubscriber(prNumber: pr.prNumber, repo: pr.repo, gitHubId: gitHubId, subscriberId: subscriberId) {
+                errorMessage = error
             }
         }
         
-        await MainActor.run {
-            selectedUserIds.removeAll()
-            showUserPicker = false
-            Task { await loadSubscribers() }
-        }
+        selectedUserIds.removeAll()
+        showUserPicker = false
+        await loadSubscribers()
         isLoading = false
     }
     
     private func removeSubscriber(_ subscriberGitHubId: Int64) async {
         isLoading = true
         errorMessage = nil
-        let repoEscaped = pr.repo.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? pr.repo
-        guard let url = URL(string: "\(backendUrl)/api/pullrequests/\(pr.prNumber)/remove-subscriber?repo=\(repoEscaped)&gitHubId=\(gitHubId)&subscriberId=\(subscriberGitHubId)") else { return }
-        
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        
-        do {
-            let (data, resp) = try await URLSession.shared.data(for: req)
-            if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
-                struct ErrResp: Decodable { let error: String? }
-                if let err = try? JSONDecoder().decode(ErrResp.self, from: data), let msg = err.error {
-                    await MainActor.run { self.errorMessage = msg }
-                } else {
-                    await MainActor.run { self.errorMessage = "Failed to remove subscriber" }
-                }
-            } else {
-                await MainActor.run {
-                    Task { await loadSubscribers() }
-                }
-            }
-        } catch {
-            await MainActor.run { self.errorMessage = error.localizedDescription }
+        if let error = await api.removeSubscriber(prNumber: pr.prNumber, repo: pr.repo, gitHubId: gitHubId, subscriberId: subscriberGitHubId) {
+            errorMessage = error
+        } else {
+            await loadSubscribers()
         }
         isLoading = false
     }
@@ -1303,14 +941,14 @@ struct SubscriberManagementView: View {
 
 // MARK: - User Picker View
 struct UserPickerView: View {
-    let users: [SubscriberManagementView.AvailableUser]
+    let users: [ApiAvailableUser]
     let currentSubscribers: [Int64]
     let currentUserId: Int64
     @Binding var selectedIds: Set<Int64>
     let onDone: () -> Void
     let onCancel: () -> Void
     
-    var filteredUsers: [SubscriberManagementView.AvailableUser] {
+    var filteredUsers: [ApiAvailableUser] {
         users.filter { user in
             user.gitHubId != currentUserId &&
             !currentSubscribers.contains(user.gitHubId) &&
@@ -1382,7 +1020,7 @@ struct UserPickerView: View {
 }
 
 struct UserPickerRow: View {
-    let user: SubscriberManagementView.AvailableUser
+    let user: ApiAvailableUser
     let isSelected: Bool
     let onToggle: () -> Void
     

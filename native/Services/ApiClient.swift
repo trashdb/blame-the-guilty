@@ -45,6 +45,79 @@ struct ApiMe: Decodable {
     let avatarUrl: String?
 }
 
+// MARK: - PR detail DTOs
+
+struct ApiPRDetails: Decodable {
+    let mergeableState: String?
+    let behindBy: Int?
+    let aheadBy: Int?
+    let draft: Bool?
+}
+
+struct ApiMergeResponse: Decodable {
+    let merged: Bool
+    let sha: String?
+    let message: String?
+    let error: String?
+}
+
+struct ApiCommitInfo: Decodable, Identifiable {
+    var id: String { sha ?? UUID().uuidString }
+    let sha: String?
+    let message: String?
+    let authorName: String?
+    let authorLogin: String?
+    let date: String?
+    let url: String?
+}
+
+struct ApiFileInfo: Decodable, Identifiable {
+    var id: String { filename ?? UUID().uuidString }
+    let filename: String?
+    let status: String?
+    let additions: Int?
+    let deletions: Int?
+}
+
+struct ApiCheckInfo: Decodable, Identifiable {
+    var id: String { name ?? UUID().uuidString }
+    let name: String?
+    let status: String?
+    let conclusion: String?
+    let startedAt: String?
+    let completedAt: String?
+    let url: String?
+}
+
+struct ApiSubscriberInfo: Identifiable, Decodable {
+    var id: Int64 { gitHubId }
+    let gitHubId: Int64
+    let gitHubUsername: String
+    let avatarUrl: String
+}
+
+struct ApiAvailableUser: Identifiable, Decodable {
+    var id: Int64 { gitHubId }
+    let gitHubId: Int64
+    let login: String
+    let avatarUrl: String?
+}
+
+struct ApiError: Decodable {
+    let error: String?
+}
+
+enum ApiFetch<T> {
+    case success(T)
+    case failure(String)
+}
+
+enum ApiUpdateBranchResult {
+    case updated(String)
+    case sent
+    case failed(String)
+}
+
 // MARK: - Protocol
 
 protocol ApiClientProtocol: AnyObject {
@@ -57,6 +130,18 @@ protocol ApiClientProtocol: AnyObject {
     func syncActiveWorkflows(gitHubId: Int64) async -> Int
     func subscribeToPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool
     func unsubscribeFromPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool
+
+    func fetchPRDetails(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<ApiPRDetails>
+    func mergePR(prNumber: Int64, repo: String, gitHubId: Int64, method: String) async -> ApiMergeResponse?
+    func setDraft(prNumber: Int64, repo: String, gitHubId: Int64, draft: Bool) async -> String?
+    func updateBranch(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiUpdateBranchResult
+    func fetchCommits(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<[ApiCommitInfo]>
+    func fetchFiles(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<[ApiFileInfo]>
+    func fetchChecks(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<[ApiCheckInfo]>
+    func fetchSubscribers(prNumber: Int64, repo: String) async -> ApiFetch<[ApiSubscriberInfo]>
+    func fetchAvailableUsers() async -> ApiFetch<[ApiAvailableUser]>
+    func addSubscriber(prNumber: Int64, repo: String, gitHubId: Int64, subscriberId: Int64) async -> String?
+    func removeSubscriber(prNumber: Int64, repo: String, gitHubId: Int64, subscriberId: Int64) async -> String?
 }
 
 // MARK: - Live Implementation
@@ -132,6 +217,173 @@ final class LiveApiClient: ApiClientProtocol {
         guard let (_, resp) = try? await URLSession.shared.data(for: req),
               let http = resp as? HTTPURLResponse, http.statusCode == 200 else { return false }
         return true
+    }
+
+    // MARK: - PR detail actions
+
+    private func url(_ path: String, query: [String: String] = [:]) -> URL? {
+        var components = URLComponents(string: "\(baseUrl)\(path)")
+        components?.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }
+        return components?.url
+    }
+
+    func fetchPRDetails(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<ApiPRDetails> {
+        guard let url = url("/api/pullrequests/\(prNumber)/detail", query: ["repo": repo, "gitHubId": "\(gitHubId)"]) else {
+            return .failure("Invalid URL")
+        }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 15
+        do {
+            let (data, _) = try await URLSession.shared.data(for: req)
+            guard let decoded = try? JSONDecoder().decode(ApiPRDetails.self, from: data) else {
+                let raw = String(data: data, encoding: .utf8) ?? "non-utf8"
+                return .failure("Parse error: \(raw.prefix(200))")
+            }
+            return .success(decoded)
+        } catch {
+            return .failure(error.localizedDescription)
+        }
+    }
+
+    func mergePR(prNumber: Int64, repo: String, gitHubId: Int64, method: String) async -> ApiMergeResponse? {
+        guard let url = url("/api/pullrequests/\(prNumber)/merge", query: ["repo": repo, "gitHubId": "\(gitHubId)", "method": method]) else { return nil }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        guard let (data, _) = try? await URLSession.shared.data(for: request) else { return nil }
+        return try? JSONDecoder().decode(ApiMergeResponse.self, from: data)
+    }
+
+    func setDraft(prNumber: Int64, repo: String, gitHubId: Int64, draft: Bool) async -> String? {
+        guard let url = url("/api/pullrequests/\(prNumber)/draft", query: ["repo": repo, "gitHubId": "\(gitHubId)", "draft": draft ? "true" : "false"]) else {
+            return "Invalid URL"
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        do {
+            let (_, resp) = try await URLSession.shared.data(for: request)
+            let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            return status >= 400 ? "HTTP \(status)" : nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    func updateBranch(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiUpdateBranchResult {
+        guard let url = url("/api/pullrequests/\(prNumber)/update-branch", query: ["repo": repo, "gitHubId": "\(gitHubId)"]) else {
+            return .failed("Invalid URL")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        do {
+            let (data, resp) = try await URLSession.shared.data(for: request)
+            let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            struct MessageResponse: Decodable { let message: String? }
+            if let decoded = try? JSONDecoder().decode(MessageResponse.self, from: data), let message = decoded.message {
+                return .updated(message)
+            }
+            if let decoded = try? JSONDecoder().decode(ApiError.self, from: data), let message = decoded.error, status >= 400 {
+                return .failed(message)
+            }
+            if status >= 200 && status < 300 {
+                return .sent
+            }
+            let raw = String(data: data, encoding: .utf8) ?? "non-utf8"
+            return .failed("\(raw.prefix(200))")
+        } catch {
+            return .failed(error.localizedDescription)
+        }
+    }
+
+    func fetchCommits(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<[ApiCommitInfo]> {
+        await fetchList("/api/pullrequests/\(prNumber)/commits", prNumber: prNumber, repo: repo, gitHubId: gitHubId)
+    }
+
+    func fetchFiles(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<[ApiFileInfo]> {
+        await fetchList("/api/pullrequests/\(prNumber)/files", prNumber: prNumber, repo: repo, gitHubId: gitHubId)
+    }
+
+    func fetchChecks(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<[ApiCheckInfo]> {
+        await fetchList("/api/pullrequests/\(prNumber)/checks", prNumber: prNumber, repo: repo, gitHubId: gitHubId)
+    }
+
+    private func fetchList<T: Decodable>(_ path: String, prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<[T]> {
+        guard let url = url(path, query: ["repo": repo, "gitHubId": "\(gitHubId)"]) else {
+            return .failure("Invalid URL")
+        }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 15
+        do {
+            let (data, _) = try await URLSession.shared.data(for: req)
+            guard let decoded = try? JSONDecoder().decode([T].self, from: data) else {
+                return .failure("Parse error: \(errorLocalized(from: data))")
+            }
+            return .success(decoded)
+        } catch {
+            return .failure(error.localizedDescription)
+        }
+    }
+
+    private func errorLocalized(from data: Data) -> String {
+        (try? JSONDecoder().decode(ApiError.self, from: data))?.error
+            ?? String(data: data, encoding: .utf8).map { "\($0.prefix(200))" }
+            ?? "non-utf8"
+    }
+
+    func fetchSubscribers(prNumber: Int64, repo: String) async -> ApiFetch<[ApiSubscriberInfo]> {
+        guard let url = url("/api/pullrequests/\(prNumber)/subscribers", query: ["repo": repo]) else {
+            return .failure("Invalid URL")
+        }
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            struct Wrapper: Decodable { let subscribers: [ApiSubscriberInfo] }
+            guard let decoded = try? JSONDecoder().decode(Wrapper.self, from: data) else {
+                return .failure("Parse error: \(errorLocalized(from: data))")
+            }
+            return .success(decoded.subscribers)
+        } catch {
+            return .failure(error.localizedDescription)
+        }
+    }
+
+    func fetchAvailableUsers() async -> ApiFetch<[ApiAvailableUser]> {
+        guard let url = url("/api/users") else { return .failure("Invalid URL") }
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            guard let decoded = try? JSONDecoder().decode([ApiAvailableUser].self, from: data) else {
+                return .failure("Parse error: \(errorLocalized(from: data))")
+            }
+            return .success(decoded)
+        } catch {
+            return .failure(error.localizedDescription)
+        }
+    }
+
+    func addSubscriber(prNumber: Int64, repo: String, gitHubId: Int64, subscriberId: Int64) async -> String? {
+        await mutateSubscriber("/api/pullrequests/\(prNumber)/add-subscriber", prNumber: prNumber, repo: repo, gitHubId: gitHubId, subscriberId: subscriberId)
+    }
+
+    func removeSubscriber(prNumber: Int64, repo: String, gitHubId: Int64, subscriberId: Int64) async -> String? {
+        await mutateSubscriber("/api/pullrequests/\(prNumber)/remove-subscriber", prNumber: prNumber, repo: repo, gitHubId: gitHubId, subscriberId: subscriberId)
+    }
+
+    private func mutateSubscriber(_ path: String, prNumber: Int64, repo: String, gitHubId: Int64, subscriberId: Int64) async -> String? {
+        guard let url = url(path, query: ["repo": repo, "gitHubId": "\(gitHubId)", "subscriberId": "\(subscriberId)"]) else {
+            return "Invalid URL"
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        do {
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
+                if let err = try? JSONDecoder().decode(ApiError.self, from: data), let msg = err.error {
+                    return msg
+                }
+                return "HTTP \(http.statusCode)"
+            }
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
     }
 }
 

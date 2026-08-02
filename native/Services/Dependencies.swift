@@ -7,6 +7,7 @@ struct Dependencies {
     let keychainService: KeychainServiceProtocol
     let persistenceService: PersistenceServiceProtocol
     let oAuthService: OAuthServiceProtocol
+    let apiClient: ApiClientProtocol
 
     static func live(signalRService: SignalRServiceProtocol) -> Dependencies {
         Dependencies(
@@ -14,7 +15,8 @@ struct Dependencies {
             signalRService: signalRService,
             keychainService: LiveKeychainService(),
             persistenceService: LivePersistenceService(),
-            oAuthService: OAuthService()
+            oAuthService: OAuthService(),
+            apiClient: LiveApiClient(baseUrl: signalRService.baseUrl)
         )
     }
 
@@ -27,14 +29,16 @@ struct Dependencies {
         signalR: SignalRServiceProtocol = MockSignalRService(),
         keychain: KeychainServiceProtocol = MockKeychainService(),
         persistence: PersistenceServiceProtocol = MockPersistenceService(),
-        oauth: OAuthServiceProtocol = MockOAuthService()
+        oauth: OAuthServiceProtocol = MockOAuthService(),
+        api: ApiClientProtocol = MockApiClient()
     ) -> Dependencies {
         Dependencies(
             gitService: git,
             signalRService: signalR,
             keychainService: keychain,
             persistenceService: persistence,
-            oAuthService: oauth
+            oAuthService: oauth,
+            apiClient: api
         )
     }
 }

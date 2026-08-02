@@ -90,6 +90,34 @@ class MockSignalRService: SignalRServiceProtocol {
     func unsubscribeFromPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool { false }
 }
 
+// MARK: - ApiClient Mock
+
+class MockApiClient: ApiClientProtocol {
+    let baseUrl: String = "https://mock.example.com"
+
+    func fetchMe(gitHubId: Int64) async -> ApiMe? { nil }
+    func fetchWorkflowRuns(gitHubId: Int64, limit: Int) async -> [ApiWorkflowRun]? { [] }
+    func fetchActivePRs(gitHubId: Int64) async -> [ApiPullRequest]? { [] }
+    func syncPRsFromGitHub(gitHubId: Int64) async -> Int { 0 }
+    func syncActiveWorkflows(gitHubId: Int64) async -> Int { 0 }
+    func subscribeToPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool { false }
+    func unsubscribeFromPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool { false }
+
+    func fetchPRDetails(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<ApiPRDetails> {
+        .failure("mock")
+    }
+    func mergePR(prNumber: Int64, repo: String, gitHubId: Int64, method: String) async -> ApiMergeResponse? { nil }
+    func setDraft(prNumber: Int64, repo: String, gitHubId: Int64, draft: Bool) async -> String? { nil }
+    func updateBranch(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiUpdateBranchResult { .sent }
+    func fetchCommits(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<[ApiCommitInfo]> { .success([]) }
+    func fetchFiles(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<[ApiFileInfo]> { .success([]) }
+    func fetchChecks(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<[ApiCheckInfo]> { .success([]) }
+    func fetchSubscribers(prNumber: Int64, repo: String) async -> ApiFetch<[ApiSubscriberInfo]> { .success([]) }
+    func fetchAvailableUsers() async -> ApiFetch<[ApiAvailableUser]> { .success([]) }
+    func addSubscriber(prNumber: Int64, repo: String, gitHubId: Int64, subscriberId: Int64) async -> String? { nil }
+    func removeSubscriber(prNumber: Int64, repo: String, gitHubId: Int64, subscriberId: Int64) async -> String? { nil }
+}
+
 // MARK: - Keychain Mock
 
 class MockKeychainService: KeychainServiceProtocol {

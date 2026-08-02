@@ -36,7 +36,7 @@ struct ContentView: View {
                     }
 
                     if signalR.isLoggedIn {
-                        ActivePRsView(prs: signalR.activePRs, gitHubId: signalR.userGitHubId)
+                        ActivePRsView(prs: signalR.activePRs, gitHubId: signalR.userGitHubId, deps: deps)
                         Divider()
                     }
 
