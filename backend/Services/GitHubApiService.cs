@@ -13,16 +13,16 @@ namespace Statefalse.Api.Services;
 public class GitHubApiService
 {
     private readonly AppDbContext _db;
-    private readonly GitHubClient _github;
-    private readonly GitHubTokenResolver _tokens;
+    private readonly IGitHubClient _github;
+    private readonly IGitHubTokenResolver _tokens;
     private readonly AiService _ai;
     private readonly ILogger<GitHubApiService> _logger;
     private readonly SignalRNotifier _notifier;
 
     public GitHubApiService(
         AppDbContext db,
-        GitHubClient github,
-        GitHubTokenResolver tokens,
+        IGitHubClient github,
+        IGitHubTokenResolver tokens,
         AiService ai,
         ILogger<GitHubApiService> logger,
         SignalRNotifier notifier)

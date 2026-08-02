@@ -13,10 +13,10 @@ namespace Statefalse.Api.Services;
 public class AiService
 {
     private static readonly HttpClient _client = new() { Timeout = TimeSpan.FromSeconds(30) };
-    private readonly GitHubClient _github;
+    private readonly IGitHubClient _github;
     private readonly ILogger<AiService> _logger;
 
-    public AiService(GitHubClient github, ILogger<AiService> logger)
+    public AiService(IGitHubClient github, ILogger<AiService> logger)
     {
         _github = github;
         _logger = logger;

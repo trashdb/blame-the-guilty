@@ -14,14 +14,14 @@ namespace Statefalse.Api.Services;
 public class PullRequestSyncService
 {
     private readonly AppDbContext _db;
-    private readonly GitHubClient _github;
-    private readonly GitHubTokenResolver _tokens;
+    private readonly IGitHubClient _github;
+    private readonly IGitHubTokenResolver _tokens;
     private readonly ILogger<PullRequestSyncService> _logger;
 
     public PullRequestSyncService(
         AppDbContext db,
-        GitHubClient github,
-        GitHubTokenResolver tokens,
+        IGitHubClient github,
+        IGitHubTokenResolver tokens,
         ILogger<PullRequestSyncService> logger)
     {
         _db = db;

@@ -13,13 +13,13 @@ namespace Statefalse.Api.Services;
 public class WorkflowRunWebhookHandler : IWebhookHandler
 {
     private readonly AppDbContext _db;
-    private readonly GitHubTokenResolver _tokens;
+    private readonly IGitHubTokenResolver _tokens;
     private readonly SignalRNotifier _notifier;
     private readonly ILogger<WorkflowRunWebhookHandler> _logger;
 
     public WorkflowRunWebhookHandler(
         AppDbContext db,
-        GitHubTokenResolver tokens,
+        IGitHubTokenResolver tokens,
         SignalRNotifier notifier,
         ILogger<WorkflowRunWebhookHandler> logger)
     {

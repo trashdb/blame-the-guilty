@@ -13,13 +13,13 @@ namespace Statefalse.Api.Services;
 public class CheckSuiteWebhookHandler : IWebhookHandler
 {
     private readonly AppDbContext _db;
-    private readonly GitHubTokenResolver _tokens;
+    private readonly IGitHubTokenResolver _tokens;
     private readonly SignalRNotifier _notifier;
     private readonly ILogger<CheckSuiteWebhookHandler> _logger;
 
     public CheckSuiteWebhookHandler(
         AppDbContext db,
-        GitHubTokenResolver tokens,
+        IGitHubTokenResolver tokens,
         SignalRNotifier notifier,
         ILogger<CheckSuiteWebhookHandler> logger)
     {

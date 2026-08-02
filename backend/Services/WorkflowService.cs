@@ -13,15 +13,15 @@ namespace Statefalse.Api.Services;
 public class WorkflowService
 {
     private readonly AppDbContext _db;
-    private readonly GitHubClient _github;
-    private readonly GitHubTokenResolver _tokens;
+    private readonly IGitHubClient _github;
+    private readonly IGitHubTokenResolver _tokens;
     private readonly IHubContext<PunishmentHub> _hub;
     private readonly ILogger<WorkflowService> _logger;
 
     public WorkflowService(
         AppDbContext db,
-        GitHubClient github,
-        GitHubTokenResolver tokens,
+        IGitHubClient github,
+        IGitHubTokenResolver tokens,
         IHubContext<PunishmentHub> hub,
         ILogger<WorkflowService> logger)
     {

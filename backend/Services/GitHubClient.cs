@@ -11,7 +11,7 @@ public sealed record GitHubResponse(int StatusCode, JsonElement? Body);
 /// Statefalse User-Agent and Bearer token when provided. A <see cref="StatusCode"/>
 /// of 0 means the request threw (network/timeout) — callers map to 502.
 /// </summary>
-public sealed class GitHubClient
+public sealed class GitHubClient : IGitHubClient
 {
     private const string ApiBase = "https://api.github.com";
     private const string UserAgent = "Statefalse";

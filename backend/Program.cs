@@ -36,13 +36,13 @@ try
 
     // HttpClient for GitHub OAuth
     builder.Services.AddHttpClient<GitHubOAuthService>();
-    builder.Services.AddHttpClient<GitHubClient>(client =>
+    builder.Services.AddHttpClient<IGitHubClient, GitHubClient>(client =>
     {
         client.BaseAddress = new Uri("https://api.github.com");
     });
 
     // Application services
-    builder.Services.AddScoped<GitHubTokenResolver>();
+    builder.Services.AddScoped<IGitHubTokenResolver, GitHubTokenResolver>();
     builder.Services.AddScoped<SignalRNotifier>();
     builder.Services.AddScoped<PullRequestQueries>();
     builder.Services.AddScoped<PullRequestSyncService>();

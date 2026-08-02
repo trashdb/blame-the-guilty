@@ -11,16 +11,16 @@ namespace Statefalse.Api.Services;
 public class PullRequestActionService
 {
     private readonly AppDbContext _db;
-    private readonly GitHubClient _github;
-    private readonly GitHubTokenResolver _tokens;
+    private readonly IGitHubClient _github;
+    private readonly IGitHubTokenResolver _tokens;
     private readonly PullRequestQueries _prs;
     private readonly SignalRNotifier _notifier;
     private readonly ILogger<PullRequestActionService> _logger;
 
     public PullRequestActionService(
         AppDbContext db,
-        GitHubClient github,
-        GitHubTokenResolver tokens,
+        IGitHubClient github,
+        IGitHubTokenResolver tokens,
         PullRequestQueries prs,
         SignalRNotifier notifier,
         ILogger<PullRequestActionService> logger)

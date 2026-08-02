@@ -8,7 +8,7 @@ namespace Statefalse.Api.Services;
 /// Resolves the effective GitHub token for a user. Precedence:
 /// User PAT > OAuth access token > shared server PAT.
 /// </summary>
-public class GitHubTokenResolver
+public class GitHubTokenResolver : IGitHubTokenResolver
 {
     private readonly AppDbContext _db;
     private readonly IConfiguration _configuration;
