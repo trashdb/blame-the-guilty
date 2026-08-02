@@ -30,9 +30,7 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
     /// Tracks PRs we've already notified as "ready to merge" so we don't re-notify
     /// on every 30s poll. A PR is removed once it's no longer ready, so it can
     /// notify again if it regresses (new commits) and becomes ready once more.
-    private var readyNotifiedPRs: Set<String> = []
-    /// First PR sync seeds the ready set silently (no notification burst on launch).
-    private var didSeedReadyPRs = false
+    private let readyNotifier: ReadyMergeNotifier
 
     private let keychain: KeychainServiceProtocol
     private let persistence: PersistenceServiceProtocol
@@ -52,6 +50,15 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
         self.oauth = oauth
         self.api = api ?? LiveApiClient(baseUrl: baseUrl)
         self.signalRClient = signalRClient ?? LiveSignalRClient(baseUrl: baseUrl)
+        self.readyNotifier = ReadyMergeNotifier { title, body, subtitle, url in
+            showNotification(
+                title: title,
+                body: body,
+                subtitle: subtitle,
+                actionURL: url,
+                style: .info
+            )
+        }
     }
 
     func restoreSession() {
@@ -139,7 +146,7 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
             await MainActor.run { loadPersistedHistory() }
             return
         }
-        let mapped = runs.map { toWorkflowRun($0) }
+        let mapped = runs.map(DTOMapper.workflowRun)
         await MainActor.run {
             runningWorkflows = mapped.filter { $0.status == "in_progress" }
             recentWorkflows = mapped
@@ -152,8 +159,8 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
         var seen = Set<String>()
         let unique = prs.filter { seen.insert("\($0.repo)#\($0.prNumber)").inserted }
         await MainActor.run {
-            let newPRs = unique.map(toPullRequest)
-            notifyNewlyReadyPRs(current: newPRs)
+            let newPRs = unique.map(DTOMapper.pullRequest)
+            readyNotifier.process(current: newPRs)
             activePRs = newPRs
             persistence.save(prs: newPRs)
         }
@@ -189,8 +196,7 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
         pollTask = nil
         task?.cancel()
         task = nil
-        readyNotifiedPRs = []
-        didSeedReadyPRs = false
+        readyNotifier.reset()
         Task { @MainActor in
             isConnected = false
             runStatus = .idle
@@ -209,53 +215,6 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
                 await self.syncPRsFromApi(gitHubId: gitHubId)
             }
         }
-    }
-
-    // MARK: - Mapping
-
-    private func toWorkflowRun(_ r: ApiWorkflowRun) -> WorkflowRun {
-        WorkflowRun(
-            id: UUID(),
-            dbId: r.id,
-            runId: r.runId,
-            workflowName: r.workflowName ?? "Workflow",
-            repo: r.repo,
-            actor: r.actor,
-            headBranch: r.headBranch,
-            trigger: r.trigger,
-            prNumber: r.prNumber,
-            prTitle: r.prTitle,
-            status: r.status,
-            htmlUrl: r.htmlUrl ?? "",
-            startedAt: r.startedAt,
-            completedAt: nil,
-            targetGitHubIds: r.targetGitHubIds ?? []
-        )
-    }
-
-    private func toPullRequest(_ pr: ApiPullRequest) -> PullRequest {
-        PullRequest(
-            prNumber: pr.prNumber, title: pr.title,
-            repo: pr.repo,
-            headBranch: pr.headBranch ?? "",
-            baseBranch: pr.baseBranch ?? "",
-            htmlUrl: URL(string: pr.htmlUrl ?? ""),
-            status: pr.status ?? "open",
-            conclusion: pr.conclusion,
-            draft: pr.draft ?? false,
-            mergeableState: pr.mergeableState,
-            ciStatus: pr.ciStatus ?? "ready",
-            reviewApproved: pr.reviewApproved ?? false,
-            lastCommentBy: pr.lastCommentBy,
-            lastCommentBody: pr.lastCommentBody,
-            lastCommentAt: pr.lastCommentAt,
-            lastCommentUrl: nil,
-            lastReviewFilePath: nil,
-            lastReviewLine: nil,
-            isSubscribed: pr.isSubscribed ?? false,
-            subscriberIds: pr.subscriberIds ?? [],
-            authorGitHubId: pr.authorGitHubId
-        )
     }
 
     // MARK: - SignalR events
@@ -284,7 +243,7 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
                 actor: e.actor ?? "someone", headBranch: e.branch,
                 trigger: e.trigger, prNumber: nil, prTitle: nil,
                 status: "in_progress",
-                htmlUrl: e.htmlUrl ?? "", startedAt: startedAt(from: e.startedAt), completedAt: nil, targetGitHubIds: []
+                htmlUrl: e.htmlUrl ?? "", startedAt: DTOMapper.startedDate(from: e.startedAt), completedAt: nil, targetGitHubIds: []
             )
 
             runningWorkflows.insert(run, at: 0)
@@ -294,81 +253,36 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
     }
 
     private func handleWorkflowCompleted(_ e: WorkflowCompletedEvent) {
-        let runId = e.runId
-        let succeeded = e.succeeded ?? false
-        let conclusion = e.conclusion
-        let name = e.workflowName
-        let repo = e.repo
-        let actor = e.actor ?? "someone"
-        let htmlUrl = e.htmlUrl
-        let trigger = e.trigger
-        let workflowURL: URL? = URL(string: htmlUrl ?? "https://github.com/\(repo)/actions/runs/\(runId)")
-
-        let isActualFailure = !succeeded && (conclusion == nil || conclusion == "failure")
-
         Task { @MainActor in
-            if isActualFailure {
-                runStatus = .failure
-            } else if succeeded {
-                runStatus = .success
-            }
-            if isActualFailure || succeeded { scheduleStatusReset() }
+            let update = WorkflowEventReducer.reduceCompleted(
+                e,
+                runningWorkflows: runningWorkflows,
+                recentWorkflows: recentWorkflows
+            )
 
-            if let idx = runningWorkflows.firstIndex(where: { $0.runId == runId }) {
-                runningWorkflows.remove(at: idx)
+            if let status = update.runStatus {
+                runStatus = status
             }
+            if update.shouldResetStatus { scheduleStatusReset() }
+
+            runningWorkflows = update.runningWorkflows
+            recentWorkflows = update.recentWorkflows
+            persistHistory()
 
             if runningWorkflows.isEmpty && runStatus == .running {
                 runStatus = .idle
                 resetTask?.cancel()
             }
 
-            let existing = recentWorkflows.first(where: { $0.runId == runId && $0.status == "in_progress" })
-            let originalStartedAt = existing?.startedAt ?? Date()
-            let completedAt = Date()
-
-            let statusString: String
-            if succeeded { statusString = "success" }
-            else if let c = conclusion, c != "failure" { statusString = "cancelled" }
-            else { statusString = "failure" }
-
-            let completedRun = WorkflowRun(
-                id: UUID(), dbId: existing?.dbId,
-                runId: runId,
-                workflowName: name ?? "Workflow",
-                repo: repo,
-                actor: actor,
-                headBranch: existing?.headBranch,
-                trigger: trigger ?? existing?.trigger,
-                prNumber: existing?.prNumber,
-                prTitle: existing?.prTitle,
-                status: statusString,
-                htmlUrl: htmlUrl ?? "https://github.com/\(repo)/actions/runs/\(runId)",
-                startedAt: originalStartedAt,
-                completedAt: completedAt,
-                targetGitHubIds: existing?.targetGitHubIds ?? []
-            )
-
-            if let idx = recentWorkflows.firstIndex(where: { $0.runId == runId && $0.status == "in_progress" }) {
-                recentWorkflows[idx] = completedRun
-            } else {
-                recentWorkflows.insert(completedRun, at: 0)
+            if let event = update.lastEvent {
+                lastEvent = event
             }
-            if recentWorkflows.count > 10 { recentWorkflows = Array(recentWorkflows.prefix(10)) }
-            persistHistory()
-
-            if isActualFailure {
-                let wfName = name ?? "Workflow"
-                lastEvent = PunishmentEvent(
-                    culprit: actor, repo: repo, runId: runId,
-                    workflowName: wfName,
-                    workflowURL: workflowURL, date: Date()
-                )
+            if let n = update.notification {
                 showNotification(
-                    title: "Workflow Failed",
-                    body: "\(wfName) failed for \(actor) in \(shortRepo(repo))",
-                    subtitle: "Run #\(runId)",
-                    actionURL: workflowURL
+                    title: n.title,
+                    body: n.body,
+                    subtitle: n.subtitle,
+                    actionURL: n.url
                 )
             }
         }
@@ -423,51 +337,6 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
         Task { @MainActor in
             mainBranchUpdate = (repo, prNumber, mergedBy, headSha)
             onMainBranchUpdated?(repo, prNumber, mergedBy, headSha)
-        }
-    }
-
-    // MARK: - Ready-to-merge notifications
-
-    /// A PR is "ready to merge" when it's open, not a draft, and CI + review are
-    /// green (`ciStatus == "ready"` means approved + checks passing), and GitHub
-    /// doesn't report conflicts.
-    private func isReadyToMerge(_ pr: PullRequest) -> Bool {
-        guard pr.status == "open", !pr.draft, !pr.isMerged else { return false }
-        guard pr.ciStatus == "ready" else { return false }
-        // If GitHub gives us a mergeable state, don't fire on conflicts/behind base.
-        if let state = pr.mergeableState, state == "dirty" || state == "behind" { return false }
-        return true
-    }
-
-    /// Fires a notification when a PR transitions INTO a ready-to-merge state.
-    /// Runs on every PR sync (30s poll + SignalR events). The first sync only
-    /// seeds the set so we don't spam notifications for already-ready PRs on launch.
-    @MainActor
-    private func notifyNewlyReadyPRs(current: [PullRequest]) {
-        let currentIds = Set(current.map { $0.id })
-
-        if !didSeedReadyPRs {
-            didSeedReadyPRs = true
-            readyNotifiedPRs = Set(current.filter { isReadyToMerge($0) }.map { $0.id })
-            return
-        }
-
-        for pr in current where isReadyToMerge(pr) {
-            if readyNotifiedPRs.insert(pr.id).inserted {
-                showNotification(
-                    title: "PR #\(pr.prNumber) ready to merge 🚀",
-                    body: pr.title,
-                    subtitle: shortRepo(pr.repo),
-                    actionURL: pr.prUrl,
-                    style: .info
-                )
-            }
-        }
-        // Allow re-notification if a PR stops being ready (e.g. new commits), and
-        // forget PRs that are gone (merged/closed).
-        readyNotifiedPRs = readyNotifiedPRs.intersection(currentIds)
-        for pr in current where !isReadyToMerge(pr) {
-            readyNotifiedPRs.remove(pr.id)
         }
     }
 
@@ -545,11 +414,5 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
             guard !Task.isCancelled else { return }
             runStatus = .idle
         }
-    }
-
-    // MARK: - Helpers
-
-    private func startedAt(from string: String?) -> Date {
-        (string).flatMap { ISO8601DateFormatter().date(from: $0) } ?? Date()
     }
 }
