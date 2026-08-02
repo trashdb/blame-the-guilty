@@ -54,33 +54,11 @@ struct WorkflowRunRow: View {
         Dictionary(uniqueKeysWithValues: users.map { ($0.gitHubId, $0.login) })
     }
 
-    var statusColor: SwiftUI.Color {
-        switch run.status {
-        case "in_progress":  return DS.Color.warning
-        case "success":      return DS.Color.success
-        case "failure":      return DS.Color.destructive
-        case "cancelled":    return DS.Color.textTertiary
-        case "superseded":   return DS.Color.statusYellow
-        default:             return DS.Color.textTertiary
-        }
-    }
-
-    var statusIcon: String {
-        switch run.status {
-        case "in_progress":  return "arrow.triangle.2.circlepath"
-        case "success":      return "checkmark.circle.fill"
-        case "failure":      return "xmark.circle.fill"
-        case "cancelled":    return "xmark.circle"
-        case "superseded":   return "arrow.triangle.branch"
-        default:             return "questionmark.circle"
-        }
-    }
-
     var body: some View {
         HStack(spacing: DS.Spacing.section) {
-            Image(systemName: statusIcon)
+            Image(systemName: DS.Icon.runStatus(run.status))
                 .font(.system(size: 16))
-                .foregroundStyle(statusColor)
+                .foregroundStyle(DS.Color.runStatusColor(run.status))
                 .frame(width: 20)
 
             VStack(alignment: .leading, spacing: DS.Spacing.xs) {

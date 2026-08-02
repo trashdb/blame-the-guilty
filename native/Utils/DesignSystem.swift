@@ -634,3 +634,66 @@ extension DS.Color {
     }
 }
 
+// MARK: - Workflow Run Status
+extension DS.Color {
+    static func runStatusColor(_ status: String?) -> SwiftUI.Color {
+        switch status {
+        case "in_progress":  return warning
+        case "success":      return success
+        case "failure":      return destructive
+        case "cancelled":    return textTertiary
+        case "superseded":   return statusYellow
+        default:             return textTertiary
+        }
+    }
+}
+
+// MARK: - Check Conclusion
+extension DS.Color {
+    static func checkColor(_ conclusion: String?) -> SwiftUI.Color {
+        switch conclusion {
+        case "success":   return success
+        case "failure":   return destructive
+        case "cancelled": return textTertiary
+        case "neutral":   return textSecondary
+        default:          return textTertiary
+        }
+    }
+}
+
+// MARK: - SF Symbol icons
+extension DS {
+    enum Icon {
+        static func runStatus(_ status: String?) -> String {
+            switch status {
+            case "in_progress":  return "arrow.triangle.2.circlepath"
+            case "success":      return "checkmark.circle.fill"
+            case "failure":      return "xmark.circle.fill"
+            case "cancelled":    return "xmark.circle"
+            case "superseded":   return "arrow.triangle.branch"
+            default:             return "questionmark.circle"
+            }
+        }
+
+        static func check(_ conclusion: String?) -> String {
+            switch conclusion {
+            case "success":   return "checkmark.circle.fill"
+            case "failure":   return "xmark.circle.fill"
+            case "cancelled": return "slash.circle"
+            case "neutral":   return "minus.circle"
+            default:          return "questionmark.circle"
+            }
+        }
+
+        static func fileStatus(_ status: String?) -> String {
+            switch status {
+            case "added":    return "plus.circle"
+            case "modified": return "pencil.circle"
+            case "removed":  return "minus.circle"
+            case "renamed":  return "arrow.right.circle"
+            default:         return "doc.circle"
+            }
+        }
+    }
+}
+

@@ -390,26 +390,39 @@ final class LiveApiClient: ApiClientProtocol {
 // MARK: - Shared JSON decoding
 
 enum ApiJSON {
+    private static let withFractional: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+    private static let plain: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = .withInternetDateTime
+        return formatter
+    }()
+
     /// Decoder that tolerates the backend's ISO-8601 date formats:
     /// fractional seconds, plain "T" separators, and missing timezone (assumed UTC).
     static let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
-        let withFrac = ISO8601DateFormatter()
-        withFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let withoutFrac = ISO8601DateFormatter()
-        withoutFrac.formatOptions = .withInternetDateTime
         decoder.dateDecodingStrategy = .custom { d in
             let container = try d.singleValueContainer()
-            var str = try container.decode(String.self)
-            str = str.replacingOccurrences(of: " ", with: "T")
-            if !str.contains("Z") && !str.contains("+") {
-                str += "Z"
-            }
-            guard let date = withFrac.date(from: str) ?? withoutFrac.date(from: str) else {
+            let str = try container.decode(String.self)
+            guard let date = parseISO8601(str) else {
                 throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid date: \(str)")
             }
             return date
         }
         return decoder
     }()
+
+    /// Parses the backend's ISO-8601 date strings: fractional seconds or plain
+    /// internet date-time, " " separators, and missing timezone assumed UTC.
+    static func parseISO8601(_ raw: String) -> Date? {
+        var str = raw.replacingOccurrences(of: " ", with: "T")
+        if !str.contains("Z") && !str.contains("+") {
+            str += "Z"
+        }
+        return withFractional.date(from: str) ?? plain.date(from: str)
+    }
 }

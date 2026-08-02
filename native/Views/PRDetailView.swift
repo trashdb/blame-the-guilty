@@ -361,7 +361,7 @@ struct PRDetailView: View {
                         }
                     } label: {
                         HStack(spacing: DS.Spacing.sm) {
-                            Image(systemName: fileStatusIcon(file.status))
+                            Image(systemName: DS.Icon.fileStatus(file.status))
                                 .font(DS.Font.caption)
                                 .foregroundStyle(DS.Color.fileStatusColor(file.status))
                             Text(file.filename ?? "")
@@ -436,9 +436,9 @@ struct PRDetailView: View {
                         }
                     } label: {
                         HStack(spacing: DS.Spacing.sm) {
-                            Image(systemName: checkIcon(check.conclusion))
+                            Image(systemName: DS.Icon.check(check.conclusion))
                                 .font(DS.Font.small)
-                                .foregroundStyle(checkColor(check.conclusion))
+                                .foregroundStyle(DS.Color.checkColor(check.conclusion))
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(check.name ?? "")
                                     .font(DS.Font.small.medium())
@@ -450,12 +450,12 @@ struct PRDetailView: View {
                                     if let conclusion = check.conclusion {
                                         Text(conclusion)
                                             .font(DS.Font.caption)
-                                            .foregroundStyle(checkColor(conclusion))
+                                            .foregroundStyle(DS.Color.checkColor(conclusion))
                                     }
                                 }
                             }
                             Spacer()
-                            if let started = parseDate(check.startedAt ?? "") {
+                            if let started = ApiJSON.parseISO8601(check.startedAt ?? "") {
                                 Text(started, style: .relative)
                                     .font(DS.Font.caption)
                                     .foregroundStyle(DS.Color.textTertiary)
@@ -476,44 +476,6 @@ struct PRDetailView: View {
     }
 
     // MARK: - Helpers
-    private func fileStatusIcon(_ status: String?) -> String {
-        switch status {
-        case "added": return "plus.circle"
-        case "modified": return "pencil.circle"
-        case "removed": return "minus.circle"
-        case "renamed": return "arrow.right.circle"
-        default: return "doc.circle"
-        }
-    }
-
-    private func checkIcon(_ conclusion: String?) -> String {
-        switch conclusion {
-        case "success": return "checkmark.circle.fill"
-        case "failure": return "xmark.circle.fill"
-        case "cancelled": return "slash.circle"
-        case "neutral": return "minus.circle"
-        default: return "questionmark.circle"
-        }
-    }
-
-    private func checkColor(_ conclusion: String?) -> Color {
-        switch conclusion {
-        case "success": return DS.Color.success
-        case "failure": return DS.Color.destructive
-        case "cancelled": return DS.Color.textTertiary
-        case "neutral": return DS.Color.textSecondary
-        default: return DS.Color.textTertiary
-        }
-    }
-
-    private func parseDate(_ str: String) -> Date? {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let d = formatter.date(from: str) { return d }
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: str)
-    }
-
     // MARK: - IDE
     private func openInRider(file: String, line: Int?) {
         Task {
