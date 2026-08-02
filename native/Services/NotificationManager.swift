@@ -5,8 +5,6 @@ enum NotificationStyle {
     case info
 }
 
-func setupNotifications() {}
-
 private func playPunishmentSound() {
     let paths = [
         "/System/Library/Sounds/Glass.aiff",

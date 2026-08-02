@@ -608,8 +608,3 @@ extension DS.Color {
     }
 }
 
-// MARK: - Notification Names
-extension Notification.Name {
-    static let prSubscriptionChanged = Notification.Name("prSubscriptionChanged")
-}
-

@@ -734,22 +734,12 @@ struct PRDetailView: View {
 
     private func performSubscribe() async {
         let service = currentDependencies.signalRService
-        let success = await service.subscribeToPR(prNumber: pr.prNumber, repo: pr.repo, gitHubId: gitHubId)
-        if success {
-            await MainActor.run {
-                NotificationCenter.default.post(name: .prSubscriptionChanged, object: nil)
-            }
-        }
+        _ = await service.subscribeToPR(prNumber: pr.prNumber, repo: pr.repo, gitHubId: gitHubId)
     }
 
     private func performUnsubscribe() async {
         let service = currentDependencies.signalRService
-        let success = await service.unsubscribeFromPR(prNumber: pr.prNumber, repo: pr.repo, gitHubId: gitHubId)
-        if success {
-            await MainActor.run {
-                NotificationCenter.default.post(name: .prSubscriptionChanged, object: nil)
-            }
-        }
+        _ = await service.unsubscribeFromPR(prNumber: pr.prNumber, repo: pr.repo, gitHubId: gitHubId)
     }
 
     private func loadCommits() {
@@ -1276,7 +1266,6 @@ struct SubscriberManagementView: View {
             selectedUserIds.removeAll()
             showUserPicker = false
             Task { await loadSubscribers() }
-            NotificationCenter.default.post(name: .prSubscriptionChanged, object: nil)
         }
         isLoading = false
     }
@@ -1302,7 +1291,6 @@ struct SubscriberManagementView: View {
             } else {
                 await MainActor.run {
                     Task { await loadSubscribers() }
-                    NotificationCenter.default.post(name: .prSubscriptionChanged, object: nil)
                 }
             }
         } catch {
