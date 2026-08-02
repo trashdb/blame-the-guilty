@@ -158,118 +158,47 @@ finally
 {
     Log.CloseAndFlush();
 }
-
 void ApplyMigrations(AppDbContext db)
 {
-    db.Database.EnsureCreated();
+    var migrations = db.Database.GetMigrations().ToList();
+    if (migrations.Count == 0) return;
 
-    // Ensure the PunishmentEvents table exists even on existing DBs
-    db.Database.ExecuteSqlRaw("""
-        CREATE TABLE IF NOT EXISTS "PunishmentEvents" (
-            "Id" INTEGER NOT NULL CONSTRAINT "PK_PunishmentEvents" PRIMARY KEY AUTOINCREMENT,
-            "RunId" INTEGER NOT NULL,
-            "CulpritLogin" TEXT NOT NULL,
-            "CulpritGitHubId" INTEGER,
-            "RepoFullName" TEXT NOT NULL,
-            "WorkflowName" TEXT,
-            "WorkflowUrl" TEXT,
-            "OccurredAt" TEXT NOT NULL,
-            "WasNotified" INTEGER NOT NULL DEFAULT 0
-        );
-        """);
+    // Databases created before EF migrations adoption (or from a failed early
+    // Migrate() attempt) have tables but no applied migrations. Baseline them so
+    // Migrate() skips the schema that already exists.
+    var hasHistoryTable = db.Database
+        .SqlQueryRaw<int>("SELECT COUNT(*) AS \"Value\" FROM sqlite_master WHERE type = 'table' AND name = '__EFMigrationsHistory'")
+        .Single() > 0;
 
-    db.Database.ExecuteSqlRaw("""
-        CREATE TABLE IF NOT EXISTS "WorkflowRuns" (
-            "Id" INTEGER NOT NULL CONSTRAINT "PK_WorkflowRuns" PRIMARY KEY AUTOINCREMENT,
-            "RunId" INTEGER NOT NULL,
-            "GitHubId" INTEGER NOT NULL,
-            "WorkflowName" TEXT,
-            "Repo" TEXT NOT NULL,
-            "Actor" TEXT NOT NULL,
-            "HtmlUrl" TEXT,
-            "Status" TEXT NOT NULL DEFAULT 'in_progress',
-            "StartedAt" TEXT NOT NULL
-        );
-        """);
+    var appliedMigrations = hasHistoryTable
+        ? db.Database.GetAppliedMigrations().ToList()
+        : new List<string>();
 
-    db.Database.ExecuteSqlRaw("""
-        CREATE INDEX IF NOT EXISTS "IX_WorkflowRuns_GitHubId" ON "WorkflowRuns" ("GitHubId");
-        """);
-    db.Database.ExecuteSqlRaw("""
-        CREATE INDEX IF NOT EXISTS "IX_WorkflowRuns_Status" ON "WorkflowRuns" ("Status");
-        """);
-    db.Database.ExecuteSqlRaw("""
-        CREATE INDEX IF NOT EXISTS "IX_WorkflowRuns_RunId" ON "WorkflowRuns" ("RunId");
-        """);
+    var hasTables = db.Database
+        .SqlQueryRaw<int>("SELECT COUNT(*) AS \"Value\" FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
+        .Single() > 0;
 
-    db.Database.ExecuteSqlRaw("""
-        CREATE TABLE IF NOT EXISTS "CheckSuiteEvents" (
-            "Id" INTEGER NOT NULL CONSTRAINT "PK_CheckSuiteEvents" PRIMARY KEY AUTOINCREMENT,
-            "CheckSuiteId" INTEGER NOT NULL,
-            "Conclusion" TEXT NOT NULL,
-            "HeadBranch" TEXT,
-            "HeadSha" TEXT,
-            "PrAuthorLogin" TEXT,
-            "PrAuthorGitHubId" INTEGER,
-            "PrNumber" INTEGER,
-            "RepoFullName" TEXT NOT NULL,
-            "OccurredAt" TEXT NOT NULL,
-            "WasNotified" INTEGER NOT NULL DEFAULT 0
-        );
-        """);
+    if (hasTables && appliedMigrations.Count < migrations.Count)
+    {
+        db.Database.ExecuteSqlRaw("""
+            CREATE TABLE IF NOT EXISTS "__EFMigrationsHistory" (
+                "MigrationId" TEXT NOT NULL CONSTRAINT "PK___EFMigrationsHistory" PRIMARY KEY,
+                "ProductVersion" TEXT NOT NULL
+            );
+            """);
 
-    db.Database.ExecuteSqlRaw("""
-        CREATE TABLE IF NOT EXISTS "PullRequestEvents" (
-            "Id" INTEGER NOT NULL CONSTRAINT "PK_PullRequestEvents" PRIMARY KEY AUTOINCREMENT,
-            "PrNumber" INTEGER NOT NULL,
-            "Title" TEXT NOT NULL,
-            "AuthorLogin" TEXT NOT NULL,
-            "AuthorGitHubId" INTEGER,
-            "RepoFullName" TEXT NOT NULL,
-            "HeadBranch" TEXT,
-            "BaseBranch" TEXT,
-            "PrUrl" TEXT,
-            "Status" TEXT NOT NULL,
-            "Conclusion" TEXT,
-            "ExtraInfo" TEXT,
-            "OccurredAt" TEXT NOT NULL,
-            "WasNotified" INTEGER NOT NULL DEFAULT 0
-        );
-        """);
+        var productVersion = typeof(DbContext).Assembly.GetName().Version?.ToString() ?? "10.0";
+        foreach (var m in migrations)
+        {
+            db.Database.ExecuteSqlRaw(
+                """INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion") VALUES ({0}, {1});""",
+                m, productVersion);
+        }
+    }
 
-    // Add SubscriberIds column to existing databases (silently skips if already exists)
-    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "SubscriberIds" TEXT;"""); } catch { /* column already exists */ }
+    db.Database.Migrate();
 
-    db.Database.ExecuteSqlRaw("""
-        CREATE INDEX IF NOT EXISTS "IX_PullRequestEvents_AuthorLogin" ON "PullRequestEvents" ("AuthorLogin");
-        """);
-    db.Database.ExecuteSqlRaw("""
-        CREATE INDEX IF NOT EXISTS "IX_PullRequestEvents_Status" ON "PullRequestEvents" ("Status");
-        """);
-    db.Database.ExecuteSqlRaw("""
-        CREATE INDEX IF NOT EXISTS "IX_PullRequestEvents_PrNumber" ON "PullRequestEvents" ("PrNumber");
-        """);
-
-    // Add columns that may not exist on older DBs
-    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "GitHubUsers" ADD COLUMN "AccessToken" TEXT;"""); } catch { }
-    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "WorkflowRuns" ADD COLUMN "TargetGitHubIds" TEXT;"""); } catch { }
-    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "Draft" INTEGER NOT NULL DEFAULT 0;"""); } catch { }
-    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "MergeableState" TEXT;"""); } catch { }
-    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "WorkflowRuns" ADD COLUMN "HeadBranch" TEXT;"""); } catch { }
-    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "WorkflowRuns" ADD COLUMN "Trigger" TEXT;"""); } catch { }
-    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "ReviewApproved" INTEGER NOT NULL DEFAULT 0;"""); } catch { }
-    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "ApprovedBy" TEXT;"""); } catch { }
-    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "GitHubUsers" ADD COLUMN "AvatarUrl" TEXT;"""); } catch { }
-    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "GitHubUsers" ADD COLUMN "UserPatToken" TEXT;"""); } catch { }
-    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "WorkflowRuns" ADD COLUMN "IsIgnored" INTEGER NOT NULL DEFAULT 0;"""); } catch { }
-    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "LastCommentBy" TEXT;"""); } catch { }
-    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "LastCommentBody" TEXT;"""); } catch { }
-    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "LastCommentAt" TEXT;"""); } catch { }
-    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "WorkflowRuns" ADD COLUMN "HeadSha" TEXT;"""); } catch { }
-    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "HeadSha" TEXT;"""); } catch { }
-    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "LastCommentUrl" TEXT;"""); } catch { }
-    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "LastReviewFilePath" TEXT;"""); } catch { }
-    try { db.Database.ExecuteSqlRaw("""ALTER TABLE "PullRequestEvents" ADD COLUMN "LastReviewLine" INTEGER;"""); } catch { }
+    // ── Data maintenance (not schema) ────────────────────────────────
 
     // Recover stuck runs: mark in_progress older than 24h as cancelled
     var cutoff = DateTime.UtcNow.AddHours(-24);

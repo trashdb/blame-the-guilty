@@ -40,5 +40,12 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.RunId);
         });
+
+        modelBuilder.Entity<PullRequestEvent>(entity =>
+        {
+            entity.HasIndex(e => e.AuthorLogin);
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.PrNumber);
+        });
     }
 }
