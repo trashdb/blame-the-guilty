@@ -4,9 +4,11 @@ using System.Threading.RateLimiting;
 using Serilog;
 using Scalar.AspNetCore;
 using Statefalse.Api;
-using Statefalse.Api.Data;
-using Statefalse.Api.Hubs;
-using Statefalse.Api.Services;
+using Statefalse.Application;
+using Statefalse.Domain;
+using Statefalse.Infrastructure;
+using Statefalse.Infrastructure.Data;
+using Statefalse.Infrastructure.Hubs;
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
@@ -42,8 +44,9 @@ try
     });
 
     // Application services
+    builder.Services.AddScoped<IAppDbContext>(sp => sp.GetRequiredService<AppDbContext>());
     builder.Services.AddScoped<IGitHubTokenResolver, GitHubTokenResolver>();
-    builder.Services.AddScoped<SignalRNotifier>();
+    builder.Services.AddScoped<ISignalRNotifier, SignalRNotifier>();
     builder.Services.AddScoped<PullRequestQueries>();
     builder.Services.AddScoped<PullRequestSyncService>();
     builder.Services.AddScoped<PullRequestQueryService>();

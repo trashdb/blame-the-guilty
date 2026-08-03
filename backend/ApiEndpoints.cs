@@ -1,8 +1,7 @@
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
-using Statefalse.Api.Contracts;
-using Statefalse.Api.Data;
-using Statefalse.Api.Services;
+using Statefalse.Domain.Contracts;
+using Statefalse.Application;
+using Statefalse.Infrastructure.Data;
 
 namespace Statefalse.Api;
 
@@ -166,13 +165,7 @@ public static class ApiEndpoints
 
     private static void MapUsers(WebApplication app)
     {
-        app.MapGet("/api/users", async (AppDbContext db) =>
-        {
-            var users = await db.GitHubUsers
-                .Select(u => new UserDto(u.GitHubId, u.GitHubUsername, u.AvatarUrl))
-                .ToListAsync();
-            return Results.Ok(users);
-        });
+        app.MapGet("/api/users", async (AuthService auth) => await MapAsync(auth.GetUsersAsync()));
     }
 
     private static async Task<IResult> MapAsync(Task<ApiResult> task)

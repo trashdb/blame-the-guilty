@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
-using Statefalse.Api.Data;
-using Statefalse.Api.Models;
+using Statefalse.Infrastructure.Data;
+using Statefalse.Domain.Models;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
