@@ -436,7 +436,7 @@ func generateTitleStripsPrefix() async {
 func generateTitleWithTicket() async {
     let git = GitService()
     let title = await git.generatePRTitle(from: "fix/LOY-999-crash-on-start")
-    #expect(title == "[LOY-999] Loy 999 crash on start")
+    #expect(title == "[LOY-999] Crash on start")
 }
 
 @Test("GitService.generatePRTitle without prefix")
@@ -457,7 +457,7 @@ func generateTitleUnderscore() async {
 func generateTitleHotfix() async {
     let git = GitService()
     let title = await git.generatePRTitle(from: "hotfix/ABC-1-patch")
-    #expect(title == "[ABC-1] Abc 1 patch")
+    #expect(title == "[ABC-1] Patch")
 }
 
 @Test("GitService.generatePRTitle bugfix prefix")
@@ -485,7 +485,7 @@ func generateTitleRelease() async {
 func generateTitleAlreadyFormatted() async {
     let git = GitService()
     let title = await git.generatePRTitle(from: "feature/[ABC-1]-Add-login")
-    #expect(title == "[ABC-1] [Abc 1] Add login")
+    #expect(title == "[ABC-1] Add login")
 }
 
 // ──────────────────────────────────────────────

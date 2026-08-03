@@ -160,23 +160,27 @@ actor GitService: GitServiceProtocol {
 
     func repoFullName(repoPath: String) async -> String? {
         guard let raw = try? await runGit(repoPath: repoPath, args: ["config", "--get", "remote.origin.url"]) else { return nil }
-        let url = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let colon = url.firstIndex(of: ":") {
-            var after = String(url[url.index(after: colon)...])
-            if after.hasSuffix(".git") { after = String(after.dropLast(4)) }
-            return after
-        }
+        return Self.repoFullName(fromRemoteURL: raw)
+    }
+
+    /// Parse an origin remote URL into `owner/repo`, handling ssh (`git@host:owner/repo.git`),
+    /// https (`https://host/owner/repo.git`) and plain path forms.
+    nonisolated static func repoFullName(fromRemoteURL raw: String) -> String? {
+        var url = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if let scheme = url.range(of: "://") {
-            let afterScheme = url[scheme.upperBound...]
-            if let slash = afterScheme.firstIndex(of: "/") {
-                var after = String(afterScheme[afterScheme.index(after: slash)...])
-                if after.hasSuffix(".git") { after = String(after.dropLast(4)) }
-                return after
+            url = String(url[scheme.upperBound...])
+            if let slash = url.firstIndex(of: "/") {
+                url = String(url[url.index(after: slash)...])
+            } else {
+                return nil
             }
+        } else if let colon = url.firstIndex(of: ":") {
+            url = String(url[url.index(after: colon)...])
         }
-        var s = url
-        if s.hasSuffix(".git") { s = String(s.dropLast(4)) }
-        return s
+        if url.hasSuffix(".git") {
+            url = String(url.dropLast(4))
+        }
+        return url.isEmpty ? nil : url
     }
 
     func listMyRemoteBranchesViaAPI(repoPath: String, backendUrl: String, gitHubId: Int64) async -> [(name: String, isMerged: Bool)] {
@@ -287,17 +291,29 @@ actor GitService: GitServiceProtocol {
         return CreatePRResult(url: prURL, isExisting: result.existing ?? false)
     }
 
-    func generatePRTitle(from branchName: String) -> String {
-        let cleaned = branchName
+    nonisolated func generatePRTitle(from branchName: String) -> String {
+        var name = branchName
+        let ticket = extractTicketNumber(from: branchName)
+        if let ticket {
+            name = name
+                .replacingOccurrences(of: "[\(ticket)]", with: "")
+                .replacingOccurrences(of: ticket, with: "")
+        }
+        let cleaned = name
             .replacingOccurrences(of: #"^(feature|fix|hotfix|bugfix|chore|release)/"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: "/", with: " ")
             .replacingOccurrences(of: "-", with: " ")
             .replacingOccurrences(of: "_", with: " ")
             .split(separator: " ")
             .enumerated()
-            .map { i, word in i == 0 ? String(word).capitalized : String(word) }
+            .map { i, word in
+                let w = String(word)
+                return i == 0 ? w.prefix(1).uppercased() + w.dropFirst() : w
+            }
             .joined(separator: " ")
-        if let ticket = extractTicketNumber(from: branchName) {
-            return "[\(ticket)] \(cleaned)"
+            .trimmingCharacters(in: .whitespaces)
+        if let ticket {
+            return cleaned.isEmpty ? "[\(ticket)]" : "[\(ticket)] \(cleaned)"
         }
         return cleaned
     }
@@ -374,7 +390,7 @@ actor GitService: GitServiceProtocol {
         return filtered.sorted { $0.name.lowercased() < $1.name.lowercased() }
     }
 
-    static func repoName(from path: String) -> String {
+    nonisolated static func repoName(from path: String) -> String {
         URL(fileURLWithPath: path).lastPathComponent
     }
 

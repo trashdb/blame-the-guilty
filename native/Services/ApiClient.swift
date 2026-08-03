@@ -148,26 +148,28 @@ protocol ApiClientProtocol: AnyObject {
 
 final class LiveApiClient: ApiClientProtocol {
     let baseUrl: String
+    private let session: URLSession
 
-    init(baseUrl: String) {
+    init(baseUrl: String, session: URLSession = .shared) {
         self.baseUrl = baseUrl
+        self.session = session
     }
 
     func fetchMe(gitHubId: Int64) async -> ApiMe? {
         guard let url = URL(string: "\(baseUrl)/api/auth/me?gitHubId=\(gitHubId)") else { return nil }
-        guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
+        guard let (data, _) = try? await session.data(from: url) else { return nil }
         return try? JSONDecoder().decode(ApiMe.self, from: data)
     }
 
     func fetchWorkflowRuns(gitHubId: Int64, limit: Int) async -> [ApiWorkflowRun]? {
         guard let url = URL(string: "\(baseUrl)/api/workflows/runs?gitHubId=\(gitHubId)&limit=\(limit)") else { return nil }
-        guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
+        guard let (data, _) = try? await session.data(from: url) else { return nil }
         return try? ApiJSON.decoder.decode([ApiWorkflowRun].self, from: data)
     }
 
     func fetchActivePRs(gitHubId: Int64) async -> [ApiPullRequest]? {
         guard let url = URL(string: "\(baseUrl)/api/pullrequests/active?gitHubId=\(gitHubId)") else { return nil }
-        guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
+        guard let (data, _) = try? await session.data(from: url) else { return nil }
         return try? JSONDecoder().decode([ApiPullRequest].self, from: data)
     }
 
@@ -176,7 +178,7 @@ final class LiveApiClient: ApiClientProtocol {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         do {
-            let (data, _) = try await URLSession.shared.data(for: request)
+            let (data, _) = try await session.data(for: request)
             struct SyncResult: Decodable { let synced: Int }
             if let result = try? JSONDecoder().decode(SyncResult.self, from: data) {
                 return result.synced
@@ -190,7 +192,7 @@ final class LiveApiClient: ApiClientProtocol {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         do {
-            let (data, _) = try await URLSession.shared.data(for: request)
+            let (data, _) = try await session.data(for: request)
             struct SyncResult: Decodable { let synced: Int }
             if let result = try? JSONDecoder().decode(SyncResult.self, from: data) {
                 return result.synced
@@ -204,7 +206,7 @@ final class LiveApiClient: ApiClientProtocol {
         guard let url = URL(string: "\(baseUrl)/api/pullrequests/\(prNumber)/subscribe?repo=\(repoEncoded)&gitHubId=\(gitHubId)") else { return false }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
-        guard let (_, resp) = try? await URLSession.shared.data(for: req),
+        guard let (_, resp) = try? await session.data(for: req),
               let http = resp as? HTTPURLResponse, http.statusCode == 200 else { return false }
         return true
     }
@@ -214,7 +216,7 @@ final class LiveApiClient: ApiClientProtocol {
         guard let url = URL(string: "\(baseUrl)/api/pullrequests/\(prNumber)/unsubscribe?repo=\(repoEncoded)&gitHubId=\(gitHubId)") else { return false }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
-        guard let (_, resp) = try? await URLSession.shared.data(for: req),
+        guard let (_, resp) = try? await session.data(for: req),
               let http = resp as? HTTPURLResponse, http.statusCode == 200 else { return false }
         return true
     }
@@ -234,7 +236,7 @@ final class LiveApiClient: ApiClientProtocol {
         var req = URLRequest(url: url)
         req.timeoutInterval = 15
         do {
-            let (data, _) = try await URLSession.shared.data(for: req)
+            let (data, _) = try await session.data(for: req)
             guard let decoded = try? JSONDecoder().decode(ApiPRDetails.self, from: data) else {
                 let raw = String(data: data, encoding: .utf8) ?? "non-utf8"
                 return .failure("Parse error: \(raw.prefix(200))")
@@ -249,7 +251,7 @@ final class LiveApiClient: ApiClientProtocol {
         guard let url = url("/api/pullrequests/\(prNumber)/merge", query: ["repo": repo, "gitHubId": "\(gitHubId)", "method": method]) else { return nil }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        guard let (data, _) = try? await URLSession.shared.data(for: request) else { return nil }
+        guard let (data, _) = try? await session.data(for: request) else { return nil }
         return try? JSONDecoder().decode(ApiMergeResponse.self, from: data)
     }
 
@@ -260,7 +262,7 @@ final class LiveApiClient: ApiClientProtocol {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         do {
-            let (_, resp) = try await URLSession.shared.data(for: request)
+            let (_, resp) = try await session.data(for: request)
             let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
             return status >= 400 ? "HTTP \(status)" : nil
         } catch {
@@ -275,7 +277,7 @@ final class LiveApiClient: ApiClientProtocol {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         do {
-            let (data, resp) = try await URLSession.shared.data(for: request)
+            let (data, resp) = try await session.data(for: request)
             let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
             struct MessageResponse: Decodable { let message: String? }
             if let decoded = try? JSONDecoder().decode(MessageResponse.self, from: data), let message = decoded.message {
@@ -313,7 +315,7 @@ final class LiveApiClient: ApiClientProtocol {
         var req = URLRequest(url: url)
         req.timeoutInterval = 15
         do {
-            let (data, _) = try await URLSession.shared.data(for: req)
+            let (data, _) = try await session.data(for: req)
             guard let decoded = try? JSONDecoder().decode([T].self, from: data) else {
                 return .failure("Parse error: \(errorLocalized(from: data))")
             }
@@ -334,7 +336,7 @@ final class LiveApiClient: ApiClientProtocol {
             return .failure("Invalid URL")
         }
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, _) = try await session.data(from: url)
             struct Wrapper: Decodable { let subscribers: [ApiSubscriberInfo] }
             guard let decoded = try? JSONDecoder().decode(Wrapper.self, from: data) else {
                 return .failure("Parse error: \(errorLocalized(from: data))")
@@ -348,7 +350,7 @@ final class LiveApiClient: ApiClientProtocol {
     func fetchAvailableUsers() async -> ApiFetch<[ApiAvailableUser]> {
         guard let url = url("/api/users") else { return .failure("Invalid URL") }
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, _) = try await session.data(from: url)
             guard let decoded = try? JSONDecoder().decode([ApiAvailableUser].self, from: data) else {
                 return .failure("Parse error: \(errorLocalized(from: data))")
             }
@@ -373,7 +375,7 @@ final class LiveApiClient: ApiClientProtocol {
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         do {
-            let (data, resp) = try await URLSession.shared.data(for: req)
+            let (data, resp) = try await session.data(for: req)
             if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
                 if let err = try? JSONDecoder().decode(ApiError.self, from: data), let msg = err.error {
                     return msg
