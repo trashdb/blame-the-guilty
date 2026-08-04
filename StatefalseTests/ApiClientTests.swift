@@ -56,11 +56,11 @@ final class ApiClientTests: XCTestCase {
 
     func testDetailRequestBuildsPathAndQuery() async {
         MockURLProtocol.handler = { _ in self.jsonResponse(200, "{}") }
-        _ = await makeClient().fetchPRDetails(prNumber: 7, repo: "owner/repo", gitHubId: 123)
+        _ = await makeClient().fetchPRDetails(prNumber: 7, repo: "owner/repo")
         let url = MockURLProtocol.lastRequest!.url!
         XCTAssertEqual(url.path, "/api/pullrequests/7/detail")
         XCTAssertEqual(queryItem("repo", in: url), "owner/repo")
-        XCTAssertEqual(queryItem("gitHubId", in: url), "123")
+        XCTAssertNil(queryItem("gitHubId", in: url))
     }
 
     // MARK: - fetchPRDetails
@@ -69,7 +69,7 @@ final class ApiClientTests: XCTestCase {
         MockURLProtocol.handler = { _ in
             self.jsonResponse(200, #"{"mergeableState":"clean","behindBy":0,"aheadBy":3,"draft":false}"#)
         }
-        let result = await makeClient().fetchPRDetails(prNumber: 7, repo: "owner/repo", gitHubId: 123)
+        let result = await makeClient().fetchPRDetails(prNumber: 7, repo: "owner/repo")
         guard case .success(let details) = result else {
             return XCTFail("expected success, got \(result)")
         }
@@ -80,7 +80,7 @@ final class ApiClientTests: XCTestCase {
 
     func testFetchPRDetailsFailureOnBadBody() async {
         MockURLProtocol.handler = { _ in self.jsonResponse(200, "not json") }
-        let result = await makeClient().fetchPRDetails(prNumber: 7, repo: "owner/repo", gitHubId: 123)
+        let result = await makeClient().fetchPRDetails(prNumber: 7, repo: "owner/repo")
         guard case .failure(let message) = result else {
             return XCTFail("expected failure, got \(result)")
         }
@@ -93,7 +93,7 @@ final class ApiClientTests: XCTestCase {
         MockURLProtocol.handler = { _ in
             self.jsonResponse(200, #"[{"sha":"abc","message":"Fix","authorName":"Alice","authorLogin":"alice","date":null,"url":null}]"#)
         }
-        let result = await makeClient().fetchCommits(prNumber: 7, repo: "owner/repo", gitHubId: 123)
+        let result = await makeClient().fetchCommits(prNumber: 7, repo: "owner/repo")
         guard case .success(let commits) = result else {
             return XCTFail("expected success, got \(result)")
         }
@@ -104,7 +104,7 @@ final class ApiClientTests: XCTestCase {
 
     func testFetchListFailureSurfacesBackendError() async {
         MockURLProtocol.handler = { _ in self.jsonResponse(500, #"{"error":"boom"}"#) }
-        let result = await makeClient().fetchFiles(prNumber: 7, repo: "owner/repo", gitHubId: 123)
+        let result = await makeClient().fetchFiles(prNumber: 7, repo: "owner/repo")
         guard case .failure(let message) = result else {
             return XCTFail("expected failure, got \(result)")
         }
@@ -115,7 +115,7 @@ final class ApiClientTests: XCTestCase {
         MockURLProtocol.handler = { _ in
             self.jsonResponse(200, #"[{"name":"CI","status":"completed","conclusion":"success","startedAt":"2024-01-01T10:00:00Z","completedAt":null,"url":null}]"#)
         }
-        let result = await makeClient().fetchChecks(prNumber: 7, repo: "owner/repo", gitHubId: 123)
+        let result = await makeClient().fetchChecks(prNumber: 7, repo: "owner/repo")
         guard case .success(let checks) = result else {
             return XCTFail("expected success, got \(result)")
         }
@@ -154,20 +154,20 @@ final class ApiClientTests: XCTestCase {
         MockURLProtocol.handler = { _ in
             self.jsonResponse(200, #"{"merged":true,"sha":"def","message":null,"error":null}"#)
         }
-        let response = await makeClient().mergePR(prNumber: 7, repo: "owner/repo", gitHubId: 123, method: "squash")
+        let response = await makeClient().mergePR(prNumber: 7, repo: "owner/repo", method: "squash")
         XCTAssertEqual(response?.merged, true)
         XCTAssertEqual(response?.sha, "def")
     }
 
     func testSetDraftReturnsNilOnSuccess() async {
         MockURLProtocol.handler = { _ in self.jsonResponse(200, "") }
-        let error = await makeClient().setDraft(prNumber: 7, repo: "owner/repo", gitHubId: 123, draft: true)
+        let error = await makeClient().setDraft(prNumber: 7, repo: "owner/repo", draft: true)
         XCTAssertNil(error)
     }
 
     func testSetDraftReturnsHTTPError() async {
         MockURLProtocol.handler = { _ in self.jsonResponse(500, "") }
-        let error = await makeClient().setDraft(prNumber: 7, repo: "owner/repo", gitHubId: 123, draft: false)
+        let error = await makeClient().setDraft(prNumber: 7, repo: "owner/repo", draft: false)
         XCTAssertEqual(error, "HTTP 500")
     }
 
@@ -175,7 +175,7 @@ final class ApiClientTests: XCTestCase {
 
     func testUpdateBranchMessage() async {
         MockURLProtocol.handler = { _ in self.jsonResponse(200, #"{"message":"updated"}"#) }
-        let result = await makeClient().updateBranch(prNumber: 7, repo: "owner/repo", gitHubId: 123)
+        let result = await makeClient().updateBranch(prNumber: 7, repo: "owner/repo")
         guard case .updated(let message) = result else {
             return XCTFail("expected updated, got \(result)")
         }
@@ -184,7 +184,7 @@ final class ApiClientTests: XCTestCase {
 
     func testUpdateBranchSentOnBare2xx() async {
         MockURLProtocol.handler = { _ in self.jsonResponse(200, "") }
-        let result = await makeClient().updateBranch(prNumber: 7, repo: "owner/repo", gitHubId: 123)
+        let result = await makeClient().updateBranch(prNumber: 7, repo: "owner/repo")
         guard case .sent = result else {
             return XCTFail("expected sent, got \(result)")
         }
@@ -192,7 +192,7 @@ final class ApiClientTests: XCTestCase {
 
     func testUpdateBranchFailureSurfacesBackendError() async {
         MockURLProtocol.handler = { _ in self.jsonResponse(400, #"{"error":"conflict"}"#) }
-        let result = await makeClient().updateBranch(prNumber: 7, repo: "owner/repo", gitHubId: 123)
+        let result = await makeClient().updateBranch(prNumber: 7, repo: "owner/repo")
         guard case .failed(let message) = result else {
             return XCTFail("expected failed, got \(result)")
         }
@@ -203,13 +203,13 @@ final class ApiClientTests: XCTestCase {
 
     func testAddSubscriberReturnsBackendErrorOn4xx() async {
         MockURLProtocol.handler = { _ in self.jsonResponse(403, #"{"error":"not allowed"}"#) }
-        let error = await makeClient().addSubscriber(prNumber: 7, repo: "owner/repo", gitHubId: 123, subscriberId: 9)
+        let error = await makeClient().addSubscriber(prNumber: 7, repo: "owner/repo", subscriberId: 9)
         XCTAssertEqual(error, "not allowed")
     }
 
     func testRemoveSubscriberNilOnSuccess() async {
         MockURLProtocol.handler = { _ in self.jsonResponse(200, "") }
-        let error = await makeClient().removeSubscriber(prNumber: 7, repo: "owner/repo", gitHubId: 123, subscriberId: 9)
+        let error = await makeClient().removeSubscriber(prNumber: 7, repo: "owner/repo", subscriberId: 9)
         XCTAssertNil(error)
     }
 
