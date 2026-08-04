@@ -1,5 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 using System.Threading.RateLimiting;
 using Serilog;
 using Scalar.AspNetCore;
@@ -74,6 +77,42 @@ try
     builder.Services.Configure<GitHubOAuthOptions>(
         builder.Configuration.GetSection("GitHubOAuth"));
 
+    // Session JWT config + token issuance
+    var jwtSecret = builder.Configuration["Jwt:Secret"];
+    if (string.IsNullOrWhiteSpace(jwtSecret) || Encoding.UTF8.GetByteCount(jwtSecret) < 32)
+        throw new InvalidOperationException("Jwt:Secret must be set and at least 32 bytes long.");
+    builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
+    builder.Services.AddSingleton<JwtTokenService>();
+
+    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
+        {
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+                ValidateIssuer = true,
+                ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "statefalse",
+                ValidateAudience = true,
+                ValidAudience = builder.Configuration["Jwt:Audience"] ?? "statefalse-native",
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.FromSeconds(30)
+            };
+
+            // SignalR JS/WebSocket clients cannot set Authorization headers;
+            // the SDK sends the token as the access_token query param instead.
+            options.Events = new JwtBearerEvents
+            {
+                OnMessageReceived = context =>
+                {
+                    var accessToken = context.Request.Query["access_token"];
+                    if (!string.IsNullOrEmpty(accessToken))
+                        context.Token = accessToken;
+                    return Task.CompletedTask;
+                }
+            };
+        });
+
     // JSON serialization (used by Minimal API results + body binding)
     builder.Services.ConfigureHttpJsonOptions(options =>
     {
@@ -137,6 +176,8 @@ try
 
     app.UseCors("SignalR");
     app.UseRateLimiter();
+    app.UseAuthentication();
+    app.UseAuthorization();
 
     // Health check
     app.MapGet("/health", async (AppDbContext db) =>
@@ -166,7 +207,7 @@ try
     app.MapOpenApi();
     app.MapScalarApiReference();
 
-    app.MapHub<PunishmentHub>("/hub/punishment");
+    app.MapHub<PunishmentHub>("/hub/punishment").RequireAuthorization();
     app.MapApiEndpoints();
 
     await app.RunAsync();

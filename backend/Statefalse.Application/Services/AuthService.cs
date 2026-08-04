@@ -16,12 +16,14 @@ public class AuthService
     private readonly GitHubOAuthService _oauth;
     private readonly IAppDbContext _db;
     private readonly IConfiguration _configuration;
+    private readonly JwtTokenService _jwt;
 
-    public AuthService(GitHubOAuthService oauth, IAppDbContext db, IConfiguration configuration)
+    public AuthService(GitHubOAuthService oauth, IAppDbContext db, IConfiguration configuration, JwtTokenService jwt)
     {
         _oauth = oauth;
         _db = db;
         _configuration = configuration;
+        _jwt = jwt;
     }
 
     public string LoginUrl(string? redirectUri) => _oauth.GetAuthorizationUrl(redirectUri);
@@ -60,15 +62,17 @@ public class AuthService
 
         await _db.SaveChangesAsync();
 
-        // If a redirect_uri was passed via state, redirect there with user info
+        var token = _jwt.GenerateToken(userInfo.Id, userInfo.Login, userInfo.AvatarUrl);
+
+        // If a redirect_uri was passed via state, redirect there with user info + session token
         if (!string.IsNullOrEmpty(state))
         {
             var avatar = userInfo.AvatarUrl is not null ? $"&avatar={HttpUtility.UrlEncode(userInfo.AvatarUrl)}" : "";
-            var redirectUri = $"{state}?id={userInfo.Id}&username={HttpUtility.UrlEncode(userInfo.Login)}{avatar}";
+            var redirectUri = $"{state}?id={userInfo.Id}&username={HttpUtility.UrlEncode(userInfo.Login)}{avatar}&token={HttpUtility.UrlEncode(token)}";
             return new AuthCallbackResponse(null, redirectUri, null);
         }
 
-        return new AuthCallbackResponse(null, null, new { id = userInfo.Id, username = userInfo.Login, avatarUrl = userInfo.AvatarUrl });
+        return new AuthCallbackResponse(null, null, new { id = userInfo.Id, username = userInfo.Login, avatarUrl = userInfo.AvatarUrl, token });
     }
 
     public async Task<ApiResult> GetUsersAsync()

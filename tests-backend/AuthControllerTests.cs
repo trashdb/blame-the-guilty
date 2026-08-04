@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Statefalse.Infrastructure.Data;
 using Statefalse.Domain.Models;
+using Statefalse.Application;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -26,6 +27,7 @@ public class AuthControllerTests : IClassFixture<WebApplicationFactory<Program>>
 
         _factory = factory.WithWebHostBuilder(builder =>
         {
+            builder.UseSetting("Jwt:Secret", TestAuth.Secret);
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<DbContextOptions<AppDbContext>>();
@@ -51,10 +53,24 @@ public class AuthControllerTests : IClassFixture<WebApplicationFactory<Program>>
         _sqliteConnection.Dispose();
     }
 
+    private void Authenticate(long gitHubId, string? username = null)
+    {
+        _client.DefaultRequestHeaders.Authorization = new("Bearer",
+            TestAuth.Token(_factory, gitHubId, username ?? $"u{gitHubId}"));
+    }
+
+    [Fact]
+    public async Task GetToken_NoAuth_ReturnsUnauthorized()
+    {
+        var response = await _client.GetAsync("/api/auth/token");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
     [Fact]
     public async Task GetToken_WithoutUser_ReturnsUnauthorized()
     {
-        var response = await _client.GetAsync("/api/auth/token?gitHubId=99999");
+        Authenticate(99999);
+        var response = await _client.GetAsync("/api/auth/token");
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
@@ -62,8 +78,9 @@ public class AuthControllerTests : IClassFixture<WebApplicationFactory<Program>>
     public async Task GetToken_WithUserPatToken_ReturnsToken()
     {
         var id = SeedUser(u => u.UserPatToken = "ghp_test_pat_token");
+        Authenticate(id);
 
-        var response = await _client.GetAsync($"/api/auth/token?gitHubId={id}");
+        var response = await _client.GetAsync("/api/auth/token");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var body = await response.Content.ReadFromJsonAsync<Dictionary<string, string>>();
@@ -75,8 +92,9 @@ public class AuthControllerTests : IClassFixture<WebApplicationFactory<Program>>
     public async Task GetToken_FallsBackToAccessToken()
     {
         var id = SeedUser(u => u.AccessToken = "gho_access_token");
+        Authenticate(id);
 
-        var response = await _client.GetAsync($"/api/auth/token?gitHubId={id}");
+        var response = await _client.GetAsync("/api/auth/token");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var body = await response.Content.ReadFromJsonAsync<Dictionary<string, string>>();
@@ -92,8 +110,9 @@ public class AuthControllerTests : IClassFixture<WebApplicationFactory<Program>>
             u.GitHubUsername = "meuser";
             u.AvatarUrl = "https://avatars.example.com/me.png";
         });
+        Authenticate(id);
 
-        var response = await _client.GetAsync($"/api/auth/me?gitHubId={id}");
+        var response = await _client.GetAsync("/api/auth/me");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var body = await response.Content.ReadFromJsonAsync<Dictionary<string, object>>();
@@ -104,7 +123,8 @@ public class AuthControllerTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task GetMe_NonExistent_ReturnsNotFound()
     {
-        var response = await _client.GetAsync("/api/auth/me?gitHubId=999");
+        Authenticate(999);
+        var response = await _client.GetAsync("/api/auth/me");
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 

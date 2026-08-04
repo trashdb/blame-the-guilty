@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Statefalse.Domain.Models;
@@ -5,6 +7,7 @@ using Statefalse.Infrastructure.Data;
 
 namespace Statefalse.Infrastructure.Hubs;
 
+[Authorize]
 public class PunishmentHub : Hub
 {
     private readonly AppDbContext _db;
@@ -14,8 +17,12 @@ public class PunishmentHub : Hub
         _db = db;
     }
 
-    public async Task RegisterConnection(long gitHubId, string? username = null)
+    public async Task RegisterConnection(string? username = null)
     {
+        var claim = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (claim == null || !long.TryParse(claim, out var gitHubId))
+            throw new HubException("Missing identity claim.");
+
         var user = await _db.GitHubUsers
             .FirstOrDefaultAsync(u => u.GitHubId == gitHubId);
 

@@ -29,6 +29,7 @@ public class ControllersTests : IClassFixture<WebApplicationFactory<Program>>, I
 
         _factory = factory.WithWebHostBuilder(builder =>
         {
+            builder.UseSetting("Jwt:Secret", TestAuth.Secret);
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<DbContextOptions<AppDbContext>>();
@@ -51,6 +52,14 @@ public class ControllersTests : IClassFixture<WebApplicationFactory<Program>>, I
         _factory.Dispose();
         _sqliteConnection.Close();
         _sqliteConnection.Dispose();
+    }
+
+    private HttpClient AuthClient(long gitHubId)
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new("Bearer",
+            TestAuth.Token(_factory, gitHubId, $"user{gitHubId}"));
+        return client;
     }
 
     private long SeedUser(Action<GitHubUser>? configure = null)
@@ -96,12 +105,37 @@ public class ControllersTests : IClassFixture<WebApplicationFactory<Program>>, I
         Assert.Contains("application/json", response.Content.Headers.ContentType?.ToString() ?? "");
     }
 
+    // ───────────── Auth guard ─────────────
+
+    [Fact]
+    public async Task ProtectedEndpoints_WithoutBearer_ReturnsUnauthorized()
+    {
+        var responses = await Task.WhenAll(
+            _client.GetAsync("/api/users"),
+            _client.GetAsync("/api/punishments"),
+            _client.GetAsync("/api/webhook/logs"),
+            _client.GetAsync("/api/workflows/runs"),
+            _client.GetAsync("/api/pullrequests/active"));
+        foreach (var r in responses)
+            Assert.Equal(HttpStatusCode.Unauthorized, r.StatusCode);
+    }
+
+    [Fact]
+    public async Task ProtectedEndpoints_WithInvalidToken_ReturnsUnauthorized()
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new("Bearer", "not-a-valid-token");
+        var response = await client.GetAsync("/api/users");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
     // ───────────── Users ─────────────
 
     [Fact]
     public async Task GetUsers_Empty_ReturnsEmptyList()
     {
-        var response = await _client.GetAsync("/api/users");
+        var client = AuthClient(1001);
+        var response = await client.GetAsync("/api/users");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var users = await response.Content.ReadFromJsonAsync<List<Dictionary<string, object>>>();
@@ -114,7 +148,8 @@ public class ControllersTests : IClassFixture<WebApplicationFactory<Program>>, I
         SeedUser();
         SeedUser();
 
-        var response = await _client.GetAsync("/api/users");
+        var client = AuthClient(1001);
+        var response = await client.GetAsync("/api/users");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var users = await response.Content.ReadFromJsonAsync<List<Dictionary<string, object>>>();
@@ -127,7 +162,8 @@ public class ControllersTests : IClassFixture<WebApplicationFactory<Program>>, I
     [Fact]
     public async Task GetPunishments_Empty_ReturnsEmptyList()
     {
-        var response = await _client.GetAsync("/api/punishments?days=7&limit=50");
+        var client = AuthClient(1001);
+        var response = await client.GetAsync("/api/punishments?days=7&limit=50");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var events = await response.Content.ReadFromJsonAsync<List<Dictionary<string, object>>>();
@@ -147,7 +183,8 @@ public class ControllersTests : IClassFixture<WebApplicationFactory<Program>>, I
         });
         db.SaveChanges();
 
-        var response = await _client.GetAsync("/api/punishments?days=7&limit=50");
+        var client = AuthClient(1001);
+        var response = await client.GetAsync("/api/punishments?days=7&limit=50");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var events = await response.Content.ReadFromJsonAsync<List<JsonElement>>();
@@ -178,7 +215,8 @@ public class ControllersTests : IClassFixture<WebApplicationFactory<Program>>, I
         });
         db.SaveChanges();
 
-        var response = await _client.GetAsync("/api/punishments/summary?days=7");
+        var client = AuthClient(1001);
+        var response = await client.GetAsync("/api/punishments/summary?days=7");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -192,7 +230,8 @@ public class ControllersTests : IClassFixture<WebApplicationFactory<Program>>, I
     [Fact]
     public async Task GetWebhookLogs_ReturnsList()
     {
-        var response = await _client.GetAsync("/api/webhook/logs?limit=10");
+        var client = AuthClient(1001);
+        var response = await client.GetAsync("/api/webhook/logs?limit=10");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var logs = await response.Content.ReadFromJsonAsync<List<Dictionary<string, object>>>();
@@ -223,8 +262,9 @@ public class ControllersTests : IClassFixture<WebApplicationFactory<Program>>, I
     [Fact]
     public async Task SavePat_NoUser_ReturnsNotFound()
     {
+        var client = AuthClient(999999);
         var content = JsonContent.Create(new { patToken = "ghp_new_token" });
-        var response = await _client.PostAsync("/api/auth/pat?gitHubId=999999", content);
+        var response = await client.PostAsync("/api/auth/pat", content);
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
@@ -232,13 +272,14 @@ public class ControllersTests : IClassFixture<WebApplicationFactory<Program>>, I
     public async Task SavePat_SavesToken()
     {
         var id = SeedUser(u => u.UserPatToken = null);
+        var client = AuthClient(id);
 
         var content = JsonContent.Create(new { patToken = "ghp_new_pat" });
-        var response = await _client.PostAsync($"/api/auth/pat?gitHubId={id}", content);
+        var response = await client.PostAsync("/api/auth/pat", content);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         // Verify token was saved
-        var tokenResponse = await _client.GetAsync($"/api/auth/token?gitHubId={id}");
+        var tokenResponse = await client.GetAsync("/api/auth/token");
         var tokenBody = await tokenResponse.Content.ReadFromJsonAsync<Dictionary<string, string>>();
         Assert.NotNull(tokenBody);
         Assert.Equal("ghp_new_pat", tokenBody!["token"]);
@@ -250,7 +291,8 @@ public class ControllersTests : IClassFixture<WebApplicationFactory<Program>>, I
     public async Task GetWorkflowRuns_Empty_ReturnsEmptyList()
     {
         var id = SeedUser();
-        var response = await _client.GetAsync($"/api/workflows/runs?gitHubId={id}&limit=20");
+        var client = AuthClient(id);
+        var response = await client.GetAsync("/api/workflows/runs?limit=20");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var runs = await response.Content.ReadFromJsonAsync<List<Dictionary<string, object>>>();
@@ -271,7 +313,8 @@ public class ControllersTests : IClassFixture<WebApplicationFactory<Program>>, I
         });
         db.SaveChanges();
 
-        var response = await _client.GetAsync($"/api/workflows/runs?gitHubId={id}&limit=20");
+        var client = AuthClient(id);
+        var response = await client.GetAsync("/api/workflows/runs?limit=20");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var runs = await response.Content.ReadFromJsonAsync<List<JsonElement>>();
@@ -283,8 +326,9 @@ public class ControllersTests : IClassFixture<WebApplicationFactory<Program>>, I
     [Fact]
     public async Task SetWorkflowTarget_NoRun_ReturnsNotFound()
     {
+        var client = AuthClient(1001);
         var body = JsonContent.Create(new { targetGitHubIds = new long[] { 1, 2 } });
-        var response = await _client.PutAsync("/api/workflows/runs/9999/target", body);
+        var response = await client.PutAsync("/api/workflows/runs/9999/target", body);
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
@@ -302,8 +346,9 @@ public class ControllersTests : IClassFixture<WebApplicationFactory<Program>>, I
         db.SaveChanges();
         var runId = db.WorkflowRuns.First().Id;
 
+        var client = AuthClient(id);
         var body = JsonContent.Create(new { targetGitHubIds = new long[] { 42, 99 } });
-        var response = await _client.PutAsync($"/api/workflows/runs/{runId}/target", body);
+        var response = await client.PutAsync($"/api/workflows/runs/{runId}/target", body);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var result = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -313,18 +358,18 @@ public class ControllersTests : IClassFixture<WebApplicationFactory<Program>>, I
     // ───────────── PullRequests ─────────────
 
     [Fact]
-    public async Task GetActivePRs_NoToken_ReturnsUnauthorized()
+    public async Task GetActivePRs_NoAuth_ReturnsUnauthorized()
     {
-        var id = SeedUser(u => u.UserPatToken = null);
-        var response = await _client.GetAsync($"/api/pullrequests/active?gitHubId={id}");
+        var response = await _client.GetAsync("/api/pullrequests/active");
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]
-    public async Task GetActivePRs_WithToken_ReturnsOk()
+    public async Task GetActivePRs_WithAuth_ReturnsOk()
     {
         var id = SeedUser();
-        var response = await _client.GetAsync($"/api/pullrequests/active?gitHubId={id}");
+        var client = AuthClient(id);
+        var response = await client.GetAsync("/api/pullrequests/active");
         // Returns empty list since no PRs exist (GitHub API calls may fail but
         // the endpoint returns 200 with partial data)
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -334,93 +379,84 @@ public class ControllersTests : IClassFixture<WebApplicationFactory<Program>>, I
     public async Task GetPRDetail_NoPR_ReturnsPartialData()
     {
         var id = SeedUser();
-        var response = await _client.GetAsync($"/api/pullrequests/999999/detail?repo=org/repo&gitHubId={id}");
+        var client = AuthClient(id);
+        var response = await client.GetAsync("/api/pullrequests/999999/detail?repo=org/repo");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [Fact]
-    public async Task MergePR_NoToken_ReturnsUnauthorized()
+    public async Task MergePR_NoAuth_ReturnsUnauthorized()
     {
-        var id = SeedUser(u => u.UserPatToken = null);
-        var response = await _client.PostAsync($"/api/pullrequests/1/merge?repo=org/repo&gitHubId={id}&method=squash", null);
+        var response = await _client.PostAsync("/api/pullrequests/1/merge?repo=org/repo&method=squash", null);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]
-    public async Task UpdateBranch_NoToken_ReturnsUnauthorized()
+    public async Task UpdateBranch_NoAuth_ReturnsUnauthorized()
     {
-        var id = SeedUser(u => u.UserPatToken = null);
-        var response = await _client.PostAsync($"/api/pullrequests/1/update-branch?repo=org/repo&gitHubId={id}", null);
+        var response = await _client.PostAsync("/api/pullrequests/1/update-branch?repo=org/repo", null);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]
-    public async Task GetPRCommits_NoToken_ReturnsUnauthorized()
+    public async Task GetPRCommits_NoAuth_ReturnsUnauthorized()
     {
-        var id = SeedUser(u => u.UserPatToken = null);
-        var response = await _client.GetAsync($"/api/pullrequests/1/commits?repo=org/repo&gitHubId={id}");
+        var response = await _client.GetAsync("/api/pullrequests/1/commits?repo=org/repo");
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]
-    public async Task GetPRFiles_NoToken_ReturnsUnauthorized()
+    public async Task GetPRFiles_NoAuth_ReturnsUnauthorized()
     {
-        var id = SeedUser(u => u.UserPatToken = null);
-        var response = await _client.GetAsync($"/api/pullrequests/1/files?repo=org/repo&gitHubId={id}");
+        var response = await _client.GetAsync("/api/pullrequests/1/files?repo=org/repo");
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]
-    public async Task GetPRChecks_NoToken_ReturnsUnauthorized()
+    public async Task GetPRChecks_NoAuth_ReturnsUnauthorized()
     {
-        var id = SeedUser(u => u.UserPatToken = null);
-        var response = await _client.GetAsync($"/api/pullrequests/1/checks?repo=org/repo&gitHubId={id}");
+        var response = await _client.GetAsync("/api/pullrequests/1/checks?repo=org/repo");
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]
-    public async Task SetDraft_NoToken_ReturnsUnauthorized()
+    public async Task SetDraft_NoAuth_ReturnsUnauthorized()
     {
-        var id = SeedUser(u => u.UserPatToken = null);
-        var response = await _client.PostAsync($"/api/pullrequests/1/draft?repo=org/repo&gitHubId={id}&draft=true", null);
+        var response = await _client.PostAsync("/api/pullrequests/1/draft?repo=org/repo&draft=true", null);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     // ───────────── GitHub API Proxy ─────────────
 
     [Fact]
-    public async Task GetMyBranches_NoToken_ReturnsUnauthorized()
+    public async Task GetMyBranches_NoAuth_ReturnsUnauthorized()
     {
-        var id = SeedUser(u => u.UserPatToken = null);
-        var response = await _client.GetAsync($"/api/github/my-branches?gitHubId={id}&repo=org/repo");
+        var response = await _client.GetAsync("/api/github/my-branches?repo=org/repo");
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]
-    public async Task CreatePR_NoToken_ReturnsUnauthorized()
+    public async Task CreatePR_NoAuth_ReturnsUnauthorized()
     {
-        var id = SeedUser(u => u.UserPatToken = null);
         var response = await _client.PostAsync(
-            $"/api/github/create-pr?gitHubId={id}&repo=org/repo&head=feature/test&baseBranch=main&title=Test", null);
+            "/api/github/create-pr?repo=org/repo&head=feature/test&baseBranch=main&title=Test", null);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]
-    public async Task PRPreview_NoToken_ReturnsUnauthorized()
+    public async Task PRPreview_NoAuth_ReturnsUnauthorized()
     {
-        var id = SeedUser(u => u.UserPatToken = null);
         var response = await _client.PostAsync(
-            $"/api/github/pr-preview?gitHubId={id}&repo=org/repo&head=feature/test&baseBranch=main&title=Test", null);
+            "/api/github/pr-preview?repo=org/repo&head=feature/test&baseBranch=main&title=Test", null);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     // ───────────── Workflows (GitHub-dependent) ─────────────
 
     [Fact]
-    public async Task SyncActive_NoToken_ReturnsUnauthorized()
+    public async Task SyncActive_NoAuth_ReturnsUnauthorized()
     {
-        var id = SeedUser(u => u.UserPatToken = null);
-        var response = await _client.PostAsync($"/api/workflows/sync-active?gitHubId={id}", null);
+        var response = await _client.PostAsync("/api/workflows/sync-active", null);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
@@ -428,17 +464,28 @@ public class ControllersTests : IClassFixture<WebApplicationFactory<Program>>, I
     public async Task RerunRun_NoRun_ReturnsNotFound()
     {
         var id = SeedUser();
-        var response = await _client.PostAsync($"/api/workflows/runs/999999/rerun?gitHubId={id}", null);
+        var client = AuthClient(id);
+        var response = await client.PostAsync("/api/workflows/runs/999999/rerun", null);
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     // ───────────── Interpret ─────────────
 
     [Fact]
+    public async Task Interpret_NoAuth_ReturnsUnauthorized()
+    {
+        var body = JsonContent.Create(new { query = "create pr" });
+        var response = await _client.PostAsync("/api/github/interpret", body);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Interpret_NoQuery_ReturnsBadRequest()
     {
-        var body = JsonContent.Create(new { gitHubId = 1L });
-        var response = await _client.PostAsync("/api/github/interpret", body);
+        var id = SeedUser();
+        var client = AuthClient(id);
+        var body = JsonContent.Create(new { });
+        var response = await client.PostAsync("/api/github/interpret", body);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
@@ -446,8 +493,9 @@ public class ControllersTests : IClassFixture<WebApplicationFactory<Program>>, I
     public async Task Interpret_NoApiKeyOrToken_ReturnsBadRequest()
     {
         var id = SeedUser(u => u.AccessToken = null);
-        var body = JsonContent.Create(new { query = "create pr", gitHubId = id });
-        var response = await _client.PostAsync("/api/github/interpret", body);
+        var client = AuthClient(id);
+        var body = JsonContent.Create(new { query = "create pr" });
+        var response = await client.PostAsync("/api/github/interpret", body);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 }
