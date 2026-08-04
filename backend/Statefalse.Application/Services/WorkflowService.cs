@@ -67,14 +67,24 @@ public class WorkflowService
         var subscribedRuns = new List<WorkflowRun>();
         if (subscribedRepoBranches.Count > 0)
         {
-            var repoBranches = subscribedRepoBranches.ToList();
-            subscribedRuns = await _db.WorkflowRuns
+            var repoList = subscribedRepoBranches.Select(rb => rb.RepoFullName).Distinct().ToList();
+            // EF Core can't translate .Any() over a local tuple list; translate the
+            // repo filter, then match head branches in memory.
+            var candidates = await _db.WorkflowRuns
                 .Where(w => !w.IsIgnored
                     && w.GitHubId != gitHubId
-                    && repoBranches.Any(rb => rb.RepoFullName == w.Repo && rb.HeadBranch == w.HeadBranch))
+                    && repoList.Contains(w.Repo))
                 .OrderByDescending(w => w.Id)
-                .Take(limit)
+                .Take(limit * 10)
                 .ToListAsync();
+            var branchKeySet = subscribedRepoBranches
+                .Where(rb => !string.IsNullOrEmpty(rb.HeadBranch))
+                .Select(rb => (rb.RepoFullName, rb.HeadBranch))
+                .ToHashSet();
+            subscribedRuns = candidates
+                .Where(w => w.HeadBranch != null && branchKeySet.Contains((w.Repo, w.HeadBranch)))
+                .Take(limit)
+                .ToList();
         }
 
         var allRuns = myRuns.Concat(filteredTargetRuns).Concat(subscribedRuns)
