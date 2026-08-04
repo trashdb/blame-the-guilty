@@ -4,7 +4,7 @@ final class PRPreviewPanelManager {
     static let shared = PRPreviewPanelManager()
     private var panel: NSWindow?
 
-    func show(repoPath: String, branchName: String, backendUrl: String, gitHubId: Int64, onComplete: ((URL) -> Void)? = nil) {
+    func show(repoPath: String, branchName: String, backendUrl: String, gitHubId: Int64, token: String?, onComplete: ((URL) -> Void)? = nil) {
         if let existing = panel, existing.isVisible {
             existing.makeKeyAndOrderFront(nil)
             return
@@ -12,7 +12,7 @@ final class PRPreviewPanelManager {
 
         let view = CreatePRPreviewView(
             repoPath: repoPath, branchName: branchName,
-            backendUrl: backendUrl, gitHubId: gitHubId,
+            backendUrl: backendUrl, gitHubId: gitHubId, token: token,
             onComplete: { url in
                 onComplete?(url)
                 self.close()

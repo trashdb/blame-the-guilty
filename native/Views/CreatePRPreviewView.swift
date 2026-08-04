@@ -12,6 +12,7 @@ struct CreatePRPreviewView: View {
     let branchName: String
     let backendUrl: String
     let gitHubId: Int64
+    let token: String?
     let onComplete: (URL) -> Void
     var onCancel: (() -> Void)?
 
@@ -35,11 +36,12 @@ struct CreatePRPreviewView: View {
 
     private var git: GitServiceProtocol { deps.gitService }
 
-    init(repoPath: String, branchName: String, backendUrl: String, gitHubId: Int64, onComplete: @escaping (URL) -> Void, onCancel: (() -> Void)? = nil) {
+    init(repoPath: String, branchName: String, backendUrl: String, gitHubId: Int64, token: String?, onComplete: @escaping (URL) -> Void, onCancel: (() -> Void)? = nil) {
         self.repoPath = repoPath
         self.branchName = branchName
         self.backendUrl = backendUrl
         self.gitHubId = gitHubId
+        self.token = token
         self.onComplete = onComplete
         self.onCancel = onCancel
         let ticketMatch = branchName.range(of: #"[A-Z]+-\d+"#, options: .regularExpression)
@@ -249,7 +251,12 @@ struct CreatePRPreviewView: View {
         let repoEncoded = fullName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? fullName
         let headEncoded = branchName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? branchName
 
-        guard let url = URL(string: "\(backendUrl)/api/github/pr-preview?gitHubId=\(gitHubId)&repo=\(repoEncoded)&head=\(headEncoded)&baseBranch=\(cleanBase)&title=\(title.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? title)&useAI=\(useAI)") else {
+        guard let token else {
+            errorMessage = "Not signed in"
+            isLoading = false
+            return
+        }
+        guard let url = URL(string: "\(backendUrl)/api/github/pr-preview?repo=\(repoEncoded)&head=\(headEncoded)&baseBranch=\(cleanBase)&title=\(title.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? title)&useAI=\(useAI)") else {
             errorMessage = "Invalid URL"
             isLoading = false
             return
@@ -257,6 +264,7 @@ struct CreatePRPreviewView: View {
 
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.timeoutInterval = 20
         do {
             let (data, resp) = try await URLSession.shared.data(for: req)
@@ -299,7 +307,7 @@ struct CreatePRPreviewView: View {
             let subsString = selectedUserIds.isEmpty ? nil : selectedUserIds.map(String.init).joined(separator: ",")
             let result = try await git.createPR(
                 repoPath: repoPath, branchName: branchName,
-                backendUrl: backendUrl, gitHubId: gitHubId,
+                backendUrl: backendUrl, token: token ?? "",
                 overrideTitle: title, overrideBody: bodyText, subscribers: subsString
             )
             onComplete(result.url)
@@ -311,10 +319,12 @@ struct CreatePRPreviewView: View {
     
     private func loadAvailableUsers() async {
         isLoadingUsers = true
-        guard let url = URL(string: "\(backendUrl)/api/users") else { return }
+        guard let token, let url = URL(string: "\(backendUrl)/api/users") else { return }
         
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            var req = URLRequest(url: url)
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            let (data, _) = try await URLSession.shared.data(for: req)
             if let decoded = try? JSONDecoder().decode([PRSubscriberUser].self, from: data) {
                 await MainActor.run {
                     self.availableUsers = decoded.filter { $0.gitHubId != gitHubId }

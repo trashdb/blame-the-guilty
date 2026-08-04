@@ -18,7 +18,6 @@ struct PRDetailView: View {
         self.deps = deps
         _model = StateObject(wrappedValue: PRDetailViewModel(
             pr: pr,
-            gitHubId: gitHubId,
             optimisticDraft: optimisticDraft,
             api: deps.apiClient,
             signalR: deps.signalRService,
@@ -878,7 +877,7 @@ struct SubscriberManagementView: View {
         errorMessage = nil
         
         for subscriberId in selectedUserIds {
-            if let error = await api.addSubscriber(prNumber: pr.prNumber, repo: pr.repo, gitHubId: gitHubId, subscriberId: subscriberId) {
+            if let error = await api.addSubscriber(prNumber: pr.prNumber, repo: pr.repo, subscriberId: subscriberId) {
                 errorMessage = error
             }
         }
@@ -892,7 +891,7 @@ struct SubscriberManagementView: View {
     private func removeSubscriber(_ subscriberGitHubId: Int64) async {
         isLoading = true
         errorMessage = nil
-        if let error = await api.removeSubscriber(prNumber: pr.prNumber, repo: pr.repo, gitHubId: gitHubId, subscriberId: subscriberGitHubId) {
+        if let error = await api.removeSubscriber(prNumber: pr.prNumber, repo: pr.repo, subscriberId: subscriberGitHubId) {
             errorMessage = error
         } else {
             await loadSubscribers()

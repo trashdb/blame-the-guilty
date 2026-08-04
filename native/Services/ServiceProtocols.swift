@@ -36,15 +36,14 @@ protocol GitServiceProtocol: AnyObject {
     func fetchRepo(repoPath: String) async
     func repoFullName(repoPath: String) async -> String?
     func baseRefName(repoPath: String) async -> String?
-    func createPR(repoPath: String, branchName: String, backendUrl: String, gitHubId: Int64, overrideTitle: String?, overrideBody: String?, subscribers: String?) async throws -> CreatePRResult
+    func createPR(repoPath: String, branchName: String, backendUrl: String, token: String, overrideTitle: String?, overrideBody: String?, subscribers: String?) async throws -> CreatePRResult
     func pullBranch(repoPath: String, name: String, token: String?) async throws
     func createBranch(repoPath: String, from sourceBranch: String, newName: String) async throws
     func listMyBranches(repoPath: String) async throws -> [(name: String, isCurrent: Bool)]
-    func listMyRemoteBranchesViaAPI(repoPath: String, backendUrl: String, gitHubId: Int64) async -> [(name: String, isMerged: Bool)]
+    func listMyRemoteBranchesViaAPI(repoPath: String, backendUrl: String, token: String) async -> [(name: String, isMerged: Bool)]
     static func discoverRepos(workspacePath: String) -> [String]
     static func repoName(from path: String) -> String
-    static func fetchPAT(backendUrl: String, gitHubId: Int64) async -> String?
-    static func storedPAT() -> String?
+    static func fetchPAT(backendUrl: String, token: String) async -> String?
     func findRepoPath(ownerRepo: String, workspacePath: String) async -> String?
     func fetchMainAndGetDiff(repoPath: String, lastKnownSha: String?) async -> (currentSha: String, changedFiles: [String])?
     func getUncommittedFiles(repoPath: String) async -> [String]
@@ -67,20 +66,21 @@ protocol SignalRServiceProtocol: AnyObject {
     var mainBranchUpdate: (repo: String, prNumber: Int, mergedBy: String, headSha: String?)? { get set }
     var onMainBranchUpdated: ((String, Int, String, String?) -> Void)? { get set }
     var baseUrl: String { get }
+    var authToken: String? { get }
 
     func restoreSession()
     func login(keepSignedIn: Bool) async throws
     func logout()
-    func startPolling(gitHubId: Int64)
+    func startPolling()
     func stopPolling()
-    func subscribeToPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool
-    func unsubscribeFromPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool
+    func subscribeToPR(prNumber: Int64, repo: String) async -> Bool
+    func unsubscribeFromPR(prNumber: Int64, repo: String) async -> Bool
 }
 
 // MARK: - KeychainServiceProtocol
 
 protocol KeychainServiceProtocol: AnyObject {
-    func save(gitHubId: Int64, username: String, avatarUrl: String?)
+    func save(gitHubId: Int64, username: String, avatarUrl: String?, token: String?)
     func load() -> KeychainService.Session?
     func delete()
 }
@@ -97,7 +97,7 @@ protocol PersistenceServiceProtocol: AnyObject {
 // MARK: - OAuthServiceProtocol
 
 protocol OAuthServiceProtocol: AnyObject {
-    func startLogin(backendUrl: String) async throws -> (id: Int64, username: String, avatarUrl: String?)
+    func startLogin(backendUrl: String) async throws -> (id: Int64, username: String, avatarUrl: String?, token: String)
 }
 
 // MARK: - ConflictWatcherServiceProtocol

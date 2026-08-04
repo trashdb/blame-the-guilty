@@ -5,7 +5,6 @@ import SwiftUI
 @MainActor
 final class PRDetailViewModel: ObservableObject {
     let pr: PullRequest
-    let gitHubId: Int64
     private let api: ApiClientProtocol
     private let signalR: SignalRServiceProtocol
     private let onDraftChanged: ((Bool) -> Void)?
@@ -35,13 +34,11 @@ final class PRDetailViewModel: ObservableObject {
     @Published var mergeMethod = "squash"
 
     init(pr: PullRequest,
-         gitHubId: Int64,
          optimisticDraft: Bool?,
          api: ApiClientProtocol,
          signalR: SignalRServiceProtocol,
          onDraftChanged: ((Bool) -> Void)?) {
         self.pr = pr
-        self.gitHubId = gitHubId
         self.api = api
         self.signalR = signalR
         self.onDraftChanged = onDraftChanged
@@ -56,7 +53,7 @@ final class PRDetailViewModel: ObservableObject {
 
     func loadDetails() {
         Task {
-            let result = await api.fetchPRDetails(prNumber: pr.prNumber, repo: pr.repo, gitHubId: gitHubId)
+            let result = await api.fetchPRDetails(prNumber: pr.prNumber, repo: pr.repo)
             switch result {
             case .success(let details):
                 withAnimation(DS.Animation.default) {
@@ -83,7 +80,7 @@ final class PRDetailViewModel: ObservableObject {
         loadingCommits = true
         commitsError = nil
         Task {
-            let result = await api.fetchCommits(prNumber: pr.prNumber, repo: pr.repo, gitHubId: gitHubId)
+            let result = await api.fetchCommits(prNumber: pr.prNumber, repo: pr.repo)
             loadingCommits = false
             switch result {
             case .success(let items): commits = items
@@ -96,7 +93,7 @@ final class PRDetailViewModel: ObservableObject {
         loadingFiles = true
         filesError = nil
         Task {
-            let result = await api.fetchFiles(prNumber: pr.prNumber, repo: pr.repo, gitHubId: gitHubId)
+            let result = await api.fetchFiles(prNumber: pr.prNumber, repo: pr.repo)
             loadingFiles = false
             switch result {
             case .success(let items): files = items
@@ -109,7 +106,7 @@ final class PRDetailViewModel: ObservableObject {
         loadingChecks = true
         checksError = nil
         Task {
-            let result = await api.fetchChecks(prNumber: pr.prNumber, repo: pr.repo, gitHubId: gitHubId)
+            let result = await api.fetchChecks(prNumber: pr.prNumber, repo: pr.repo)
             loadingChecks = false
             switch result {
             case .success(let items): checks = items
@@ -125,7 +122,7 @@ final class PRDetailViewModel: ObservableObject {
         mergeResult = nil
         mergeError = nil
         Task {
-            guard let resp = await api.mergePR(prNumber: pr.prNumber, repo: pr.repo, gitHubId: gitHubId, method: mergeMethod) else {
+            guard let resp = await api.mergePR(prNumber: pr.prNumber, repo: pr.repo, method: mergeMethod) else {
                 merging = false
                 mergeError = "Merge failed"
                 return
@@ -147,7 +144,7 @@ final class PRDetailViewModel: ObservableObject {
         togglingDraft = true
 
         Task {
-            let error = await api.setDraft(prNumber: pr.prNumber, repo: pr.repo, gitHubId: gitHubId, draft: makeDraft)
+            let error = await api.setDraft(prNumber: pr.prNumber, repo: pr.repo, draft: makeDraft)
             togglingDraft = false
             if let error {
                 localDraft = previousDraft
@@ -162,7 +159,7 @@ final class PRDetailViewModel: ObservableObject {
         branchUpdateResult = nil
         branchUpdateError = nil
         Task {
-            let result = await api.updateBranch(prNumber: pr.prNumber, repo: pr.repo, gitHubId: gitHubId)
+            let result = await api.updateBranch(prNumber: pr.prNumber, repo: pr.repo)
             updatingBranch = false
             switch result {
             case .updated(let message):
@@ -185,10 +182,10 @@ final class PRDetailViewModel: ObservableObject {
     }
 
     func performSubscribe() async {
-        _ = await signalR.subscribeToPR(prNumber: pr.prNumber, repo: pr.repo, gitHubId: gitHubId)
+        _ = await signalR.subscribeToPR(prNumber: pr.prNumber, repo: pr.repo)
     }
 
     func performUnsubscribe() async {
-        _ = await signalR.unsubscribeFromPR(prNumber: pr.prNumber, repo: pr.repo, gitHubId: gitHubId)
+        _ = await signalR.unsubscribeFromPR(prNumber: pr.prNumber, repo: pr.repo)
     }
 }

@@ -88,7 +88,7 @@ actor GitService: GitServiceProtocol {
         guard await hasUpstream(repoPath: repoPath) else { return .noUpstream }
         // Always pull over HTTPS using the token — never fall back to SSH `git pull`,
         // which fails in a GUI app with "permission denied (publickey)".
-        guard let t = token ?? Self.storedPAT(),
+        guard let t = token,
               let fullName = await repoFullName(repoPath: repoPath),
               let branch = try? await currentBranchName(repoPath: repoPath) ?? "",
               !branch.isEmpty else {
@@ -183,7 +183,7 @@ actor GitService: GitServiceProtocol {
         return url.isEmpty ? nil : url
     }
 
-    func listMyRemoteBranchesViaAPI(repoPath: String, backendUrl: String, gitHubId: Int64) async -> [(name: String, isMerged: Bool)] {
+    func listMyRemoteBranchesViaAPI(repoPath: String, backendUrl: String, token: String) async -> [(name: String, isMerged: Bool)] {
         guard let fullName = await repoFullName(repoPath: repoPath) else {
             let email = await currentUserEmail() ?? ""
             return await listMyRemoteBranches(repoPath: repoPath, email: email)
@@ -193,7 +193,6 @@ actor GitService: GitServiceProtocol {
             return await listMyRemoteBranches(repoPath: repoPath, email: email)
         }
         components.queryItems = [
-            .init(name: "gitHubId", value: "\(gitHubId)"),
             .init(name: "repo", value: fullName)
         ]
         guard let url = components.url else {
@@ -201,7 +200,9 @@ actor GitService: GitServiceProtocol {
             return await listMyRemoteBranches(repoPath: repoPath, email: email)
         }
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            var req = URLRequest(url: url)
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            let (data, _) = try await URLSession.shared.data(for: req)
             let branches = try JSONDecoder().decode([APIBranch].self, from: data)
             let baseRef = await baseRefName(repoPath: repoPath)
             return await withTaskGroup(of: (String, Bool).self) { group in
@@ -234,7 +235,7 @@ actor GitService: GitServiceProtocol {
         try await runGit(repoPath: repoPath, args: ["push", "origin", "--delete", name])
     }
 
-    func createPR(repoPath: String, branchName: String, backendUrl: String, gitHubId: Int64,
+    func createPR(repoPath: String, branchName: String, backendUrl: String, token: String,
                   overrideTitle: String? = nil, overrideBody: String? = nil, subscribers: String? = nil) async throws -> CreatePRResult {
         // Check if the specific branch exists on remote
         let remoteRef = "origin/\(branchName)"
@@ -254,7 +255,6 @@ actor GitService: GitServiceProtocol {
             throw GitError.commandFailed("Invalid URL")
         }
         components.queryItems = [
-            .init(name: "gitHubId", value: "\(gitHubId)"),
             .init(name: "repo", value: fullName),
             .init(name: "head", value: branchName),
             .init(name: "baseBranch", value: cleanBase),
@@ -270,6 +270,7 @@ actor GitService: GitServiceProtocol {
 
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (data, resp) = try await URLSession.shared.data(for: req)
         guard let http = resp as? HTTPURLResponse else {
             throw GitError.commandFailed("No response from server")
@@ -495,7 +496,7 @@ actor GitService: GitServiceProtocol {
         // Always pull over HTTPS using the token. We never fall back to `git pull`
         // (which would use the SSH `origin` remote) because a sandboxed GUI app has
         // no SSH agent and that fails with "permission denied (publickey)".
-        guard let t = token ?? Self.storedPAT() else {
+        guard let t = token else {
             throw GitError.commandFailed("No GitHub token available for pull. Open Settings → save your Personal Access Token, then try again.")
         }
         guard let fullName = await repoFullName(repoPath: repoPath) else {
@@ -509,9 +510,11 @@ actor GitService: GitServiceProtocol {
         }
     }
 
-    static func fetchPAT(backendUrl: String, gitHubId: Int64) async -> String? {
-        guard let url = URL(string: "\(backendUrl)/api/auth/token?gitHubId=\(gitHubId)") else { return nil }
-        guard let (data, resp) = try? await URLSession.shared.data(from: url),
+    static func fetchPAT(backendUrl: String, token: String) async -> String? {
+        guard let url = URL(string: "\(backendUrl)/api/auth/token") else { return nil }
+        var req = URLRequest(url: url)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
               let http = resp as? HTTPURLResponse, http.statusCode == 200,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: String],
               let token = json["token"], !token.isEmpty else {
@@ -519,8 +522,6 @@ actor GitService: GitServiceProtocol {
         }
         return token
     }
-
-    static func storedPAT() -> String? { nil }
 
     func createBranch(repoPath: String, from sourceBranch: String, newName: String) async throws {
         try await runGit(repoPath: repoPath, args: ["checkout", "-b", newName, sourceBranch])

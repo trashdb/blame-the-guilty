@@ -123,31 +123,35 @@ enum ApiUpdateBranchResult {
 protocol ApiClientProtocol: AnyObject {
     var baseUrl: String { get }
 
-    func fetchMe(gitHubId: Int64) async -> ApiMe?
-    func fetchWorkflowRuns(gitHubId: Int64, limit: Int) async -> [ApiWorkflowRun]?
-    func fetchActivePRs(gitHubId: Int64) async -> [ApiPullRequest]?
-    func syncPRsFromGitHub(gitHubId: Int64) async -> Int
-    func syncActiveWorkflows(gitHubId: Int64) async -> Int
-    func subscribeToPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool
-    func unsubscribeFromPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool
+    /// Session JWT used as `Authorization: Bearer` on every request.
+    var authToken: String? { get set }
 
-    func fetchPRDetails(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<ApiPRDetails>
-    func mergePR(prNumber: Int64, repo: String, gitHubId: Int64, method: String) async -> ApiMergeResponse?
-    func setDraft(prNumber: Int64, repo: String, gitHubId: Int64, draft: Bool) async -> String?
-    func updateBranch(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiUpdateBranchResult
-    func fetchCommits(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<[ApiCommitInfo]>
-    func fetchFiles(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<[ApiFileInfo]>
-    func fetchChecks(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<[ApiCheckInfo]>
+    func fetchMe() async -> ApiMe?
+    func fetchWorkflowRuns(limit: Int) async -> [ApiWorkflowRun]?
+    func fetchActivePRs() async -> [ApiPullRequest]?
+    func syncPRsFromGitHub() async -> Int
+    func syncActiveWorkflows() async -> Int
+    func subscribeToPR(prNumber: Int64, repo: String) async -> Bool
+    func unsubscribeFromPR(prNumber: Int64, repo: String) async -> Bool
+
+    func fetchPRDetails(prNumber: Int64, repo: String) async -> ApiFetch<ApiPRDetails>
+    func mergePR(prNumber: Int64, repo: String, method: String) async -> ApiMergeResponse?
+    func setDraft(prNumber: Int64, repo: String, draft: Bool) async -> String?
+    func updateBranch(prNumber: Int64, repo: String) async -> ApiUpdateBranchResult
+    func fetchCommits(prNumber: Int64, repo: String) async -> ApiFetch<[ApiCommitInfo]>
+    func fetchFiles(prNumber: Int64, repo: String) async -> ApiFetch<[ApiFileInfo]>
+    func fetchChecks(prNumber: Int64, repo: String) async -> ApiFetch<[ApiCheckInfo]>
     func fetchSubscribers(prNumber: Int64, repo: String) async -> ApiFetch<[ApiSubscriberInfo]>
     func fetchAvailableUsers() async -> ApiFetch<[ApiAvailableUser]>
-    func addSubscriber(prNumber: Int64, repo: String, gitHubId: Int64, subscriberId: Int64) async -> String?
-    func removeSubscriber(prNumber: Int64, repo: String, gitHubId: Int64, subscriberId: Int64) async -> String?
+    func addSubscriber(prNumber: Int64, repo: String, subscriberId: Int64) async -> String?
+    func removeSubscriber(prNumber: Int64, repo: String, subscriberId: Int64) async -> String?
 }
 
 // MARK: - Live Implementation
 
 final class LiveApiClient: ApiClientProtocol {
     let baseUrl: String
+    var authToken: String?
     private let session: URLSession
 
     init(baseUrl: String, session: URLSession = .shared) {
@@ -155,27 +159,35 @@ final class LiveApiClient: ApiClientProtocol {
         self.session = session
     }
 
-    func fetchMe(gitHubId: Int64) async -> ApiMe? {
-        guard let url = URL(string: "\(baseUrl)/api/auth/me?gitHubId=\(gitHubId)") else { return nil }
-        guard let (data, _) = try? await session.data(from: url) else { return nil }
+    private func makeRequest(_ url: URL) -> URLRequest {
+        var request = URLRequest(url: url)
+        if let authToken {
+            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        }
+        return request
+    }
+
+    func fetchMe() async -> ApiMe? {
+        guard let url = URL(string: "\(baseUrl)/api/auth/me") else { return nil }
+        guard let (data, _) = try? await session.data(for: makeRequest(url)) else { return nil }
         return try? JSONDecoder().decode(ApiMe.self, from: data)
     }
 
-    func fetchWorkflowRuns(gitHubId: Int64, limit: Int) async -> [ApiWorkflowRun]? {
-        guard let url = URL(string: "\(baseUrl)/api/workflows/runs?gitHubId=\(gitHubId)&limit=\(limit)") else { return nil }
-        guard let (data, _) = try? await session.data(from: url) else { return nil }
+    func fetchWorkflowRuns(limit: Int) async -> [ApiWorkflowRun]? {
+        guard let url = URL(string: "\(baseUrl)/api/workflows/runs?limit=\(limit)") else { return nil }
+        guard let (data, _) = try? await session.data(for: makeRequest(url)) else { return nil }
         return try? ApiJSON.decoder.decode([ApiWorkflowRun].self, from: data)
     }
 
-    func fetchActivePRs(gitHubId: Int64) async -> [ApiPullRequest]? {
-        guard let url = URL(string: "\(baseUrl)/api/pullrequests/active?gitHubId=\(gitHubId)") else { return nil }
-        guard let (data, _) = try? await session.data(from: url) else { return nil }
+    func fetchActivePRs() async -> [ApiPullRequest]? {
+        guard let url = URL(string: "\(baseUrl)/api/pullrequests/active") else { return nil }
+        guard let (data, _) = try? await session.data(for: makeRequest(url)) else { return nil }
         return try? JSONDecoder().decode([ApiPullRequest].self, from: data)
     }
 
-    func syncPRsFromGitHub(gitHubId: Int64) async -> Int {
-        guard let url = URL(string: "\(baseUrl)/api/pullrequests/sync?gitHubId=\(gitHubId)") else { return 0 }
-        var request = URLRequest(url: url)
+    func syncPRsFromGitHub() async -> Int {
+        guard let url = URL(string: "\(baseUrl)/api/pullrequests/sync") else { return 0 }
+        var request = makeRequest(url)
         request.httpMethod = "POST"
         do {
             let (data, _) = try await session.data(for: request)
@@ -187,9 +199,9 @@ final class LiveApiClient: ApiClientProtocol {
         return 0
     }
 
-    func syncActiveWorkflows(gitHubId: Int64) async -> Int {
-        guard let url = URL(string: "\(baseUrl)/api/workflows/sync-active?gitHubId=\(gitHubId)") else { return 0 }
-        var request = URLRequest(url: url)
+    func syncActiveWorkflows() async -> Int {
+        guard let url = URL(string: "\(baseUrl)/api/workflows/sync-active") else { return 0 }
+        var request = makeRequest(url)
         request.httpMethod = "POST"
         do {
             let (data, _) = try await session.data(for: request)
@@ -201,20 +213,20 @@ final class LiveApiClient: ApiClientProtocol {
         return 0
     }
 
-    func subscribeToPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool {
+    func subscribeToPR(prNumber: Int64, repo: String) async -> Bool {
         let repoEncoded = repo.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? repo
-        guard let url = URL(string: "\(baseUrl)/api/pullrequests/\(prNumber)/subscribe?repo=\(repoEncoded)&gitHubId=\(gitHubId)") else { return false }
-        var req = URLRequest(url: url)
+        guard let url = URL(string: "\(baseUrl)/api/pullrequests/\(prNumber)/subscribe?repo=\(repoEncoded)") else { return false }
+        var req = makeRequest(url)
         req.httpMethod = "POST"
         guard let (_, resp) = try? await session.data(for: req),
               let http = resp as? HTTPURLResponse, http.statusCode == 200 else { return false }
         return true
     }
 
-    func unsubscribeFromPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool {
+    func unsubscribeFromPR(prNumber: Int64, repo: String) async -> Bool {
         let repoEncoded = repo.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? repo
-        guard let url = URL(string: "\(baseUrl)/api/pullrequests/\(prNumber)/unsubscribe?repo=\(repoEncoded)&gitHubId=\(gitHubId)") else { return false }
-        var req = URLRequest(url: url)
+        guard let url = URL(string: "\(baseUrl)/api/pullrequests/\(prNumber)/unsubscribe?repo=\(repoEncoded)") else { return false }
+        var req = makeRequest(url)
         req.httpMethod = "POST"
         guard let (_, resp) = try? await session.data(for: req),
               let http = resp as? HTTPURLResponse, http.statusCode == 200 else { return false }
@@ -229,11 +241,11 @@ final class LiveApiClient: ApiClientProtocol {
         return components?.url
     }
 
-    func fetchPRDetails(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<ApiPRDetails> {
-        guard let url = url("/api/pullrequests/\(prNumber)/detail", query: ["repo": repo, "gitHubId": "\(gitHubId)"]) else {
+    func fetchPRDetails(prNumber: Int64, repo: String) async -> ApiFetch<ApiPRDetails> {
+        guard let url = url("/api/pullrequests/\(prNumber)/detail", query: ["repo": repo]) else {
             return .failure("Invalid URL")
         }
-        var req = URLRequest(url: url)
+        var req = makeRequest(url)
         req.timeoutInterval = 15
         do {
             let (data, _) = try await session.data(for: req)
@@ -247,19 +259,19 @@ final class LiveApiClient: ApiClientProtocol {
         }
     }
 
-    func mergePR(prNumber: Int64, repo: String, gitHubId: Int64, method: String) async -> ApiMergeResponse? {
-        guard let url = url("/api/pullrequests/\(prNumber)/merge", query: ["repo": repo, "gitHubId": "\(gitHubId)", "method": method]) else { return nil }
-        var request = URLRequest(url: url)
+    func mergePR(prNumber: Int64, repo: String, method: String) async -> ApiMergeResponse? {
+        guard let url = url("/api/pullrequests/\(prNumber)/merge", query: ["repo": repo, "method": method]) else { return nil }
+        var request = makeRequest(url)
         request.httpMethod = "POST"
         guard let (data, _) = try? await session.data(for: request) else { return nil }
         return try? JSONDecoder().decode(ApiMergeResponse.self, from: data)
     }
 
-    func setDraft(prNumber: Int64, repo: String, gitHubId: Int64, draft: Bool) async -> String? {
-        guard let url = url("/api/pullrequests/\(prNumber)/draft", query: ["repo": repo, "gitHubId": "\(gitHubId)", "draft": draft ? "true" : "false"]) else {
+    func setDraft(prNumber: Int64, repo: String, draft: Bool) async -> String? {
+        guard let url = url("/api/pullrequests/\(prNumber)/draft", query: ["repo": repo, "draft": draft ? "true" : "false"]) else {
             return "Invalid URL"
         }
-        var request = URLRequest(url: url)
+        var request = makeRequest(url)
         request.httpMethod = "POST"
         do {
             let (_, resp) = try await session.data(for: request)
@@ -270,11 +282,11 @@ final class LiveApiClient: ApiClientProtocol {
         }
     }
 
-    func updateBranch(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiUpdateBranchResult {
-        guard let url = url("/api/pullrequests/\(prNumber)/update-branch", query: ["repo": repo, "gitHubId": "\(gitHubId)"]) else {
+    func updateBranch(prNumber: Int64, repo: String) async -> ApiUpdateBranchResult {
+        guard let url = url("/api/pullrequests/\(prNumber)/update-branch", query: ["repo": repo]) else {
             return .failed("Invalid URL")
         }
-        var request = URLRequest(url: url)
+        var request = makeRequest(url)
         request.httpMethod = "POST"
         do {
             let (data, resp) = try await session.data(for: request)
@@ -296,23 +308,23 @@ final class LiveApiClient: ApiClientProtocol {
         }
     }
 
-    func fetchCommits(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<[ApiCommitInfo]> {
-        await fetchList("/api/pullrequests/\(prNumber)/commits", prNumber: prNumber, repo: repo, gitHubId: gitHubId)
+    func fetchCommits(prNumber: Int64, repo: String) async -> ApiFetch<[ApiCommitInfo]> {
+        await fetchList("/api/pullrequests/\(prNumber)/commits", prNumber: prNumber, repo: repo)
     }
 
-    func fetchFiles(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<[ApiFileInfo]> {
-        await fetchList("/api/pullrequests/\(prNumber)/files", prNumber: prNumber, repo: repo, gitHubId: gitHubId)
+    func fetchFiles(prNumber: Int64, repo: String) async -> ApiFetch<[ApiFileInfo]> {
+        await fetchList("/api/pullrequests/\(prNumber)/files", prNumber: prNumber, repo: repo)
     }
 
-    func fetchChecks(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<[ApiCheckInfo]> {
-        await fetchList("/api/pullrequests/\(prNumber)/checks", prNumber: prNumber, repo: repo, gitHubId: gitHubId)
+    func fetchChecks(prNumber: Int64, repo: String) async -> ApiFetch<[ApiCheckInfo]> {
+        await fetchList("/api/pullrequests/\(prNumber)/checks", prNumber: prNumber, repo: repo)
     }
 
-    private func fetchList<T: Decodable>(_ path: String, prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<[T]> {
-        guard let url = url(path, query: ["repo": repo, "gitHubId": "\(gitHubId)"]) else {
+    private func fetchList<T: Decodable>(_ path: String, prNumber: Int64, repo: String) async -> ApiFetch<[T]> {
+        guard let url = url(path, query: ["repo": repo]) else {
             return .failure("Invalid URL")
         }
-        var req = URLRequest(url: url)
+        var req = makeRequest(url)
         req.timeoutInterval = 15
         do {
             let (data, _) = try await session.data(for: req)
@@ -336,7 +348,7 @@ final class LiveApiClient: ApiClientProtocol {
             return .failure("Invalid URL")
         }
         do {
-            let (data, _) = try await session.data(from: url)
+            let (data, _) = try await session.data(for: makeRequest(url))
             struct Wrapper: Decodable { let subscribers: [ApiSubscriberInfo] }
             guard let decoded = try? JSONDecoder().decode(Wrapper.self, from: data) else {
                 return .failure("Parse error: \(errorLocalized(from: data))")
@@ -350,7 +362,7 @@ final class LiveApiClient: ApiClientProtocol {
     func fetchAvailableUsers() async -> ApiFetch<[ApiAvailableUser]> {
         guard let url = url("/api/users") else { return .failure("Invalid URL") }
         do {
-            let (data, _) = try await session.data(from: url)
+            let (data, _) = try await session.data(for: makeRequest(url))
             guard let decoded = try? JSONDecoder().decode([ApiAvailableUser].self, from: data) else {
                 return .failure("Parse error: \(errorLocalized(from: data))")
             }
@@ -360,19 +372,19 @@ final class LiveApiClient: ApiClientProtocol {
         }
     }
 
-    func addSubscriber(prNumber: Int64, repo: String, gitHubId: Int64, subscriberId: Int64) async -> String? {
-        await mutateSubscriber("/api/pullrequests/\(prNumber)/add-subscriber", prNumber: prNumber, repo: repo, gitHubId: gitHubId, subscriberId: subscriberId)
+    func addSubscriber(prNumber: Int64, repo: String, subscriberId: Int64) async -> String? {
+        await mutateSubscriber("/api/pullrequests/\(prNumber)/add-subscriber", prNumber: prNumber, repo: repo, subscriberId: subscriberId)
     }
 
-    func removeSubscriber(prNumber: Int64, repo: String, gitHubId: Int64, subscriberId: Int64) async -> String? {
-        await mutateSubscriber("/api/pullrequests/\(prNumber)/remove-subscriber", prNumber: prNumber, repo: repo, gitHubId: gitHubId, subscriberId: subscriberId)
+    func removeSubscriber(prNumber: Int64, repo: String, subscriberId: Int64) async -> String? {
+        await mutateSubscriber("/api/pullrequests/\(prNumber)/remove-subscriber", prNumber: prNumber, repo: repo, subscriberId: subscriberId)
     }
 
-    private func mutateSubscriber(_ path: String, prNumber: Int64, repo: String, gitHubId: Int64, subscriberId: Int64) async -> String? {
-        guard let url = url(path, query: ["repo": repo, "gitHubId": "\(gitHubId)", "subscriberId": "\(subscriberId)"]) else {
+    private func mutateSubscriber(_ path: String, prNumber: Int64, repo: String, subscriberId: Int64) async -> String? {
+        guard let url = url(path, query: ["repo": repo, "subscriberId": "\(subscriberId)"]) else {
             return "Invalid URL"
         }
-        var req = URLRequest(url: url)
+        var req = makeRequest(url)
         req.httpMethod = "POST"
         do {
             let (data, resp) = try await session.data(for: req)

@@ -3,7 +3,7 @@ import Foundation
 import Network
 
 class OAuthService: OAuthServiceProtocol {
-    func startLogin(backendUrl: String) async throws -> (id: Int64, username: String, avatarUrl: String?) {
+    func startLogin(backendUrl: String) async throws -> (id: Int64, username: String, avatarUrl: String?, token: String) {
         try await withCheckedThrowingContinuation { continuation in
             let port = UInt16.random(in: 49152...65535)
             let redirectUri = "http://localhost:\(port)/callback"
@@ -45,7 +45,8 @@ class OAuthService: OAuthServiceProtocol {
                               let components = URLComponents(string: "://localhost?" + String(query)),
                               let idStr = components.queryItems?.first(where: { $0.name == "id" })?.value,
                               let id = Int64(idStr),
-                              let username = components.queryItems?.first(where: { $0.name == "username" })?.value else {
+                              let username = components.queryItems?.first(where: { $0.name == "username" })?.value,
+                              let token = components.queryItems?.first(where: { $0.name == "token" })?.value else {
                             connection.cancel()
                             listener.cancel()
                             continuation.resume(throwing: OAuthError.failed)
@@ -132,7 +133,7 @@ class OAuthService: OAuthServiceProtocol {
                         connection.send(content: response.data(using: .utf8), completion: .contentProcessed { _ in
                             connection.cancel()
                             listener.cancel()
-                            continuation.resume(returning: (id, username, avatarUrl))
+                            continuation.resume(returning: (id, username, avatarUrl, token))
                         })
                     }
                 }

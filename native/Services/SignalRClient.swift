@@ -63,7 +63,7 @@ struct MainBranchUpdatedEvent: Decodable {
 // MARK: - Protocol
 
 protocol SignalRClientProtocol: AnyObject {
-    func connectAndListen(gitHubId: Int64, username: String, onEvent: @escaping (HubEvent) -> Void) async throws
+    func connectAndListen(token: String, username: String, onEvent: @escaping (HubEvent) -> Void) async throws
 }
 
 // MARK: - Live Implementation
@@ -78,22 +78,26 @@ final class LiveSignalRClient: SignalRClientProtocol {
         self.baseUrl = baseUrl
     }
 
-    private var hubWebSocketUrl: URL {
+    private func hubWebSocketUrl(token: String) -> URL {
         let wsUrl = baseUrl
             .replacingOccurrences(of: "https://", with: "wss://")
             .replacingOccurrences(of: "http://", with: "ws://")
-        return URL(string: "\(wsUrl)/hub/punishment")!
+        // SignalR WebSockets cannot set Authorization headers; the token travels
+        // as the access_token query param, which the JwtBearer handler accepts.
+        var components = URLComponents(string: "\(wsUrl)/hub/punishment")!
+        components.queryItems = [URLQueryItem(name: "access_token", value: token)]
+        return components.url!
     }
 
-    func connectAndListen(gitHubId: Int64, username: String, onEvent: @escaping (HubEvent) -> Void) async throws {
-        let ws = URLSession.shared.webSocketTask(with: hubWebSocketUrl)
+    func connectAndListen(token: String, username: String, onEvent: @escaping (HubEvent) -> Void) async throws {
+        let ws = URLSession.shared.webSocketTask(with: hubWebSocketUrl(token: token))
         ws.resume()
         defer { ws.cancel(with: .normalClosure, reason: nil) }
 
         try await ws.send(.string("{\"protocol\":\"json\",\"version\":1}\u{1e}"))
         guard case .string = try await ws.receive() else { throw SignalRClientError.handshakeFailed }
 
-        let register = "{\"type\":1,\"target\":\"RegisterConnection\",\"arguments\":[\(gitHubId),\"\(username)\"],\"invocationId\":\"1\"}\u{1e}"
+        let register = "{\"type\":1,\"target\":\"RegisterConnection\",\"arguments\":[\"\(username)\"],\"invocationId\":\"1\"}\u{1e}"
         try await ws.send(.string(register))
 
         while !Task.isCancelled {

@@ -278,9 +278,11 @@ struct WorkflowRunRow: View {
     }
 
     private func loadUsers() {
-        guard let url = URL(string: "\(backendUrl)/api/users") else { return }
+        guard let token = signalR.authToken, let url = URL(string: "\(backendUrl)/api/users") else { return }
         loadingUsers = true
-        URLSession.shared.dataTask(with: url) { data, _, _ in
+        var req = URLRequest(url: url)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        URLSession.shared.dataTask(with: req) { data, _, _ in
             loadingUsers = false
             guard let data = data,
                   let decoded = try? JSONDecoder().decode([GitHubUserInfo].self, from: data) else { return }
@@ -291,11 +293,13 @@ struct WorkflowRunRow: View {
     }
 
     private func rerunWorkflow() {
-        guard let url = URL(string: "\(backendUrl)/api/workflows/runs/\(run.runId)/rerun?gitHubId=\(gitHubId)") else { return }
+        guard let token = signalR.authToken,
+              let url = URL(string: "\(backendUrl)/api/workflows/runs/\(run.runId)/rerun") else { return }
         isRerunning = true
         rerunError = nil
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
         URLSession.shared.dataTask(with: request) { data, response, error in
             DispatchQueue.main.async {
@@ -306,7 +310,7 @@ struct WorkflowRunRow: View {
                 }
                 if let httpResponse = response as? HTTPURLResponse {
                     if httpResponse.statusCode == 200 {
-                        Task { await signalR.syncFromApi(gitHubId: gitHubId) }
+                        Task { await signalR.syncFromApi() }
                     } else {
                         let body = data.flatMap { String(data: $0, encoding: .utf8) } ?? "Unknown error"
                         self.rerunError = "HTTP \(httpResponse.statusCode): \(body)"
@@ -325,10 +329,11 @@ struct WorkflowRunRow: View {
 
     private func saveTargets() {
         let ids = Array(selectedIds)
-        guard let dbId = run.dbId else { return }
+        guard let dbId = run.dbId, let token = signalR.authToken else { return }
         guard let url = URL(string: "\(backendUrl)/api/workflows/runs/\(dbId)/target") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let body: [String: Any] = ["targetGitHubIds": ids]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)

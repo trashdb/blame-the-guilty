@@ -4,6 +4,7 @@ struct BranchDetailView: View {
     let info: BranchInfo
     let gitHubId: Int64
     let backendUrl: String
+    let token: String?
     var onCheckout: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dependencies) private var deps
@@ -25,7 +26,7 @@ struct BranchDetailView: View {
         if showCreatePR {
             CreatePRPreviewView(
                 repoPath: info.repoPath, branchName: info.name,
-                backendUrl: backendUrl, gitHubId: gitHubId,
+                backendUrl: backendUrl, gitHubId: gitHubId, token: token,
                 onComplete: { url in
                     dismiss()
                     NSWorkspace.shared.open(url)
@@ -202,7 +203,7 @@ struct BranchDetailView: View {
         checkingOut = true
         do {
             try await git.checkoutBranch(repoPath: info.repoPath, name: info.name)
-            let token = await GitService.fetchPAT(backendUrl: backendUrl, gitHubId: gitHubId)
+            let token = await GitService.fetchPAT(backendUrl: backendUrl, token: token ?? "")
             _ = await git.pullCurrentBranch(repoPath: info.repoPath, token: token)
             openRider()
             checkoutSuccess = true

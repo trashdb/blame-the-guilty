@@ -10,10 +10,11 @@ enum KeychainService {
         let gitHubId: Int64
         let username: String
         let avatarUrl: String?
+        let token: String?
     }
 
-    static func save(gitHubId: Int64, username: String, avatarUrl: String? = nil) {
-        guard let data = try? JSONEncoder().encode(Session(gitHubId: gitHubId, username: username, avatarUrl: avatarUrl)) else { return }
+    static func save(gitHubId: Int64, username: String, avatarUrl: String? = nil, token: String? = nil) {
+        guard let data = try? JSONEncoder().encode(Session(gitHubId: gitHubId, username: username, avatarUrl: avatarUrl, token: token)) else { return }
         SecItemDelete(baseQuery(service: service) as CFDictionary)
         var query = baseQuery(service: service)
         query[kSecValueData] = data
@@ -23,7 +24,7 @@ enum KeychainService {
     static func load() -> Session? {
         if let session = loadFrom(service: service) { return session }
         if let session = loadFrom(service: oldService) {
-            save(gitHubId: session.gitHubId, username: session.username, avatarUrl: session.avatarUrl)
+            save(gitHubId: session.gitHubId, username: session.username, avatarUrl: session.avatarUrl, token: session.token)
             SecItemDelete(baseQuery(service: oldService) as CFDictionary)
             return session
         }
@@ -56,8 +57,8 @@ enum KeychainService {
 // MARK: - Protocol Wrapper for DI
 
 final class LiveKeychainService: KeychainServiceProtocol {
-    func save(gitHubId: Int64, username: String, avatarUrl: String?) {
-        KeychainService.save(gitHubId: gitHubId, username: username, avatarUrl: avatarUrl)
+    func save(gitHubId: Int64, username: String, avatarUrl: String?, token: String? = nil) {
+        KeychainService.save(gitHubId: gitHubId, username: username, avatarUrl: avatarUrl, token: token)
     }
 
     func load() -> KeychainService.Session? {

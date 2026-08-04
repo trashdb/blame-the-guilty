@@ -50,7 +50,7 @@ struct ContentView: View {
 
                     if signalR.isLoggedIn {
                         Divider()
-                        LocalBranchesView(gitHubId: signalR.userGitHubId, backendUrl: signalR.baseUrl)
+                        LocalBranchesView(gitHubId: signalR.userGitHubId, backendUrl: signalR.baseUrl, token: signalR.authToken)
                     }
                 }
                 .foregroundStyle(DS.Color.textSecondary)
@@ -65,8 +65,8 @@ struct ContentView: View {
                 if signalR.isLoggedIn {
                     toolbarButton(icon: "arrow.triangle.2.circlepath", help: "Full resync: workflows + PRs") {
                         Task {
-                            _ = await signalR.syncPRsFromGitHub(gitHubId: signalR.userGitHubId)
-                            let n = await signalR.syncActiveWorkflows(gitHubId: signalR.userGitHubId)
+                            _ = await signalR.syncPRsFromGitHub()
+                            let n = await signalR.syncActiveWorkflows()
                             if n > 0 {
                                 showNotification(
                                     title: "Workflows Synced",
@@ -94,7 +94,7 @@ struct ContentView: View {
                     }
 
                     toolbarButton(icon: "antenna.radiowaves.left.and.right", help: "Webhook Event Log (debug)") {
-                        WebhookLogPanelManager.shared.show(gitHubId: signalR.userGitHubId)
+                        WebhookLogPanelManager.shared.show(token: signalR.authToken)
                     }
 
                     toolbarButton(icon: "tray.full", help: "See All PRs") {
@@ -106,7 +106,7 @@ struct ContentView: View {
 
                     toolbarButton(icon: "gearshape.fill", help: "Settings") {
                         let m = SettingsPanelManager.shared
-                        m.gitHubId = signalR.userGitHubId
+                        m.token = signalR.authToken
                         m.backendUrl = signalR.baseUrl
                         m.show()
                     }
@@ -171,7 +171,7 @@ struct ContentView: View {
         .background(
             Button("") {
                 let m = SettingsPanelManager.shared
-                m.gitHubId = signalR.userGitHubId
+                m.token = signalR.authToken
                 m.backendUrl = signalR.baseUrl
                 m.show()
             }
@@ -214,6 +214,7 @@ struct ContentView: View {
                     info: info,
                     gitHubId: self.signalR.userGitHubId,
                     backendUrl: self.signalR.baseUrl,
+                    token: self.signalR.authToken,
                     onCheckout: nil
                 )
             })

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct WebhookLogView: View {
-    let gitHubId: Int64
+    let token: String?
 
     @State private var logs: [WebhookLogEntry] = []
     @State private var isLoading = true
@@ -57,10 +57,12 @@ struct WebhookLogView: View {
     }
 
     private func loadLogs() {
-        guard let url = URL(string: "\(backendUrl)/api/webhook/logs?limit=50") else { return }
+        guard let token, let url = URL(string: "\(backendUrl)/api/webhook/logs?limit=50") else { return }
         isLoading = true
         error = nil
-        URLSession.shared.dataTask(with: url) { data, _, err in
+        var req = URLRequest(url: url)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        URLSession.shared.dataTask(with: req) { data, _, err in
             DispatchQueue.main.async {
                 isLoading = false
                 if let err {

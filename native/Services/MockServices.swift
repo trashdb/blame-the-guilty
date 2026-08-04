@@ -35,7 +35,7 @@ actor MockGitService: GitServiceProtocol {
 
     func baseRefName(repoPath: String) async -> String? { "main" }
 
-    func createPR(repoPath: String, branchName: String, backendUrl: String, gitHubId: Int64, overrideTitle: String?, overrideBody: String?, subscribers: String?) async throws -> CreatePRResult {
+    func createPR(repoPath: String, branchName: String, backendUrl: String, token: String, overrideTitle: String?, overrideBody: String?, subscribers: String?) async throws -> CreatePRResult {
         if shouldThrow { throw GitError.commandFailed("mock error") }
         return CreatePRResult(url: URL(string: "https://github.com/owner/repo/pull/1")!, isExisting: false)
     }
@@ -53,12 +53,11 @@ actor MockGitService: GitServiceProtocol {
         return branches
     }
 
-    func listMyRemoteBranchesViaAPI(repoPath: String, backendUrl: String, gitHubId: Int64) async -> [(name: String, isMerged: Bool)] { [] }
+    func listMyRemoteBranchesViaAPI(repoPath: String, backendUrl: String, token: String) async -> [(name: String, isMerged: Bool)] { [] }
 
     static func discoverRepos(workspacePath: String) -> [String] { [] }
     static func repoName(from path: String) -> String { URL(fileURLWithPath: path).lastPathComponent }
-    static func fetchPAT(backendUrl: String, gitHubId: Int64) async -> String? { nil }
-    static func storedPAT() -> String? { nil }
+    static func fetchPAT(backendUrl: String, token: String) async -> String? { nil }
 
     func findRepoPath(ownerRepo: String, workspacePath: String) async -> String? { nil }
     func fetchMainAndGetDiff(repoPath: String, lastKnownSha: String?) async -> (currentSha: String, changedFiles: [String])? { nil }
@@ -80,42 +79,44 @@ class MockSignalRService: SignalRServiceProtocol {
     var mainBranchUpdate: (repo: String, prNumber: Int, mergedBy: String, headSha: String?)? = nil
     var onMainBranchUpdated: ((String, Int, String, String?) -> Void)? = nil
     let baseUrl: String = "https://mock.example.com"
+    var authToken: String? = nil
 
     func restoreSession() {}
     func login(keepSignedIn: Bool) async throws {}
     func logout() {}
-    func startPolling(gitHubId: Int64) {}
+    func startPolling() {}
     func stopPolling() {}
-    func subscribeToPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool { false }
-    func unsubscribeFromPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool { false }
+    func subscribeToPR(prNumber: Int64, repo: String) async -> Bool { false }
+    func unsubscribeFromPR(prNumber: Int64, repo: String) async -> Bool { false }
 }
 
 // MARK: - ApiClient Mock
 
 class MockApiClient: ApiClientProtocol {
     let baseUrl: String = "https://mock.example.com"
+    var authToken: String? = nil
 
-    func fetchMe(gitHubId: Int64) async -> ApiMe? { nil }
-    func fetchWorkflowRuns(gitHubId: Int64, limit: Int) async -> [ApiWorkflowRun]? { [] }
-    func fetchActivePRs(gitHubId: Int64) async -> [ApiPullRequest]? { [] }
-    func syncPRsFromGitHub(gitHubId: Int64) async -> Int { 0 }
-    func syncActiveWorkflows(gitHubId: Int64) async -> Int { 0 }
-    func subscribeToPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool { false }
-    func unsubscribeFromPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool { false }
+    func fetchMe() async -> ApiMe? { nil }
+    func fetchWorkflowRuns(limit: Int) async -> [ApiWorkflowRun]? { [] }
+    func fetchActivePRs() async -> [ApiPullRequest]? { [] }
+    func syncPRsFromGitHub() async -> Int { 0 }
+    func syncActiveWorkflows() async -> Int { 0 }
+    func subscribeToPR(prNumber: Int64, repo: String) async -> Bool { false }
+    func unsubscribeFromPR(prNumber: Int64, repo: String) async -> Bool { false }
 
-    func fetchPRDetails(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<ApiPRDetails> {
+    func fetchPRDetails(prNumber: Int64, repo: String) async -> ApiFetch<ApiPRDetails> {
         .failure("mock")
     }
-    func mergePR(prNumber: Int64, repo: String, gitHubId: Int64, method: String) async -> ApiMergeResponse? { nil }
-    func setDraft(prNumber: Int64, repo: String, gitHubId: Int64, draft: Bool) async -> String? { nil }
-    func updateBranch(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiUpdateBranchResult { .sent }
-    func fetchCommits(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<[ApiCommitInfo]> { .success([]) }
-    func fetchFiles(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<[ApiFileInfo]> { .success([]) }
-    func fetchChecks(prNumber: Int64, repo: String, gitHubId: Int64) async -> ApiFetch<[ApiCheckInfo]> { .success([]) }
+    func mergePR(prNumber: Int64, repo: String, method: String) async -> ApiMergeResponse? { nil }
+    func setDraft(prNumber: Int64, repo: String, draft: Bool) async -> String? { nil }
+    func updateBranch(prNumber: Int64, repo: String) async -> ApiUpdateBranchResult { .sent }
+    func fetchCommits(prNumber: Int64, repo: String) async -> ApiFetch<[ApiCommitInfo]> { .success([]) }
+    func fetchFiles(prNumber: Int64, repo: String) async -> ApiFetch<[ApiFileInfo]> { .success([]) }
+    func fetchChecks(prNumber: Int64, repo: String) async -> ApiFetch<[ApiCheckInfo]> { .success([]) }
     func fetchSubscribers(prNumber: Int64, repo: String) async -> ApiFetch<[ApiSubscriberInfo]> { .success([]) }
     func fetchAvailableUsers() async -> ApiFetch<[ApiAvailableUser]> { .success([]) }
-    func addSubscriber(prNumber: Int64, repo: String, gitHubId: Int64, subscriberId: Int64) async -> String? { nil }
-    func removeSubscriber(prNumber: Int64, repo: String, gitHubId: Int64, subscriberId: Int64) async -> String? { nil }
+    func addSubscriber(prNumber: Int64, repo: String, subscriberId: Int64) async -> String? { nil }
+    func removeSubscriber(prNumber: Int64, repo: String, subscriberId: Int64) async -> String? { nil }
 }
 
 // MARK: - Keychain Mock
@@ -124,8 +125,8 @@ class MockKeychainService: KeychainServiceProtocol {
     var savedSession: KeychainService.Session?
     var shouldReturnSession = true
 
-    func save(gitHubId: Int64, username: String, avatarUrl: String?) {
-        savedSession = KeychainService.Session(gitHubId: gitHubId, username: username, avatarUrl: avatarUrl)
+    func save(gitHubId: Int64, username: String, avatarUrl: String?, token: String?) {
+        savedSession = KeychainService.Session(gitHubId: gitHubId, username: username, avatarUrl: avatarUrl, token: token)
     }
 
     func load() -> KeychainService.Session? {
@@ -153,9 +154,9 @@ class MockPersistenceService: PersistenceServiceProtocol {
 
 class MockOAuthService: OAuthServiceProtocol {
     var shouldThrow = false
-    var loginResult = (id: Int64(12345), username: "testuser", avatarUrl: "https://example.com/avatar.png")
+    var loginResult = (id: Int64(12345), username: "testuser", avatarUrl: "https://example.com/avatar.png", token: "mock-token")
 
-    func startLogin(backendUrl: String) async throws -> (id: Int64, username: String, avatarUrl: String?) {
+    func startLogin(backendUrl: String) async throws -> (id: Int64, username: String, avatarUrl: String?, token: String) {
         if shouldThrow { throw GitError.commandFailed("mock oauth error") }
         return loginResult
     }

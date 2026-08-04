@@ -120,7 +120,7 @@ struct QuickSearchView: View {
                         subtitle: "\(b.repoName) → open PR preview", icon: "plus.circle", category: .branch
                     ) {
                         BranchDetailPanelManager.shared.show(
-                            deps: deps, info: info, gitHubId: self.gitHubId, backendUrl: self.backendUrl, onCheckout: nil
+                            deps: deps, info: info, gitHubId: self.gitHubId, backendUrl: self.backendUrl, token: self.signalR.authToken, onCheckout: nil
                         )
                     })
                 }

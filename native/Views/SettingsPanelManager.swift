@@ -3,12 +3,12 @@ import SwiftUI
 final class SettingsPanelManager {
     static let shared = SettingsPanelManager()
     private var panel: NSPanel?
-    var gitHubId: Int64 = 0
+    var token: String?
     var backendUrl: String = ""
 
     func show() {
         if panel == nil {
-            let hostingController = NSHostingController(rootView: SettingsView(gitHubId: gitHubId, backendUrl: backendUrl))
+            let hostingController = NSHostingController(rootView: SettingsView(token: token, backendUrl: backendUrl))
             let p = PanelFactory.makePanel(size: CGSize(width: 540, height: 400), title: "Settings")
             p.contentViewController = hostingController
             panel = p

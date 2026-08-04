@@ -4,9 +4,9 @@ final class WebhookLogPanelManager {
     static let shared = WebhookLogPanelManager()
     private var panel: NSPanel?
 
-    func show(gitHubId: Int64) {
+    func show(token: String?) {
         if panel == nil {
-            let hostingController = NSHostingController(rootView: WebhookLogView(gitHubId: gitHubId))
+            let hostingController = NSHostingController(rootView: WebhookLogView(token: token))
             let p = PanelFactory.makePanel(size: CGSize(width: 560, height: 500), title: "Webhook Log")
             p.contentViewController = hostingController
             panel = p

@@ -22,10 +22,10 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
     var onMainBranchUpdated: ((String, Int, String, String?) -> Void)?
 
     let baseUrl: String
+    var authToken: String?
     private let api: ApiClientProtocol
     private let signalRClient: SignalRClientProtocol
     private var task: Task<Void, Never>?
-    private var gitHubId: Int64 = 0
     private var pollTask: Task<Void, Never>?
     /// Tracks PRs we've already notified as "ready to merge" so we don't re-notify
     /// on every 30s poll. A PR is removed once it's no longer ready, so it can
@@ -66,6 +66,8 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
         userGitHubId = session.gitHubId
         username = session.username
         avatarUrl = session.avatarUrl
+        authToken = session.token
+        api.authToken = session.token
         isLoggedIn = true
         let gid = session.gitHubId
 
@@ -74,18 +76,18 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
 
         // Refresh workflows + avatar on every popover open
         Task {
-            _ = await syncPRsFromGitHub(gitHubId: gid)
-            await syncFromApi(gitHubId: gid)
-            await syncPRsFromApi(gitHubId: gid)
+            _ = await syncPRsFromGitHub()
+            await syncFromApi()
+            await syncPRsFromApi()
 
-            if let fresh = await api.fetchMe(gitHubId: gid), let url = fresh.avatarUrl {
+            if let fresh = await api.fetchMe(), let url = fresh.avatarUrl {
                 await MainActor.run { avatarUrl = url }
-                keychain.save(gitHubId: gid, username: session.username, avatarUrl: url)
+                keychain.save(gitHubId: gid, username: session.username, avatarUrl: url, token: session.token)
             }
         }
 
         guard task == nil else { return }
-        connect(gitHubId: gid, username: session.username)
+        connect()
     }
 
     func login(keepSignedIn: Bool) async throws {
@@ -94,10 +96,12 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
             userGitHubId = result.id
             username = result.username
             avatarUrl = result.avatarUrl
+            authToken = result.token
+            api.authToken = result.token
             isLoggedIn = true
-            connect(gitHubId: result.id, username: result.username)
+            connect()
             if keepSignedIn {
-                keychain.save(gitHubId: result.id, username: result.username, avatarUrl: result.avatarUrl)
+                keychain.save(gitHubId: result.id, username: result.username, avatarUrl: result.avatarUrl, token: result.token)
             }
         }
     }
@@ -111,26 +115,29 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
         stopPolling()
         disconnect()
         keychain.delete()
+        api.authToken = nil
+        authToken = nil
         isLoggedIn = false
         username = ""
         avatarUrl = nil
         userGitHubId = 0
     }
 
-    func connect(gitHubId: Int64, username: String = "") {
-        self.gitHubId = gitHubId
+    func connect() {
         task?.cancel()
         task = Task { [weak self] in
             guard let self else { return }
 
-            _ = await syncPRsFromGitHub(gitHubId: gitHubId)
-            await syncFromApi(gitHubId: gitHubId)
-            await syncPRsFromApi(gitHubId: gitHubId)
-            startPolling(gitHubId: gitHubId)
+            _ = await syncPRsFromGitHub()
+            await syncFromApi()
+            await syncPRsFromApi()
+            startPolling()
 
             while !Task.isCancelled {
                 do {
-                    try await self.signalRClient.connectAndListen(gitHubId: gitHubId, username: username) { [weak self] event in
+                    let token = await MainActor.run { self.authToken }
+                    guard let token else { break }
+                    try await self.signalRClient.connectAndListen(token: token, username: self.username) { [weak self] event in
                         self?.handle(event)
                     }
                 } catch {
@@ -141,8 +148,8 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
         }
     }
 
-    func syncFromApi(gitHubId: Int64) async {
-        guard let runs = await api.fetchWorkflowRuns(gitHubId: gitHubId, limit: 20) else {
+    func syncFromApi() async {
+        guard let runs = await api.fetchWorkflowRuns(limit: 20) else {
             await MainActor.run { loadPersistedHistory() }
             return
         }
@@ -154,8 +161,8 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
         }
     }
 
-    func syncPRsFromApi(gitHubId: Int64) async {
-        guard let prs = await api.fetchActivePRs(gitHubId: gitHubId) else { return }
+    func syncPRsFromApi() async {
+        guard let prs = await api.fetchActivePRs() else { return }
         var seen = Set<String>()
         let unique = prs.filter { seen.insert("\($0.repo)#\($0.prNumber)").inserted }
         await MainActor.run {
@@ -166,27 +173,27 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
         }
     }
 
-    func syncPRsFromGitHub(gitHubId: Int64) async -> Int {
-        await api.syncPRsFromGitHub(gitHubId: gitHubId)
+    func syncPRsFromGitHub() async -> Int {
+        await api.syncPRsFromGitHub()
     }
 
-    func subscribeToPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool {
-        let ok = await api.subscribeToPR(prNumber: prNumber, repo: repo, gitHubId: gitHubId)
-        if ok { await syncFromApi(gitHubId: gitHubId) }
+    func subscribeToPR(prNumber: Int64, repo: String) async -> Bool {
+        let ok = await api.subscribeToPR(prNumber: prNumber, repo: repo)
+        if ok { await syncFromApi() }
         return ok
     }
 
-    func unsubscribeFromPR(prNumber: Int64, repo: String, gitHubId: Int64) async -> Bool {
-        let ok = await api.unsubscribeFromPR(prNumber: prNumber, repo: repo, gitHubId: gitHubId)
-        if ok { await syncFromApi(gitHubId: gitHubId) }
+    func unsubscribeFromPR(prNumber: Int64, repo: String) async -> Bool {
+        let ok = await api.unsubscribeFromPR(prNumber: prNumber, repo: repo)
+        if ok { await syncFromApi() }
         return ok
     }
 
-    func syncActiveWorkflows(gitHubId: Int64) async -> Int {
-        let synced = await api.syncActiveWorkflows(gitHubId: gitHubId)
+    func syncActiveWorkflows() async -> Int {
+        let synced = await api.syncActiveWorkflows()
         if synced > 0 {
-            await syncFromApi(gitHubId: gitHubId)
-            await syncPRsFromApi(gitHubId: gitHubId)
+            await syncFromApi()
+            await syncPRsFromApi()
         }
         return synced
     }
@@ -206,13 +213,13 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
         }
     }
 
-    func startPolling(gitHubId: Int64) {
+    func startPolling() {
         pollTask?.cancel()
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 30_000_000_000)
                 guard !Task.isCancelled, let self else { return }
-                await self.syncPRsFromApi(gitHubId: gitHubId)
+                await self.syncPRsFromApi()
             }
         }
     }
@@ -224,7 +231,7 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
         case .workflowStarted(let e): handleWorkflowStarted(e)
         case .workflowCompleted(let e): handleWorkflowCompleted(e)
         case .pullRequestsUpdated:
-            Task { await self.syncPRsFromApi(gitHubId: self.gitHubId) }
+            Task { await self.syncPRsFromApi() }
         case .prApproved(let e): handlePrApproved(e)
         case .prCommented(let e): handlePrCommented(e)
         case .mainBranchUpdated(let e): handleMainBranchUpdated(e)
@@ -303,7 +310,7 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
                 actionURL: URL(string: "https://github.com/\(repo)/pull/\(prNumber)"),
                 style: .info
             )
-            await self.syncPRsFromApi(gitHubId: self.gitHubId)
+            await self.syncPRsFromApi()
         }
     }
 
@@ -324,7 +331,7 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
                 actionURL: commentUrl ?? URL(string: "https://github.com/\(repo)/pull/\(prNumber)"),
                 style: .info
             )
-            await self.syncPRsFromApi(gitHubId: self.gitHubId)
+            await self.syncPRsFromApi()
         }
     }
 

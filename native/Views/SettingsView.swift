@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
-    let gitHubId: Int64
+    let token: String?
     let backendUrl: String
 
     @AppStorage("workspacePath") private var workspacePath = TeamDefaults.workspacePath
@@ -347,12 +347,17 @@ struct SettingsView: View {
         defer { patSaving = false }
 
         let url = backendUrlDraft.isEmpty ? settingsBackendUrl : backendUrlDraft
-        guard let endpoint = URL(string: "\(url)/api/auth/pat?gitHubId=\(gitHubId)") else {
+        guard let token else {
+            patError = "Not signed in"
+            return
+        }
+        guard let endpoint = URL(string: "\(url)/api/auth/pat") else {
             patError = "Invalid backend URL"
             return
         }
         var req = URLRequest(url: endpoint)
         req.httpMethod = "POST"
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try? JSONEncoder().encode(["patToken": patDraft])
 
