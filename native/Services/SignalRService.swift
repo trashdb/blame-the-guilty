@@ -63,11 +63,17 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
 
     func restoreSession() {
         guard let session = keychain.load() else { return }
+        // Sessions stored before JWT auth have no token — force a fresh login
+        // instead of showing a logged-in but dead UI.
+        guard let sessionToken = session.token else {
+            keychain.delete()
+            return
+        }
         userGitHubId = session.gitHubId
         username = session.username
         avatarUrl = session.avatarUrl
-        authToken = session.token
-        api.authToken = session.token
+        authToken = sessionToken
+        api.authToken = sessionToken
         isLoggedIn = true
         let gid = session.gitHubId
 
@@ -82,7 +88,7 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
 
             if let fresh = await api.fetchMe(), let url = fresh.avatarUrl {
                 await MainActor.run { avatarUrl = url }
-                keychain.save(gitHubId: gid, username: session.username, avatarUrl: url, token: session.token)
+                keychain.save(gitHubId: gid, username: session.username, avatarUrl: url, token: sessionToken)
             }
         }
 
