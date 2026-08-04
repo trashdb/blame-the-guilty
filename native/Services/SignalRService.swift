@@ -48,7 +48,8 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
         self.keychain = keychain
         self.persistence = persistence
         self.oauth = oauth
-        self.api = api ?? LiveApiClient(baseUrl: baseUrl)
+        let resolvedApi = api ?? LiveApiClient(baseUrl: baseUrl)
+        self.api = resolvedApi
         self.signalRClient = signalRClient ?? LiveSignalRClient(baseUrl: baseUrl)
         self.readyNotifier = ReadyMergeNotifier { title, body, subtitle, url in
             showNotification(
@@ -58,6 +59,9 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
                 actionURL: url,
                 style: .info
             )
+        }
+        resolvedApi.onUnauthorized = { [weak self] in
+            Task { await self?.handleSessionExpired() }
         }
     }
 
@@ -127,6 +131,17 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
         username = ""
         avatarUrl = nil
         userGitHubId = 0
+    }
+
+    /// Fired when the backend rejects the session JWT (expired or revoked).
+    /// Clears the session so the UI falls back to the login screen; the
+    /// reconnect loop exits because `authToken` is nil.
+    func handleSessionExpired() async {
+        await MainActor.run {
+            guard isLoggedIn else { return }
+            showNotification(title: "Session expired", body: "Please sign in again.", style: .info)
+            logout()
+        }
     }
 
     func connect() {

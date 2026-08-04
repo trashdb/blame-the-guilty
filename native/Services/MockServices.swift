@@ -95,6 +95,7 @@ class MockSignalRService: SignalRServiceProtocol {
 class MockApiClient: ApiClientProtocol {
     let baseUrl: String = "https://mock.example.com"
     var authToken: String? = nil
+    var onUnauthorized: (() -> Void)? = nil
 
     func fetchMe() async -> ApiMe? { nil }
     func fetchWorkflowRuns(limit: Int) async -> [ApiWorkflowRun]? { [] }

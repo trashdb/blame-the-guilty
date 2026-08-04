@@ -126,6 +126,10 @@ protocol ApiClientProtocol: AnyObject {
     /// Session JWT used as `Authorization: Bearer` on every request.
     var authToken: String? { get set }
 
+    /// Fired (at most once per token) when the backend rejects the JWT with 401.
+    /// The owner reacts by forcing a fresh login.
+    var onUnauthorized: (() -> Void)? { get set }
+
     func fetchMe() async -> ApiMe?
     func fetchWorkflowRuns(limit: Int) async -> [ApiWorkflowRun]?
     func fetchActivePRs() async -> [ApiPullRequest]?
@@ -151,8 +155,12 @@ protocol ApiClientProtocol: AnyObject {
 
 final class LiveApiClient: ApiClientProtocol {
     let baseUrl: String
-    var authToken: String?
+    var onUnauthorized: (() -> Void)?
+    var authToken: String? {
+        didSet { didFireUnauthorized = false }
+    }
     private let session: URLSession
+    private var didFireUnauthorized = false
 
     init(baseUrl: String, session: URLSession = .shared) {
         self.baseUrl = baseUrl
@@ -167,21 +175,33 @@ final class LiveApiClient: ApiClientProtocol {
         return request
     }
 
+    /// Runs a request, detecting JWT rejection so the owner can force a re-login.
+    /// The callback fires only once per token to avoid a storm of logouts.
+    private func perform(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        let urlSession = session
+        let (data, response) = try await urlSession.data(for: request)
+        if let http = response as? HTTPURLResponse, http.statusCode == 401, !didFireUnauthorized {
+            didFireUnauthorized = true
+            onUnauthorized?()
+        }
+        return (data, response)
+    }
+
     func fetchMe() async -> ApiMe? {
         guard let url = URL(string: "\(baseUrl)/api/auth/me") else { return nil }
-        guard let (data, _) = try? await session.data(for: makeRequest(url)) else { return nil }
+        guard let (data, _) = try? await perform(makeRequest(url)) else { return nil }
         return try? JSONDecoder().decode(ApiMe.self, from: data)
     }
 
     func fetchWorkflowRuns(limit: Int) async -> [ApiWorkflowRun]? {
         guard let url = URL(string: "\(baseUrl)/api/workflows/runs?limit=\(limit)") else { return nil }
-        guard let (data, _) = try? await session.data(for: makeRequest(url)) else { return nil }
+        guard let (data, _) = try? await perform(makeRequest(url)) else { return nil }
         return try? ApiJSON.decoder.decode([ApiWorkflowRun].self, from: data)
     }
 
     func fetchActivePRs() async -> [ApiPullRequest]? {
         guard let url = URL(string: "\(baseUrl)/api/pullrequests/active") else { return nil }
-        guard let (data, _) = try? await session.data(for: makeRequest(url)) else { return nil }
+        guard let (data, _) = try? await perform(makeRequest(url)) else { return nil }
         return try? JSONDecoder().decode([ApiPullRequest].self, from: data)
     }
 
@@ -190,7 +210,7 @@ final class LiveApiClient: ApiClientProtocol {
         var request = makeRequest(url)
         request.httpMethod = "POST"
         do {
-            let (data, _) = try await session.data(for: request)
+            let (data, _) = try await perform(request)
             struct SyncResult: Decodable { let synced: Int }
             if let result = try? JSONDecoder().decode(SyncResult.self, from: data) {
                 return result.synced
@@ -204,7 +224,7 @@ final class LiveApiClient: ApiClientProtocol {
         var request = makeRequest(url)
         request.httpMethod = "POST"
         do {
-            let (data, _) = try await session.data(for: request)
+            let (data, _) = try await perform( request)
             struct SyncResult: Decodable { let synced: Int }
             if let result = try? JSONDecoder().decode(SyncResult.self, from: data) {
                 return result.synced
@@ -218,7 +238,7 @@ final class LiveApiClient: ApiClientProtocol {
         guard let url = URL(string: "\(baseUrl)/api/pullrequests/\(prNumber)/subscribe?repo=\(repoEncoded)") else { return false }
         var req = makeRequest(url)
         req.httpMethod = "POST"
-        guard let (_, resp) = try? await session.data(for: req),
+        guard let (_, resp) = try? await perform( req),
               let http = resp as? HTTPURLResponse, http.statusCode == 200 else { return false }
         return true
     }
@@ -228,7 +248,7 @@ final class LiveApiClient: ApiClientProtocol {
         guard let url = URL(string: "\(baseUrl)/api/pullrequests/\(prNumber)/unsubscribe?repo=\(repoEncoded)") else { return false }
         var req = makeRequest(url)
         req.httpMethod = "POST"
-        guard let (_, resp) = try? await session.data(for: req),
+        guard let (_, resp) = try? await perform( req),
               let http = resp as? HTTPURLResponse, http.statusCode == 200 else { return false }
         return true
     }
@@ -248,7 +268,7 @@ final class LiveApiClient: ApiClientProtocol {
         var req = makeRequest(url)
         req.timeoutInterval = 15
         do {
-            let (data, _) = try await session.data(for: req)
+            let (data, _) = try await perform( req)
             guard let decoded = try? JSONDecoder().decode(ApiPRDetails.self, from: data) else {
                 let raw = String(data: data, encoding: .utf8) ?? "non-utf8"
                 return .failure("Parse error: \(raw.prefix(200))")
@@ -263,7 +283,7 @@ final class LiveApiClient: ApiClientProtocol {
         guard let url = url("/api/pullrequests/\(prNumber)/merge", query: ["repo": repo, "method": method]) else { return nil }
         var request = makeRequest(url)
         request.httpMethod = "POST"
-        guard let (data, _) = try? await session.data(for: request) else { return nil }
+        guard let (data, _) = try? await perform( request) else { return nil }
         return try? JSONDecoder().decode(ApiMergeResponse.self, from: data)
     }
 
@@ -274,7 +294,7 @@ final class LiveApiClient: ApiClientProtocol {
         var request = makeRequest(url)
         request.httpMethod = "POST"
         do {
-            let (_, resp) = try await session.data(for: request)
+            let (_, resp) = try await perform( request)
             let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
             return status >= 400 ? "HTTP \(status)" : nil
         } catch {
@@ -289,7 +309,7 @@ final class LiveApiClient: ApiClientProtocol {
         var request = makeRequest(url)
         request.httpMethod = "POST"
         do {
-            let (data, resp) = try await session.data(for: request)
+            let (data, resp) = try await perform( request)
             let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
             struct MessageResponse: Decodable { let message: String? }
             if let decoded = try? JSONDecoder().decode(MessageResponse.self, from: data), let message = decoded.message {
@@ -327,7 +347,7 @@ final class LiveApiClient: ApiClientProtocol {
         var req = makeRequest(url)
         req.timeoutInterval = 15
         do {
-            let (data, _) = try await session.data(for: req)
+            let (data, _) = try await perform( req)
             guard let decoded = try? JSONDecoder().decode([T].self, from: data) else {
                 return .failure("Parse error: \(errorLocalized(from: data))")
             }
@@ -348,7 +368,7 @@ final class LiveApiClient: ApiClientProtocol {
             return .failure("Invalid URL")
         }
         do {
-            let (data, _) = try await session.data(for: makeRequest(url))
+            let (data, _) = try await perform( makeRequest(url))
             struct Wrapper: Decodable { let subscribers: [ApiSubscriberInfo] }
             guard let decoded = try? JSONDecoder().decode(Wrapper.self, from: data) else {
                 return .failure("Parse error: \(errorLocalized(from: data))")
@@ -362,7 +382,7 @@ final class LiveApiClient: ApiClientProtocol {
     func fetchAvailableUsers() async -> ApiFetch<[ApiAvailableUser]> {
         guard let url = url("/api/users") else { return .failure("Invalid URL") }
         do {
-            let (data, _) = try await session.data(for: makeRequest(url))
+            let (data, _) = try await perform( makeRequest(url))
             guard let decoded = try? JSONDecoder().decode([ApiAvailableUser].self, from: data) else {
                 return .failure("Parse error: \(errorLocalized(from: data))")
             }
@@ -387,7 +407,7 @@ final class LiveApiClient: ApiClientProtocol {
         var req = makeRequest(url)
         req.httpMethod = "POST"
         do {
-            let (data, resp) = try await session.data(for: req)
+            let (data, resp) = try await perform( req)
             if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
                 if let err = try? JSONDecoder().decode(ApiError.self, from: data), let msg = err.error {
                     return msg

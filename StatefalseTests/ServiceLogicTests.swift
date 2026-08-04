@@ -214,3 +214,55 @@ final class WorkflowEventReducerTests: XCTestCase {
         XCTAssertNotNil(update.recentWorkflows.first?.completedAt)
     }
 }
+
+final class SessionExpiryTests: XCTestCase {
+    private final class MockSignalRTransport: SignalRClientProtocol {
+        func connectAndListen(token: String, username: String, onEvent: @escaping (HubEvent) -> Void) async throws {}
+    }
+
+    func testSessionExpiryLogsOutAndClearsKeychain() async {
+        let keychain = MockKeychainService()
+        keychain.savedSession = KeychainService.Session(gitHubId: 123, username: "alice", avatarUrl: nil, token: "jwt")
+        let api = MockApiClient()
+        let service = SignalRService(
+            baseUrl: "https://mock.example.com",
+            keychain: keychain,
+            persistence: MockPersistenceService(),
+            oauth: MockOAuthService(),
+            api: api,
+            signalRClient: MockSignalRTransport()
+        )
+        await MainActor.run {
+            service.isLoggedIn = true
+            service.authToken = "jwt"
+            api.authToken = "jwt"
+        }
+
+        await service.handleSessionExpired()
+
+        await MainActor.run {
+            XCTAssertFalse(service.isLoggedIn)
+            XCTAssertNil(service.authToken)
+            XCTAssertNil(api.authToken)
+        }
+        XCTAssertNil(keychain.savedSession)
+    }
+
+    func testSessionExpiryIsIdempotent() async {
+        let keychain = MockKeychainService()
+        keychain.savedSession = KeychainService.Session(gitHubId: 123, username: "alice", avatarUrl: nil, token: "jwt")
+        let service = SignalRService(
+            baseUrl: "https://mock.example.com",
+            keychain: keychain,
+            persistence: MockPersistenceService(),
+            oauth: MockOAuthService(),
+            api: MockApiClient(),
+            signalRClient: MockSignalRTransport()
+        )
+        await MainActor.run { service.isLoggedIn = true }
+        await service.handleSessionExpired()
+        await service.handleSessionExpired()
+        await MainActor.run { XCTAssertFalse(service.isLoggedIn) }
+        XCTAssertNil(keychain.savedSession)
+    }
+}

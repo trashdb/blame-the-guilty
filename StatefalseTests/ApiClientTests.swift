@@ -227,4 +227,39 @@ final class ApiClientTests: XCTestCase {
         XCTAssertNotNil(ApiJSON.parseISO8601("2024-01-01 10:00:00"))
         XCTAssertNil(ApiJSON.parseISO8601("garbage"))
     }
+
+    // MARK: - 401 session-expiry detection
+
+    func test401FiresOnUnauthorizedOncePerToken() async {
+        MockURLProtocol.handler = { _ in self.jsonResponse(401, #"{"error":"unauthorized"}"#) }
+        let client = makeClient()
+        client.authToken = "jwt"
+        var calls = 0
+        client.onUnauthorized = { calls += 1 }
+        _ = await client.fetchMe()
+        _ = await client.fetchMe()
+        XCTAssertEqual(calls, 1, "should fire only once per token")
+    }
+
+    func testNewTokenResetsUnauthorizedGuard() async {
+        MockURLProtocol.handler = { _ in self.jsonResponse(401, "") }
+        let client = makeClient()
+        client.authToken = "jwt-1"
+        var calls = 0
+        client.onUnauthorized = { calls += 1 }
+        _ = await client.fetchMe()
+        client.authToken = "jwt-2"
+        _ = await client.fetchMe()
+        XCTAssertEqual(calls, 2, "new token should reset the once-per-token guard")
+    }
+
+    func testNon401DoesNotFireOnUnauthorized() async {
+        MockURLProtocol.handler = { _ in self.jsonResponse(500, "") }
+        let client = makeClient()
+        client.authToken = "jwt"
+        var calls = 0
+        client.onUnauthorized = { calls += 1 }
+        _ = await client.fetchMe()
+        XCTAssertEqual(calls, 0)
+    }
 }
