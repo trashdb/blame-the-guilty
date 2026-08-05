@@ -35,7 +35,7 @@ actor MockGitService: GitServiceProtocol {
 
     func baseRefName(repoPath: String) async -> String? { "main" }
 
-    func createPR(repoPath: String, branchName: String, backendUrl: String, token: String, overrideTitle: String?, overrideBody: String?, subscribers: String?) async throws -> CreatePRResult {
+    func createPR(repoPath: String, branchName: String, api: ApiClientProtocol, overrideTitle: String?, overrideBody: String?, subscribers: String?) async throws -> CreatePRResult {
         if shouldThrow { throw GitError.commandFailed("mock error") }
         return CreatePRResult(url: URL(string: "https://github.com/owner/repo/pull/1")!, isExisting: false)
     }
@@ -53,11 +53,10 @@ actor MockGitService: GitServiceProtocol {
         return branches
     }
 
-    func listMyRemoteBranchesViaAPI(repoPath: String, backendUrl: String, token: String) async -> [(name: String, isMerged: Bool)] { [] }
+    func listMyRemoteBranchesViaAPI(repoPath: String, api: ApiClientProtocol) async -> [(name: String, isMerged: Bool)] { [] }
 
     static func discoverRepos(workspacePath: String) -> [String] { [] }
     static func repoName(from path: String) -> String { URL(fileURLWithPath: path).lastPathComponent }
-    static func fetchPAT(backendUrl: String, token: String) async -> String? { nil }
 
     func findRepoPath(ownerRepo: String, workspacePath: String) async -> String? { nil }
     func fetchMainAndGetDiff(repoPath: String, lastKnownSha: String?) async -> (currentSha: String, changedFiles: [String])? { nil }
@@ -127,6 +126,11 @@ class MockApiClient: ApiClientProtocol {
     func fetchPRPreview(repo: String, head: String, baseBranch: String, title: String, useAI: Bool) async -> ApiFetch<ApiPRPreview> {
         .success(ApiPRPreview(summary: "", suggestedBody: "", summaryError: nil))
     }
+    func fetchMyBranches(repo: String) async -> ApiFetch<[ApiBranch]> { .success([]) }
+    func createPR(repo: String, head: String, baseBranch: String, title: String, body: String?, subscribers: String?) async -> ApiFetch<ApiCreatePRResult> {
+        .success(ApiCreatePRResult(prNumber: 1, url: "https://github.com/owner/repo/pull/1", existing: false))
+    }
+    func fetchPAT() async -> String? { nil }
 }
 
 // MARK: - Keychain Mock

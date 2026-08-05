@@ -36,14 +36,13 @@ protocol GitServiceProtocol: AnyObject {
     func fetchRepo(repoPath: String) async
     func repoFullName(repoPath: String) async -> String?
     func baseRefName(repoPath: String) async -> String?
-    func createPR(repoPath: String, branchName: String, backendUrl: String, token: String, overrideTitle: String?, overrideBody: String?, subscribers: String?) async throws -> CreatePRResult
+    func createPR(repoPath: String, branchName: String, api: ApiClientProtocol, overrideTitle: String?, overrideBody: String?, subscribers: String?) async throws -> CreatePRResult
     func pullBranch(repoPath: String, name: String, token: String?) async throws
     func createBranch(repoPath: String, from sourceBranch: String, newName: String) async throws
     func listMyBranches(repoPath: String) async throws -> [(name: String, isCurrent: Bool)]
-    func listMyRemoteBranchesViaAPI(repoPath: String, backendUrl: String, token: String) async -> [(name: String, isMerged: Bool)]
+    func listMyRemoteBranchesViaAPI(repoPath: String, api: ApiClientProtocol) async -> [(name: String, isMerged: Bool)]
     static func discoverRepos(workspacePath: String) -> [String]
     static func repoName(from path: String) -> String
-    static func fetchPAT(backendUrl: String, token: String) async -> String?
     func findRepoPath(ownerRepo: String, workspacePath: String) async -> String?
     func fetchMainAndGetDiff(repoPath: String, lastKnownSha: String?) async -> (currentSha: String, changedFiles: [String])?
     func getUncommittedFiles(repoPath: String) async -> [String]

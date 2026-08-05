@@ -4,14 +4,14 @@ final class BranchDetailPanelManager {
     static let shared = BranchDetailPanelManager()
     private var panel: NSWindow?
 
-    func show(deps: Dependencies, info: BranchInfo, gitHubId: Int64, backendUrl: String, token: String?, onCheckout: (() -> Void)?) {
+    func show(deps: Dependencies, info: BranchInfo, gitHubId: Int64, onCheckout: (() -> Void)?) {
         if let existing = panel, existing.isVisible {
             existing.makeKeyAndOrderFront(nil)
             return
         }
 
         let view = BranchDetailView(
-            info: info, gitHubId: gitHubId, backendUrl: backendUrl, token: token,
+            info: info, gitHubId: gitHubId,
             onCheckout: onCheckout
         )
         let hostingController = NSHostingController(rootView: view.environment(\.dependencies, deps))

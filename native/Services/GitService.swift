@@ -24,10 +24,6 @@ struct RemoteBranch: Identifiable {
     let isMerged: Bool
 }
 
-struct APIBranch: Codable {
-    let name: String
-}
-
 private final class RunGitDone: @unchecked Sendable {
     private var _done = false
     private let lock = NSLock()
@@ -183,51 +179,38 @@ actor GitService: GitServiceProtocol {
         return url.isEmpty ? nil : url
     }
 
-    func listMyRemoteBranchesViaAPI(repoPath: String, backendUrl: String, token: String) async -> [(name: String, isMerged: Bool)] {
+    func listMyRemoteBranchesViaAPI(repoPath: String, api: ApiClientProtocol) async -> [(name: String, isMerged: Bool)] {
         guard let fullName = await repoFullName(repoPath: repoPath) else {
             let email = await currentUserEmail() ?? ""
             return await listMyRemoteBranches(repoPath: repoPath, email: email)
         }
-        guard var components = URLComponents(string: "\(backendUrl)/api/github/my-branches") else {
+        let branches: [ApiBranch]
+        switch await api.fetchMyBranches(repo: fullName) {
+        case .success(let fetched): branches = fetched
+        case .failure:
             let email = await currentUserEmail() ?? ""
             return await listMyRemoteBranches(repoPath: repoPath, email: email)
         }
-        components.queryItems = [
-            .init(name: "repo", value: fullName)
-        ]
-        guard let url = components.url else {
-            let email = await currentUserEmail() ?? ""
-            return await listMyRemoteBranches(repoPath: repoPath, email: email)
-        }
-        do {
-            var req = URLRequest(url: url)
-            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            let (data, _) = try await URLSession.shared.data(for: req)
-            let branches = try JSONDecoder().decode([APIBranch].self, from: data)
-            let baseRef = await baseRefName(repoPath: repoPath)
-            return await withTaskGroup(of: (String, Bool).self) { group in
-                for branch in branches {
-                    group.addTask {
-                        let isMerged: Bool
-                        if let baseRef,
-                           let mergeOut = try? await self.runGit(repoPath: repoPath, args: ["log", "--oneline", "\(baseRef)..origin/\(branch.name)"]),
-                           mergeOut.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            isMerged = true
-                        } else {
-                            isMerged = false
-                        }
-                        return (branch.name, isMerged)
+        let baseRef = await baseRefName(repoPath: repoPath)
+        return await withTaskGroup(of: (String, Bool).self) { group in
+            for branch in branches {
+                group.addTask {
+                    let isMerged: Bool
+                    if let baseRef,
+                       let mergeOut = try? await self.runGit(repoPath: repoPath, args: ["log", "--oneline", "\(baseRef)..origin/\(branch.name)"]),
+                       mergeOut.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        isMerged = true
+                    } else {
+                        isMerged = false
                     }
+                    return (branch.name, isMerged)
                 }
-                var results: [(name: String, isMerged: Bool)] = []
-                for await (name, isMerged) in group {
-                    results.append((name: name, isMerged: isMerged))
-                }
-                return results
             }
-        } catch {
-            let email = await currentUserEmail() ?? ""
-            return await listMyRemoteBranches(repoPath: repoPath, email: email)
+            var results: [(name: String, isMerged: Bool)] = []
+            for await (name, isMerged) in group {
+                results.append((name: name, isMerged: isMerged))
+            }
+            return results
         }
     }
 
@@ -235,7 +218,7 @@ actor GitService: GitServiceProtocol {
         try await runGit(repoPath: repoPath, args: ["push", "origin", "--delete", name])
     }
 
-    func createPR(repoPath: String, branchName: String, backendUrl: String, token: String,
+    func createPR(repoPath: String, branchName: String, api: ApiClientProtocol,
                   overrideTitle: String? = nil, overrideBody: String? = nil, subscribers: String? = nil) async throws -> CreatePRResult {
         // Check if the specific branch exists on remote
         let remoteRef = "origin/\(branchName)"
@@ -251,45 +234,18 @@ actor GitService: GitServiceProtocol {
         let cleanBase = base.hasPrefix("origin/") ? String(base.dropFirst(7)) : base
         let title = overrideTitle ?? generatePRTitle(from: branchName)
 
-        guard var components = URLComponents(string: "\(backendUrl)/api/github/create-pr") else {
-            throw GitError.commandFailed("Invalid URL")
-        }
-        components.queryItems = [
-            .init(name: "repo", value: fullName),
-            .init(name: "head", value: branchName),
-            .init(name: "baseBranch", value: cleanBase),
-            .init(name: "title", value: title)
-        ]
-        if let body = overrideBody, !body.isEmpty {
-            components.queryItems?.append(.init(name: "body", value: body))
-        }
-        if let subs = subscribers, !subs.isEmpty {
-            components.queryItems?.append(.init(name: "subscribers", value: subs))
-        }
-        guard let url = components.url else { throw GitError.commandFailed("Invalid URL") }
-
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        let (data, resp) = try await URLSession.shared.data(for: req)
-        guard let http = resp as? HTTPURLResponse else {
-            throw GitError.commandFailed("No response from server")
-        }
-
-        struct PRResponse: Decodable { let prNumber: Int64; let url: String; let existing: Bool? }
-        guard let result = try? JSONDecoder().decode(PRResponse.self, from: data) else {
-            // Try decoding as error
-            struct ErrResp: Decodable { let error: String }
-            if let err = try? JSONDecoder().decode(ErrResp.self, from: data) {
-                throw GitError.commandFailed(err.error)
+        switch await api.createPR(
+            repo: fullName, head: branchName, baseBranch: cleanBase,
+            title: title, body: overrideBody, subscribers: subscribers
+        ) {
+        case .success(let result):
+            guard let prURL = URL(string: result.url) else {
+                throw GitError.commandFailed("Invalid PR URL from server")
             }
-            throw GitError.commandFailed("HTTP \(http.statusCode)")
+            return CreatePRResult(url: prURL, isExisting: result.existing ?? false)
+        case .failure(let message):
+            throw GitError.commandFailed(message)
         }
-
-        guard let prURL = URL(string: result.url) else {
-            throw GitError.commandFailed("Invalid PR URL from server")
-        }
-        return CreatePRResult(url: prURL, isExisting: result.existing ?? false)
     }
 
     nonisolated func generatePRTitle(from branchName: String) -> String {
@@ -508,19 +464,6 @@ actor GitService: GitServiceProtocol {
         if let current = current, !current.isEmpty, current != name {
             try await runGit(repoPath: repoPath, args: ["checkout", current])
         }
-    }
-
-    static func fetchPAT(backendUrl: String, token: String) async -> String? {
-        guard let url = URL(string: "\(backendUrl)/api/auth/token") else { return nil }
-        var req = URLRequest(url: url)
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        guard let (data, resp) = try? await URLSession.shared.data(for: req),
-              let http = resp as? HTTPURLResponse, http.statusCode == 200,
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: String],
-              let token = json["token"], !token.isEmpty else {
-            return nil
-        }
-        return token
     }
 
     func createBranch(repoPath: String, from sourceBranch: String, newName: String) async throws {

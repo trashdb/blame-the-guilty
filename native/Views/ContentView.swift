@@ -50,7 +50,7 @@ struct ContentView: View {
 
                     if signalR.isLoggedIn {
                         Divider()
-                        LocalBranchesView(gitHubId: signalR.userGitHubId, backendUrl: signalR.baseUrl, token: signalR.authToken)
+                        LocalBranchesView(gitHubId: signalR.userGitHubId)
                     }
                 }
                 .foregroundStyle(DS.Color.textSecondary)
@@ -163,8 +163,7 @@ struct ContentView: View {
             isPresented: $showQuickSearch,
             actions: signalR.isLoggedIn ? quickSearchActions : [],
             signalR: signalR,
-            gitHubId: signalR.userGitHubId,
-            backendUrl: signalR.baseUrl
+            gitHubId: signalR.userGitHubId
         ))
         .animation(DS.Animation.popover, value: showQuickSearch)
         .background(
@@ -211,8 +210,6 @@ struct ContentView: View {
                     deps: deps,
                     info: info,
                     gitHubId: self.signalR.userGitHubId,
-                    backendUrl: self.signalR.baseUrl,
-                    token: self.signalR.authToken,
                     onCheckout: nil
                 )
             })

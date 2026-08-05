@@ -102,6 +102,16 @@ struct ApiPRPreview: Decodable {
     let summaryError: String?
 }
 
+struct ApiBranch: Decodable {
+    let name: String
+}
+
+struct ApiCreatePRResult: Decodable {
+    let prNumber: Int64
+    let url: String
+    let existing: Bool?
+}
+
 struct ApiAvailableUser: Identifiable, Decodable {
     var id: Int64 { gitHubId }
     let gitHubId: Int64
@@ -168,6 +178,10 @@ protocol ApiClientProtocol: AnyObject {
     func fetchWebhookLogs(limit: Int) async -> [WebhookLogEntry]?
     func savePAT(patToken: String, to backendUrl: String?) async -> Bool
     func fetchPRPreview(repo: String, head: String, baseBranch: String, title: String, useAI: Bool) async -> ApiFetch<ApiPRPreview>
+
+    func fetchMyBranches(repo: String) async -> ApiFetch<[ApiBranch]>
+    func createPR(repo: String, head: String, baseBranch: String, title: String, body: String?, subscribers: String?) async -> ApiFetch<ApiCreatePRResult>
+    func fetchPAT() async -> String?
 }
 
 // MARK: - Live Implementation
@@ -516,6 +530,59 @@ final class LiveApiClient: ApiClientProtocol {
         } catch {
             return .failure(error.localizedDescription)
         }
+    }
+
+    // MARK: - GitHub REST via backend
+
+    func fetchMyBranches(repo: String) async -> ApiFetch<[ApiBranch]> {
+        guard let url = url("/api/github/my-branches", query: ["repo": repo]) else {
+            return .failure("Invalid URL")
+        }
+        do {
+            let (data, _) = try await perform(makeRequest(url))
+            guard let decoded = try? JSONDecoder().decode([ApiBranch].self, from: data) else {
+                return .failure("Parse error: \(errorLocalized(from: data))")
+            }
+            return .success(decoded)
+        } catch {
+            return .failure(error.localizedDescription)
+        }
+    }
+
+    func createPR(repo: String, head: String, baseBranch: String, title: String, body: String?, subscribers: String?) async -> ApiFetch<ApiCreatePRResult> {
+        var query: [String: String] = [
+            "repo": repo,
+            "head": head,
+            "baseBranch": baseBranch,
+            "title": title
+        ]
+        if let body, !body.isEmpty { query["body"] = body }
+        if let subscribers, !subscribers.isEmpty { query["subscribers"] = subscribers }
+        guard let url = url("/api/github/create-pr", query: query) else {
+            return .failure("Invalid URL")
+        }
+        var request = makeRequest(url)
+        request.httpMethod = "POST"
+        do {
+            let (data, response) = try await perform(request)
+            guard let http = response as? HTTPURLResponse else {
+                return .failure("No response from server")
+            }
+            if let decoded = try? JSONDecoder().decode(ApiCreatePRResult.self, from: data) {
+                return .success(decoded)
+            }
+            return .failure("HTTP \(http.statusCode): \(errorLocalized(from: data))")
+        } catch {
+            return .failure(error.localizedDescription)
+        }
+    }
+
+    func fetchPAT() async -> String? {
+        guard let url = URL(string: "\(baseUrl)/api/auth/token") else { return nil }
+        guard let (data, _) = try? await perform(makeRequest(url)) else { return nil }
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: String],
+              let token = json["token"], !token.isEmpty else { return nil }
+        return token
     }
 }
 

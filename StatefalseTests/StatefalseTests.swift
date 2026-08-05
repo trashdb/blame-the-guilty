@@ -634,7 +634,7 @@ func cachedBranchNilTicket() {
 func apiBranchCoding() throws {
     let json = #"{"name":"feature/test"}"#
     let data = try #require(json.data(using: .utf8))
-    let branch = try JSONDecoder().decode(APIBranch.self, from: data)
+    let branch = try JSONDecoder().decode(ApiBranch.self, from: data)
     #expect(branch.name == "feature/test")
 }
 

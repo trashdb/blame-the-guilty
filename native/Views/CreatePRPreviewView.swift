@@ -3,9 +3,7 @@ import SwiftUI
 struct CreatePRPreviewView: View {
     let repoPath: String
     let branchName: String
-    let backendUrl: String
     let gitHubId: Int64
-    let token: String?
     let api: ApiClientProtocol
     let onComplete: (URL) -> Void
     var onCancel: (() -> Void)?
@@ -30,12 +28,10 @@ struct CreatePRPreviewView: View {
 
     private var git: GitServiceProtocol { deps.gitService }
 
-    init(repoPath: String, branchName: String, backendUrl: String, gitHubId: Int64, token: String?, api: ApiClientProtocol, onComplete: @escaping (URL) -> Void, onCancel: (() -> Void)? = nil) {
+    init(repoPath: String, branchName: String, gitHubId: Int64, api: ApiClientProtocol, onComplete: @escaping (URL) -> Void, onCancel: (() -> Void)? = nil) {
         self.repoPath = repoPath
         self.branchName = branchName
-        self.backendUrl = backendUrl
         self.gitHubId = gitHubId
-        self.token = token
         self.api = api
         self.onComplete = onComplete
         self.onCancel = onCancel
@@ -281,8 +277,7 @@ struct CreatePRPreviewView: View {
         do {
             let subsString = selectedUserIds.isEmpty ? nil : selectedUserIds.map(String.init).joined(separator: ",")
             let result = try await git.createPR(
-                repoPath: repoPath, branchName: branchName,
-                backendUrl: backendUrl, token: token ?? "",
+                repoPath: repoPath, branchName: branchName, api: api,
                 overrideTitle: title, overrideBody: bodyText, subscribers: subsString
             )
             onComplete(result.url)

@@ -39,7 +39,6 @@ struct QuickSearchView: View {
     let actions: [QuickSearchAction]
     let signalR: SignalRService
     let gitHubId: Int64
-    let backendUrl: String
     @Environment(\.dependencies) private var deps
 
     @State private var query = ""
@@ -120,7 +119,7 @@ struct QuickSearchView: View {
                         subtitle: "\(b.repoName) → open PR preview", icon: "plus.circle", category: .branch
                     ) {
                         BranchDetailPanelManager.shared.show(
-                            deps: deps, info: info, gitHubId: self.gitHubId, backendUrl: self.backendUrl, token: self.signalR.authToken, onCheckout: nil
+                            deps: deps, info: info, gitHubId: self.gitHubId, onCheckout: nil
                         )
                     })
                 }

@@ -2,8 +2,6 @@ import SwiftUI
 
 struct LocalBranchesView: View {
     let gitHubId: Int64
-    let backendUrl: String
-    let token: String?
     @Environment(\.dependencies) private var deps
 
     @State private var repos: [ScannedRepo] = []
@@ -109,7 +107,7 @@ struct LocalBranchesView: View {
         .background {
             Color.clear
                 .popover(item: $selectedBranchInfo) { info in
-                    BranchDetailView(info: info, gitHubId: gitHubId, backendUrl: backendUrl, token: token, onCheckout: { Task { await scan() } })
+                    BranchDetailView(info: info, gitHubId: gitHubId, onCheckout: { Task { await scan() } })
                         .transition(.scale(scale: 0.95).combined(with: .opacity))
                 }
                 .animation(DS.Animation.popover, value: selectedBranchInfo != nil)
@@ -377,7 +375,7 @@ struct LocalBranchesView: View {
                     do {
                         let b = try await self.git.listMyBranches(repoPath: path)
                         let r = await self.git.listMyRemoteBranchesViaAPI(
-                            repoPath: path, backendUrl: self.backendUrl, token: self.token ?? ""
+                            repoPath: path, api: self.deps.apiClient
                         )
                         let repo = ScannedRepo(
                             path: path,
@@ -413,8 +411,8 @@ struct LocalBranchesView: View {
         await MainActor.run { checkingOutBranch = (repo, name) }
         do {
             try await git.checkoutBranch(repoPath: repo.path, name: name)
-            let token = await GitService.fetchPAT(backendUrl: backendUrl, token: token ?? "")
-            if case .conflict = await git.pullCurrentBranch(repoPath: repo.path, token: token) {
+            let pat = await deps.apiClient.fetchPAT()
+            if case .conflict = await git.pullCurrentBranch(repoPath: repo.path, token: pat) {
                 await openRider(repo.path)
             }
             let branches = try await git.listMyBranches(repoPath: repo.path)
@@ -455,8 +453,8 @@ struct LocalBranchesView: View {
         let key = (repo.id, name)
         await MainActor.run { pullingBranch = key }
         do {
-            let token = await GitService.fetchPAT(backendUrl: backendUrl, token: token ?? "")
-            try await git.pullBranch(repoPath: repo.path, name: name, token: token)
+            let pat = await deps.apiClient.fetchPAT()
+            try await git.pullBranch(repoPath: repo.path, name: name, token: pat)
             let branches = try await git.listMyBranches(repoPath: repo.path)
             await MainActor.run {
                 if let ri = repos.firstIndex(where: { $0.id == repo.id }) {
