@@ -1,8 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
-    let token: String?
-    let backendUrl: String
+    let api: ApiClientProtocol
 
     @AppStorage("workspacePath") private var workspacePath = TeamDefaults.workspacePath
     @AppStorage("jiraBoardUrl") private var jiraBoardUrl = TeamDefaults.jiraBoardUrl
@@ -347,30 +346,16 @@ struct SettingsView: View {
         defer { patSaving = false }
 
         let url = backendUrlDraft.isEmpty ? settingsBackendUrl : backendUrlDraft
-        guard let token else {
+        guard api.authToken != nil else {
             patError = "Not signed in"
             return
         }
-        guard let endpoint = URL(string: "\(url)/api/auth/pat") else {
-            patError = "Invalid backend URL"
-            return
-        }
-        var req = URLRequest(url: endpoint)
-        req.httpMethod = "POST"
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try? JSONEncoder().encode(["patToken": patDraft])
 
-        do {
-            let (_, resp) = try await URLSession.shared.data(for: req)
-            if let http = resp as? HTTPURLResponse, http.statusCode == 200 {
-                patSaved = true
-                patDraft = ""
-            } else {
-                patError = "Saved locally, but backend rejected it (HTTP \((resp as? HTTPURLResponse)?.statusCode ?? -1))"
-            }
-        } catch {
-            patError = "Saved locally, but backend is unreachable: \(error.localizedDescription)"
+        if await api.savePAT(patToken: patDraft, to: url) {
+            patSaved = true
+            patDraft = ""
+        } else {
+            patError = "Saved locally, but backend rejected it"
         }
     }
 

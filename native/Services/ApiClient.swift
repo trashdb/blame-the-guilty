@@ -96,6 +96,12 @@ struct ApiSubscriberInfo: Identifiable, Decodable {
     let avatarUrl: String
 }
 
+struct ApiPRPreview: Decodable {
+    let summary: String
+    let suggestedBody: String
+    let summaryError: String?
+}
+
 struct ApiAvailableUser: Identifiable, Decodable {
     var id: Int64 { gitHubId }
     let gitHubId: Int64
@@ -110,6 +116,13 @@ struct ApiError: Decodable {
 enum ApiFetch<T> {
     case success(T)
     case failure(String)
+
+    func get() throws -> T {
+        switch self {
+        case .success(let value): return value
+        case .failure(let message): throw NSError(domain: "ApiFetch", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+        }
+    }
 }
 
 enum ApiUpdateBranchResult {
@@ -149,6 +162,12 @@ protocol ApiClientProtocol: AnyObject {
     func fetchAvailableUsers() async -> ApiFetch<[ApiAvailableUser]>
     func addSubscriber(prNumber: Int64, repo: String, subscriberId: Int64) async -> String?
     func removeSubscriber(prNumber: Int64, repo: String, subscriberId: Int64) async -> String?
+
+    func rerunWorkflow(runId: Int64) async -> String?
+    func setTargetGitHubIds(dbId: Int, targetIds: [Int64]) async -> Bool
+    func fetchWebhookLogs(limit: Int) async -> [WebhookLogEntry]?
+    func savePAT(patToken: String, to backendUrl: String?) async -> Bool
+    func fetchPRPreview(repo: String, head: String, baseBranch: String, title: String, useAI: Bool) async -> ApiFetch<ApiPRPreview>
 }
 
 // MARK: - Live Implementation
@@ -224,7 +243,7 @@ final class LiveApiClient: ApiClientProtocol {
         var request = makeRequest(url)
         request.httpMethod = "POST"
         do {
-            let (data, _) = try await perform( request)
+            let (data, _) = try await perform(request)
             struct SyncResult: Decodable { let synced: Int }
             if let result = try? JSONDecoder().decode(SyncResult.self, from: data) {
                 return result.synced
@@ -238,7 +257,7 @@ final class LiveApiClient: ApiClientProtocol {
         guard let url = URL(string: "\(baseUrl)/api/pullrequests/\(prNumber)/subscribe?repo=\(repoEncoded)") else { return false }
         var req = makeRequest(url)
         req.httpMethod = "POST"
-        guard let (_, resp) = try? await perform( req),
+        guard let (_, resp) = try? await perform(req),
               let http = resp as? HTTPURLResponse, http.statusCode == 200 else { return false }
         return true
     }
@@ -248,7 +267,7 @@ final class LiveApiClient: ApiClientProtocol {
         guard let url = URL(string: "\(baseUrl)/api/pullrequests/\(prNumber)/unsubscribe?repo=\(repoEncoded)") else { return false }
         var req = makeRequest(url)
         req.httpMethod = "POST"
-        guard let (_, resp) = try? await perform( req),
+        guard let (_, resp) = try? await perform(req),
               let http = resp as? HTTPURLResponse, http.statusCode == 200 else { return false }
         return true
     }
@@ -268,7 +287,7 @@ final class LiveApiClient: ApiClientProtocol {
         var req = makeRequest(url)
         req.timeoutInterval = 15
         do {
-            let (data, _) = try await perform( req)
+            let (data, _) = try await perform(req)
             guard let decoded = try? JSONDecoder().decode(ApiPRDetails.self, from: data) else {
                 let raw = String(data: data, encoding: .utf8) ?? "non-utf8"
                 return .failure("Parse error: \(raw.prefix(200))")
@@ -283,7 +302,7 @@ final class LiveApiClient: ApiClientProtocol {
         guard let url = url("/api/pullrequests/\(prNumber)/merge", query: ["repo": repo, "method": method]) else { return nil }
         var request = makeRequest(url)
         request.httpMethod = "POST"
-        guard let (data, _) = try? await perform( request) else { return nil }
+        guard let (data, _) = try? await perform(request) else { return nil }
         return try? JSONDecoder().decode(ApiMergeResponse.self, from: data)
     }
 
@@ -294,7 +313,7 @@ final class LiveApiClient: ApiClientProtocol {
         var request = makeRequest(url)
         request.httpMethod = "POST"
         do {
-            let (_, resp) = try await perform( request)
+            let (_, resp) = try await perform(request)
             let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
             return status >= 400 ? "HTTP \(status)" : nil
         } catch {
@@ -309,7 +328,7 @@ final class LiveApiClient: ApiClientProtocol {
         var request = makeRequest(url)
         request.httpMethod = "POST"
         do {
-            let (data, resp) = try await perform( request)
+            let (data, resp) = try await perform(request)
             let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
             struct MessageResponse: Decodable { let message: String? }
             if let decoded = try? JSONDecoder().decode(MessageResponse.self, from: data), let message = decoded.message {
@@ -347,7 +366,7 @@ final class LiveApiClient: ApiClientProtocol {
         var req = makeRequest(url)
         req.timeoutInterval = 15
         do {
-            let (data, _) = try await perform( req)
+            let (data, _) = try await perform(req)
             guard let decoded = try? JSONDecoder().decode([T].self, from: data) else {
                 return .failure("Parse error: \(errorLocalized(from: data))")
             }
@@ -368,7 +387,7 @@ final class LiveApiClient: ApiClientProtocol {
             return .failure("Invalid URL")
         }
         do {
-            let (data, _) = try await perform( makeRequest(url))
+            let (data, _) = try await perform(makeRequest(url))
             struct Wrapper: Decodable { let subscribers: [ApiSubscriberInfo] }
             guard let decoded = try? JSONDecoder().decode(Wrapper.self, from: data) else {
                 return .failure("Parse error: \(errorLocalized(from: data))")
@@ -382,7 +401,7 @@ final class LiveApiClient: ApiClientProtocol {
     func fetchAvailableUsers() async -> ApiFetch<[ApiAvailableUser]> {
         guard let url = url("/api/users") else { return .failure("Invalid URL") }
         do {
-            let (data, _) = try await perform( makeRequest(url))
+            let (data, _) = try await perform(makeRequest(url))
             guard let decoded = try? JSONDecoder().decode([ApiAvailableUser].self, from: data) else {
                 return .failure("Parse error: \(errorLocalized(from: data))")
             }
@@ -407,7 +426,7 @@ final class LiveApiClient: ApiClientProtocol {
         var req = makeRequest(url)
         req.httpMethod = "POST"
         do {
-            let (data, resp) = try await perform( req)
+            let (data, resp) = try await perform(req)
             if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
                 if let err = try? JSONDecoder().decode(ApiError.self, from: data), let msg = err.error {
                     return msg
@@ -417,6 +436,85 @@ final class LiveApiClient: ApiClientProtocol {
             return nil
         } catch {
             return error.localizedDescription
+        }
+    }
+
+    // MARK: - Workflow run management
+
+    func rerunWorkflow(runId: Int64) async -> String? {
+        guard let url = URL(string: "\(baseUrl)/api/workflows/runs/\(runId)/rerun") else { return "Invalid URL" }
+        var request = makeRequest(url)
+        request.httpMethod = "POST"
+        do {
+            let (data, response) = try await perform(request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard status == 200 else {
+                let body = String(data: data, encoding: .utf8) ?? "Unknown error"
+                return "HTTP \(status): \(body)"
+            }
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    func setTargetGitHubIds(dbId: Int, targetIds: [Int64]) async -> Bool {
+        guard let url = URL(string: "\(baseUrl)/api/workflows/runs/\(dbId)/target") else { return false }
+        var request = makeRequest(url)
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONEncoder().encode(["targetGitHubIds": targetIds])
+        guard let (_, response) = try? await perform(request),
+              let http = response as? HTTPURLResponse else { return false }
+        return http.statusCode == 200
+    }
+
+    // MARK: - Webhook logs
+
+    func fetchWebhookLogs(limit: Int) async -> [WebhookLogEntry]? {
+        guard let url = URL(string: "\(baseUrl)/api/webhook/logs?limit=\(limit)") else { return nil }
+        guard let (data, _) = try? await perform(makeRequest(url)) else { return nil }
+        return try? ApiJSON.decoder.decode([WebhookLogEntry].self, from: data)
+    }
+
+    // MARK: - Auth helpers
+
+    func savePAT(patToken: String, to backendUrl: String?) async -> Bool {
+        let target = backendUrl ?? baseUrl
+        guard let url = URL(string: "\(target)/api/auth/pat") else { return false }
+        var request = makeRequest(url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONEncoder().encode(["patToken": patToken])
+        guard let (_, response) = try? await perform(request),
+              let http = response as? HTTPURLResponse else { return false }
+        return http.statusCode == 200
+    }
+
+    // MARK: - PR preview
+
+    func fetchPRPreview(repo: String, head: String, baseBranch: String, title: String, useAI: Bool) async -> ApiFetch<ApiPRPreview> {
+        let repoEncoded = repo.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? repo
+        let headEncoded = head.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? head
+        let baseEncoded = baseBranch.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? baseBranch
+        let titleEncoded = title.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? title
+        guard let url = URL(string: "\(baseUrl)/api/github/pr-preview?repo=\(repoEncoded)&head=\(headEncoded)&baseBranch=\(baseEncoded)&title=\(titleEncoded)&useAI=\(useAI)") else {
+            return .failure("Invalid URL")
+        }
+        var request = makeRequest(url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 20
+        do {
+            let (data, response) = try await perform(request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                return .failure(errorLocalized(from: data))
+            }
+            guard let decoded = try? JSONDecoder().decode(ApiPRPreview.self, from: data) else {
+                return .failure("Parse error: \(errorLocalized(from: data))")
+            }
+            return .success(decoded)
+        } catch {
+            return .failure(error.localizedDescription)
         }
     }
 }

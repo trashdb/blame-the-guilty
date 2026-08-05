@@ -16,7 +16,7 @@ struct Dependencies {
             keychainService: LiveKeychainService(),
             persistenceService: LivePersistenceService(),
             oAuthService: OAuthService(),
-            apiClient: LiveApiClient(baseUrl: signalRService.baseUrl)
+            apiClient: signalRService.api
         )
     }
 

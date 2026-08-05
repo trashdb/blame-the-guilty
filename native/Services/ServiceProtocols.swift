@@ -67,6 +67,7 @@ protocol SignalRServiceProtocol: AnyObject {
     var onMainBranchUpdated: ((String, Int, String, String?) -> Void)? { get set }
     var baseUrl: String { get }
     var authToken: String? { get }
+    var api: ApiClientProtocol { get }
 
     func restoreSession()
     func login(keepSignedIn: Bool) async throws

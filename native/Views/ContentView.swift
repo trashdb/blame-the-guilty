@@ -94,7 +94,7 @@ struct ContentView: View {
                     }
 
                     toolbarButton(icon: "antenna.radiowaves.left.and.right", help: "Webhook Event Log (debug)") {
-                        WebhookLogPanelManager.shared.show(token: signalR.authToken)
+                        WebhookLogPanelManager.shared.show(api: signalR.api)
                     }
 
                     toolbarButton(icon: "tray.full", help: "See All PRs") {
@@ -106,8 +106,7 @@ struct ContentView: View {
 
                     toolbarButton(icon: "gearshape.fill", help: "Settings") {
                         let m = SettingsPanelManager.shared
-                        m.token = signalR.authToken
-                        m.backendUrl = signalR.baseUrl
+                        m.api = signalR.api
                         m.show()
                     }
                 }
@@ -171,8 +170,7 @@ struct ContentView: View {
         .background(
             Button("") {
                 let m = SettingsPanelManager.shared
-                m.token = signalR.authToken
-                m.backendUrl = signalR.baseUrl
+                m.api = signalR.api
                 m.show()
             }
             .keyboardShortcut(",", modifiers: .command)

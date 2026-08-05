@@ -80,6 +80,7 @@ class MockSignalRService: SignalRServiceProtocol {
     var onMainBranchUpdated: ((String, Int, String, String?) -> Void)? = nil
     let baseUrl: String = "https://mock.example.com"
     var authToken: String? = nil
+    var api: ApiClientProtocol = MockApiClient()
 
     func restoreSession() {}
     func login(keepSignedIn: Bool) async throws {}
@@ -118,6 +119,14 @@ class MockApiClient: ApiClientProtocol {
     func fetchAvailableUsers() async -> ApiFetch<[ApiAvailableUser]> { .success([]) }
     func addSubscriber(prNumber: Int64, repo: String, subscriberId: Int64) async -> String? { nil }
     func removeSubscriber(prNumber: Int64, repo: String, subscriberId: Int64) async -> String? { nil }
+
+    func rerunWorkflow(runId: Int64) async -> String? { nil }
+    func setTargetGitHubIds(dbId: Int, targetIds: [Int64]) async -> Bool { true }
+    func fetchWebhookLogs(limit: Int) async -> [WebhookLogEntry]? { [] }
+    func savePAT(patToken: String, to backendUrl: String?) async -> Bool { true }
+    func fetchPRPreview(repo: String, head: String, baseBranch: String, title: String, useAI: Bool) async -> ApiFetch<ApiPRPreview> {
+        .success(ApiPRPreview(summary: "", suggestedBody: "", summaryError: nil))
+    }
 }
 
 // MARK: - Keychain Mock

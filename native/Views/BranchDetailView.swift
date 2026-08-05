@@ -27,6 +27,7 @@ struct BranchDetailView: View {
             CreatePRPreviewView(
                 repoPath: info.repoPath, branchName: info.name,
                 backendUrl: backendUrl, gitHubId: gitHubId, token: token,
+                api: deps.apiClient,
                 onComplete: { url in
                     dismiss()
                     NSWorkspace.shared.open(url)

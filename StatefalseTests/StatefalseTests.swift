@@ -311,13 +311,13 @@ func webhookUniqueID() throws {
 // GitHubUserInfo
 // ──────────────────────────────────────────────
 
-@Test("GitHubUserInfo decodes from JSON")
+@Test("ApiAvailableUser decodes from JSON")
 func gitHubUserDecode() throws {
     let json = """
     {"gitHubId":42,"login":"testuser"}
     """
     let data = try #require(json.data(using: .utf8))
-    let user = try JSONDecoder().decode(GitHubUserInfo.self, from: data)
+    let user = try JSONDecoder().decode(ApiAvailableUser.self, from: data)
     #expect(user.gitHubId == 42)
     #expect(user.login == "testuser")
     #expect(user.id == 42)

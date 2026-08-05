@@ -92,12 +92,6 @@ struct WebhookLogEntry: Decodable, Identifiable {
     }
 }
 
-struct GitHubUserInfo: Decodable, Identifiable {
-    let gitHubId: Int64
-    let login: String
-    var id: Int64 { gitHubId }
-}
-
 func extractTicketNumber(from branchName: String) -> String? {
     let pattern = try? NSRegularExpression(pattern: "[A-Z]+-\\d+")
     let range = NSRange(branchName.startIndex..., in: branchName)

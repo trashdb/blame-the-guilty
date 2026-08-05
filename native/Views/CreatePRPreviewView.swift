@@ -1,18 +1,12 @@
 import SwiftUI
 
-struct PRSubscriberUser: Identifiable, Decodable {
-    var id: Int64 { gitHubId }
-    let gitHubId: Int64
-    let login: String
-    let avatarUrl: String?
-}
-
 struct CreatePRPreviewView: View {
     let repoPath: String
     let branchName: String
     let backendUrl: String
     let gitHubId: Int64
     let token: String?
+    let api: ApiClientProtocol
     let onComplete: (URL) -> Void
     var onCancel: (() -> Void)?
 
@@ -26,7 +20,7 @@ struct CreatePRPreviewView: View {
     @State private var errorMessage: String?
     
     // Subscriber dropdown
-    @State private var availableUsers: [PRSubscriberUser] = []
+    @State private var availableUsers: [ApiAvailableUser] = []
     @State private var isLoadingUsers = false
     @State private var selectedUserIds: Set<Int64> = []
     @State private var showSubscriberPicker = false
@@ -36,12 +30,13 @@ struct CreatePRPreviewView: View {
 
     private var git: GitServiceProtocol { deps.gitService }
 
-    init(repoPath: String, branchName: String, backendUrl: String, gitHubId: Int64, token: String?, onComplete: @escaping (URL) -> Void, onCancel: (() -> Void)? = nil) {
+    init(repoPath: String, branchName: String, backendUrl: String, gitHubId: Int64, token: String?, api: ApiClientProtocol, onComplete: @escaping (URL) -> Void, onCancel: (() -> Void)? = nil) {
         self.repoPath = repoPath
         self.branchName = branchName
         self.backendUrl = backendUrl
         self.gitHubId = gitHubId
         self.token = token
+        self.api = api
         self.onComplete = onComplete
         self.onCancel = onCancel
         let ticketMatch = branchName.range(of: #"[A-Z]+-\d+"#, options: .regularExpression)
@@ -248,38 +243,18 @@ struct CreatePRPreviewView: View {
         errorMessage = nil
         let base = await git.baseRefName(repoPath: repoPath) ?? "main"
         let cleanBase = base.hasPrefix("origin/") ? String(base.dropFirst(7)) : base
-        let repoEncoded = fullName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? fullName
-        let headEncoded = branchName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? branchName
 
-        guard let token else {
+        guard api.authToken != nil else {
             errorMessage = "Not signed in"
             isLoading = false
             return
         }
-        guard let url = URL(string: "\(backendUrl)/api/github/pr-preview?repo=\(repoEncoded)&head=\(headEncoded)&baseBranch=\(cleanBase)&title=\(title.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? title)&useAI=\(useAI)") else {
-            errorMessage = "Invalid URL"
-            isLoading = false
-            return
-        }
-
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        req.timeoutInterval = 20
-        do {
-            let (data, resp) = try await URLSession.shared.data(for: req)
-            guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
-                struct ErrResp: Decodable { let error: String? }
-                if let err = try? JSONDecoder().decode(ErrResp.self, from: data), let msg = err.error {
-                    errorMessage = msg
-                } else {
-                    errorMessage = "Server error"
-                }
-                isLoading = false
-                return
-            }
-            struct PreviewData: Decodable { let summary: String; let suggestedBody: String; let summaryError: String? }
-            let decoded = try JSONDecoder().decode(PreviewData.self, from: data)
+        let result = await api.fetchPRPreview(
+            repo: fullName, head: branchName,
+            baseBranch: cleanBase, title: title, useAI: useAI
+        )
+        switch result {
+        case .success(let decoded):
             summary = decoded.summary.isEmpty ? nil : decoded.summary
             if let err = decoded.summaryError, !err.isEmpty {
                 errorMessage = err
@@ -288,8 +263,8 @@ struct CreatePRPreviewView: View {
                 bodyText = decoded.suggestedBody
                 suggestedBody = decoded.suggestedBody
             }
-        } catch {
-            errorMessage = error.localizedDescription
+        case .failure(let message):
+            errorMessage = message
         }
         isLoading = false
     }
@@ -319,26 +294,19 @@ struct CreatePRPreviewView: View {
     
     private func loadAvailableUsers() async {
         isLoadingUsers = true
-        guard let token, let url = URL(string: "\(backendUrl)/api/users") else { return }
-        
-        do {
-            var req = URLRequest(url: url)
-            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            let (data, _) = try await URLSession.shared.data(for: req)
-            if let decoded = try? JSONDecoder().decode([PRSubscriberUser].self, from: data) {
-                await MainActor.run {
-                    self.availableUsers = decoded.filter { $0.gitHubId != gitHubId }
-                }
-            }
-        } catch {
-            // Ignore
+        guard api.authToken != nil else { return }
+
+        let result = await api.fetchAvailableUsers()
+        let fetched = (try? result.get()) ?? []
+        await MainActor.run {
+            self.availableUsers = fetched.filter { $0.gitHubId != gitHubId }
         }
         isLoadingUsers = false
     }
 }
 
 struct SubscriberPickerView: View {
-    let availableUsers: [PRSubscriberUser]
+    let availableUsers: [ApiAvailableUser]
     @Binding var selectedIds: Set<Int64>
     let onDone: () -> Void
     let onCancel: () -> Void

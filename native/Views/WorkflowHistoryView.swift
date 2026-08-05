@@ -44,7 +44,7 @@ struct WorkflowRunRow: View {
     @ObservedObject var signalR: SignalRService
 
     @State private var showTargetPicker = false
-    @State private var users: [GitHubUserInfo] = []
+    @State private var users: [ApiAvailableUser] = []
     @State private var loadingUsers = false
     @State private var selectedIds: Set<Int64> = []
     @State private var isRerunning = false
@@ -247,7 +247,7 @@ struct WorkflowRunRow: View {
         .frame(width: 220)
     }
 
-    private func userRow(_ user: GitHubUserInfo) -> some View {
+    private func userRow(_ user: ApiAvailableUser) -> some View {
         Button {
             if selectedIds.contains(user.gitHubId) {
                 selectedIds.remove(user.gitHubId)
@@ -278,46 +278,34 @@ struct WorkflowRunRow: View {
     }
 
     private func loadUsers() {
-        guard let token = signalR.authToken, let url = URL(string: "\(backendUrl)/api/users") else { return }
+        guard signalR.api.authToken != nil else { return }
         loadingUsers = true
-        var req = URLRequest(url: url)
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        URLSession.shared.dataTask(with: req) { data, _, _ in
-            loadingUsers = false
-            guard let data = data,
-                  let decoded = try? JSONDecoder().decode([GitHubUserInfo].self, from: data) else { return }
-            DispatchQueue.main.async {
-                users = decoded.filter { $0.gitHubId != gitHubId }
+        Task {
+            let result = await signalR.api.fetchAvailableUsers()
+            let fetched = (try? result.get()) ?? []
+            let filtered = fetched.filter { $0.gitHubId != gitHubId }
+            await MainActor.run {
+                users = filtered
+                loadingUsers = false
             }
-        }.resume()
+        }
     }
 
     private func rerunWorkflow() {
-        guard let token = signalR.authToken,
-              let url = URL(string: "\(backendUrl)/api/workflows/runs/\(run.runId)/rerun") else { return }
+        guard signalR.api.authToken != nil else { return }
         isRerunning = true
         rerunError = nil
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            DispatchQueue.main.async {
-                self.isRerunning = false
-                if let error = error {
-                    self.rerunError = error.localizedDescription
-                    return
-                }
-                if let httpResponse = response as? HTTPURLResponse {
-                    if httpResponse.statusCode == 200 {
-                        Task { await signalR.syncFromApi() }
-                    } else {
-                        let body = data.flatMap { String(data: $0, encoding: .utf8) } ?? "Unknown error"
-                        self.rerunError = "HTTP \(httpResponse.statusCode): \(body)"
-                    }
+        Task {
+            let error = await signalR.api.rerunWorkflow(runId: run.runId)
+            await MainActor.run {
+                isRerunning = false
+                if let error {
+                    rerunError = error
+                } else {
+                    Task { await signalR.syncFromApi() }
                 }
             }
-        }.resume()
+        }
     }
 
     private func durationString(from interval: TimeInterval) -> String {
@@ -329,20 +317,13 @@ struct WorkflowRunRow: View {
 
     private func saveTargets() {
         let ids = Array(selectedIds)
-        guard let dbId = run.dbId, let token = signalR.authToken else { return }
-        guard let url = URL(string: "\(backendUrl)/api/workflows/runs/\(dbId)/target") else { return }
-        var request = URLRequest(url: url)
-        request.httpMethod = "PUT"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body: [String: Any] = ["targetGitHubIds": ids]
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-
-        URLSession.shared.dataTask(with: request) { data, _, error in
-            guard error == nil, data != nil else { return }
-            DispatchQueue.main.async {
-                signalR.setTargetGitHubIds(for: dbId, targetIds: ids)
+        guard let dbId = run.dbId else { return }
+        Task {
+            if await signalR.api.setTargetGitHubIds(dbId: dbId, targetIds: ids) {
+                await MainActor.run {
+                    signalR.setTargetGitHubIds(for: dbId, targetIds: ids)
+                }
             }
-        }.resume()
+        }
     }
 }

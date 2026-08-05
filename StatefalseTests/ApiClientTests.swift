@@ -262,4 +262,70 @@ final class ApiClientTests: XCTestCase {
         _ = await client.fetchMe()
         XCTAssertEqual(calls, 0)
     }
+
+    // MARK: - workflow run management
+
+    func testRerunWorkflowNilOn200() async {
+        MockURLProtocol.handler = { _ in self.jsonResponse(200, "") }
+        let error = await makeClient().rerunWorkflow(runId: 42)
+        XCTAssertNil(error)
+    }
+
+    func testRerunWorkflowReturnsErrorOnFailure() async {
+        MockURLProtocol.handler = { _ in self.jsonResponse(500, #"{"error":"boom"}"#) }
+        let error = await makeClient().rerunWorkflow(runId: 42)
+        XCTAssertEqual(error, "HTTP 500: {\"error\":\"boom\"}")
+    }
+
+    func testSetTargetGitHubIdsTrueOn200() async {
+        MockURLProtocol.handler = { _ in self.jsonResponse(200, "") }
+        let ok = await makeClient().setTargetGitHubIds(dbId: 9, targetIds: [1, 2])
+        XCTAssertTrue(ok)
+    }
+
+    func testSetTargetGitHubIdsFalseOn4xx() async {
+        MockURLProtocol.handler = { _ in self.jsonResponse(400, "") }
+        let ok = await makeClient().setTargetGitHubIds(dbId: 9, targetIds: [1, 2])
+        XCTAssertFalse(ok)
+    }
+
+    // MARK: - webhook logs
+
+    func testFetchWebhookLogsDecodes() async {
+        MockURLProtocol.handler = { _ in self.jsonResponse(200, #"[{"eventType":"workflow_run","action":null,"repo":"owner/repo","workflowName":"CI","outcome":"processed","message":null,"occurredAt":"2026-08-01T10:00:00Z"}]"#) }
+        let logs = await makeClient().fetchWebhookLogs(limit: 50)
+        XCTAssertEqual(logs?.first?.eventType, "workflow_run")
+        XCTAssertNotNil(logs?.first?.occurredAt)
+    }
+
+    // MARK: - auth helpers
+
+    func testSavePATUsesCustomBackendUrl() async {
+        MockURLProtocol.handler = { _ in self.jsonResponse(200, "") }
+        let client = makeClient()
+        client.authToken = "jwt"
+        _ = await client.savePAT(patToken: "ghp_abc", to: "https://custom.example.com")
+        XCTAssertEqual(MockURLProtocol.lastRequest?.url?.absoluteString, "https://custom.example.com/api/auth/pat")
+    }
+
+    // MARK: - PR preview
+
+    func testFetchPRPreviewSuccess() async {
+        MockURLProtocol.handler = { _ in self.jsonResponse(200, #"{"summary":"s","suggestedBody":"b","summaryError":null}"#) }
+        let result = await makeClient().fetchPRPreview(repo: "owner/repo", head: "feature/x", baseBranch: "main", title: "Title", useAI: false)
+        guard case .success(let preview) = result else {
+            return XCTFail("expected success, got \(result)")
+        }
+        XCTAssertEqual(preview.summary, "s")
+        XCTAssertEqual(preview.suggestedBody, "b")
+    }
+
+    func testFetchPRPreviewFailureOn4xx() async {
+        MockURLProtocol.handler = { _ in self.jsonResponse(500, #"{"error":"boom"}"#) }
+        let result = await makeClient().fetchPRPreview(repo: "owner/repo", head: "feature/x", baseBranch: "main", title: "Title", useAI: false)
+        guard case .failure(let message) = result else {
+            return XCTFail("expected failure, got \(result)")
+        }
+        XCTAssertEqual(message, "boom")
+    }
 }

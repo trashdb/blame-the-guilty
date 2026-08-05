@@ -23,7 +23,7 @@ class SignalRService: ObservableObject, SignalRServiceProtocol {
 
     let baseUrl: String
     var authToken: String?
-    private let api: ApiClientProtocol
+    let api: ApiClientProtocol
     private let signalRClient: SignalRClientProtocol
     private var task: Task<Void, Never>?
     private var pollTask: Task<Void, Never>?

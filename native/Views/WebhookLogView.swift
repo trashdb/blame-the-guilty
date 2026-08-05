@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct WebhookLogView: View {
-    let token: String?
+    let api: ApiClientProtocol
 
     @State private var logs: [WebhookLogEntry] = []
     @State private var isLoading = true
@@ -57,28 +57,17 @@ struct WebhookLogView: View {
     }
 
     private func loadLogs() {
-        guard let token, let url = URL(string: "\(backendUrl)/api/webhook/logs?limit=50") else { return }
+        guard api.authToken != nil else { return }
         isLoading = true
         error = nil
-        var req = URLRequest(url: url)
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        URLSession.shared.dataTask(with: req) { data, _, err in
-            DispatchQueue.main.async {
+        Task {
+            let fetched = await api.fetchWebhookLogs(limit: 50)
+            await MainActor.run {
                 isLoading = false
-                if let err {
-                    error = err.localizedDescription
-                    return
-                }
-                guard let data else { error = "No data"; return }
-                let decoder = JSONDecoder()
-                decoder.dateDecodingStrategy = .iso8601
-                if let decoded = try? decoder.decode([WebhookLogEntry].self, from: data) {
-                    logs = decoded
-                } else {
-                    error = "Failed to decode"
-                }
+                logs = fetched ?? []
+                if fetched == nil { error = "Failed to load logs" }
             }
-        }.resume()
+        }
     }
 }
 
