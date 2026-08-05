@@ -59,20 +59,15 @@ struct GetPRStatusIntent: AppIntent {
     var repository: String
 
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
-        let urlString = await MainActor.run { "\(backendUrl)/api/pullrequests/\(prNumber)/detail?repo=\(repository)&gitHubId=0" }
-        guard let url = URL(string: urlString),
-              let (data, _) = try? await URLSession.shared.data(from: url) else {
+        let client = LiveApiClient.fromCurrentSession()
+        let result = await client.fetchPRDetails(prNumber: Int64(prNumber), repo: repository)
+        switch result {
+        case .success(let details):
+            let status = details.draft == true ? "Draft" : (details.mergeableState ?? "Unknown")
+            return .result(value: status)
+        case .failure:
             return .result(value: "Unknown")
         }
-        struct DetailResponse: Decodable {
-            let mergeableState: String?
-            let draft: Bool?
-        }
-        if let decoded = try? JSONDecoder().decode(DetailResponse.self, from: data) {
-            let status = decoded.draft == true ? "Draft" : (decoded.mergeableState ?? "Unknown")
-            return .result(value: status)
-        }
-        return .result(value: "Unknown")
     }
 }
 
@@ -83,21 +78,12 @@ struct ListMyPRsIntent: AppIntent {
     static var description = IntentDescription("Shows your active pull requests")
 
     func perform() async throws -> some IntentResult & ReturnsValue<[String]> {
-        let urlString = await MainActor.run { "\(backendUrl)/api/pullrequests/active?gitHubId=0" }
-        guard let url = URL(string: urlString),
-              let (data, _) = try? await URLSession.shared.data(from: url) else {
+        let client = LiveApiClient.fromCurrentSession()
+        guard let prs = await client.fetchActivePRs() else {
             return .result(value: [])
         }
-        struct PRResponse: Decodable {
-            let prNumber: Int64
-            let title: String
-            let repo: String
-        }
-        if let prs = try? JSONDecoder().decode([PRResponse].self, from: data) {
-            let summaries = prs.prefix(10).map { "PR #\($0.prNumber): \($0.title) (\($0.repo))" }
-            return .result(value: Array(summaries))
-        }
-        return .result(value: [])
+        let summaries = prs.prefix(10).map { "PR #\($0.prNumber): \($0.title) (\($0.repo))" }
+        return .result(value: Array(summaries))
     }
 }
 

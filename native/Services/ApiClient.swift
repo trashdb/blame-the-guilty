@@ -200,6 +200,14 @@ final class LiveApiClient: ApiClientProtocol {
         self.session = session
     }
 
+    /// Creates a client authenticated with the stored Keychain session for hosts
+    /// that run outside the SwiftUI hierarchy (App Intents, Widgets).
+    static func fromCurrentSession() -> LiveApiClient {
+        let client = LiveApiClient(baseUrl: backendUrl)
+        client.authToken = KeychainService.load()?.token
+        return client
+    }
+
     private func makeRequest(_ url: URL) -> URLRequest {
         var request = URLRequest(url: url)
         if let authToken {

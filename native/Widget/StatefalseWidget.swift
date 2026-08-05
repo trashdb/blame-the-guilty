@@ -34,20 +34,9 @@ struct StatefalseProvider: TimelineProvider {
     }
 
     private func fetchEntry() async -> StatefalseEntry {
-        let urlString = "\(TeamDefaults.backendUrl)/api/pullrequests/active?gitHubId=0"
-        guard let url = URL(string: urlString),
-              let (data, _) = try? await URLSession.shared.data(from: url) else {
+        let client = LiveApiClient.fromCurrentSession()
+        guard let prs = await client.fetchActivePRs() else {
             return StatefalseEntry(date: Date(), prCount: 0, status: "Offline", recentPR: nil)
-        }
-
-        struct PRResponse: Decodable {
-            let prNumber: Int64
-            let title: String
-            let ciStatus: String?
-        }
-
-        guard let prs = try? JSONDecoder().decode([PRResponse].self, from: data) else {
-            return StatefalseEntry(date: Date(), prCount: 0, status: "Error", recentPR: nil)
         }
 
         let failing = prs.filter { $0.ciStatus == "failed" }.count
