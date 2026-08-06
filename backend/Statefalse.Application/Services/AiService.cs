@@ -55,7 +55,7 @@ Only respond with the JSON object, no other text.";
 
     // ─────────────────────────── PR preview ───────────────────────────
 
-    public async Task<PrPreviewResult> BuildPreviewAsync(string repo, string baseBranch, string head, string title, bool useAI, string? oauthToken)
+    public async Task<PrPreviewResult> BuildPreviewAsync(string repo, string baseBranch, string head, string title, bool useAI, string? restToken, string? copilotToken)
     {
         string? template = null;
         var templatePaths = new[]
@@ -72,7 +72,7 @@ Only respond with the JSON object, no other text.";
         };
         foreach (var path in templatePaths)
         {
-            template = await FetchFileContent(repo, path, oauthToken);
+            template = await FetchFileContent(repo, path, restToken);
             if (template != null)
             {
                 _logger.LogInformation("PrPreview: found template at {Path}", path);
@@ -84,21 +84,21 @@ Only respond with the JSON object, no other text.";
             _logger.LogWarning("PrPreview: no PR template found for repo={Repo}", repo);
         }
 
-        var commits = await GetCommitsBetween(repo, baseBranch, head, oauthToken);
+        var commits = await GetCommitsBetween(repo, baseBranch, head, restToken);
         _logger.LogInformation("PrPreview: fetched {Count} commits for {Base}...{Head}", commits.Count, baseBranch, head);
 
         var summary = "";
         string? summaryError = null;
         if (useAI && commits.Count > 0)
         {
-            if (!string.IsNullOrEmpty(oauthToken))
+            if (!string.IsNullOrEmpty(copilotToken))
             {
                 _logger.LogInformation("PrPreview: calling Copilot API for summary (oauthToken present)");
-                summary = await GenerateSummary(commits, oauthToken);
+                summary = await GenerateSummary(commits, copilotToken);
                 if (string.IsNullOrEmpty(summary))
                 {
                     summaryError = "Copilot API returned empty response. Token may be expired — re-login to GitHub.";
-                    _logger.LogWarning("PrPreview: Copilot returned empty summary (token prefix={Prefix})", oauthToken[..Math.Min(8, oauthToken.Length)]);
+                    _logger.LogWarning("PrPreview: Copilot returned empty summary (token prefix={Prefix})", copilotToken[..Math.Min(8, copilotToken.Length)]);
                 }
                 else
                     _logger.LogInformation("PrPreview: Copilot summary generated ({Len} chars)", summary.Length);

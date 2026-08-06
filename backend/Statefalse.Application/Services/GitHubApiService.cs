@@ -222,7 +222,7 @@ public class GitHubApiService
         if (string.IsNullOrEmpty(token))
             return ApiResult.Unauthorized(new { error = "No token" });
 
-        var preview = await _ai.BuildPreviewAsync(repo, baseBranch, head, title, useAI, user?.AccessToken);
+        var preview = await _ai.BuildPreviewAsync(repo, baseBranch, head, title, useAI, token, user?.AccessToken);
 
         return ApiResult.Ok(new PrPreviewDto(
             preview.Template,
