@@ -42,11 +42,8 @@ jobs:
             -derivedDataPath /tmp/statefalse-test \
             -resultBundlePath /tmp/statefalse-test.xcresult 2>&1 | tee /tmp/statefalse-test.log | xcpretty && exit ${PIPESTATUS[0]}
 
-      - name: Upload test diagnostics
+      - name: Surface test log in annotations
         if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-diagnostics
-          path: |
-            /tmp/statefalse-test.log
-            /tmp/statefalse-test.xcresult
+        run: |
+          rg -i -e "error" -e "failed" -e "crash" -e "signal" -e "killed" -e "xcodebuild:" /tmp/statefalse-test.log 2>/dev/null | tail -5 | sed 's/^/::error::/'
+          tail -3 /tmp/statefalse-test.log 2>/dev/null | sed 's/^/::error::/'
