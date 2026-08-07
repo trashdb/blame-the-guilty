@@ -99,7 +99,7 @@ struct QuickSearchView: View {
                         Task {
                             let git = deps.gitService
                             try? await git.checkoutBranch(repoPath: b.repoPath, name: b.name)
-                            try? await git.pullCurrentBranch(repoPath: b.repoPath, token: nil)
+                            _ = await git.pullCurrentBranch(repoPath: b.repoPath, token: nil)
                         }
                     })
                 }
@@ -228,8 +228,8 @@ struct QuickSearchView: View {
                         await MainActor.run { MenuBarBadgeService.shared.currentBranches = branches }
                     }
                 }
-                .onChange(of: query) { _ in selectedIndex = 0 }
-                .onChange(of: isPresented) { shown in
+                .onChange(of: query) { selectedIndex = 0 }
+                .onChange(of: isPresented) { _, shown in
                     if shown { query = ""; selectedIndex = 0; focusTextField() }
                 }
                 .onExitCommand { isPresented = false }
@@ -264,7 +264,7 @@ struct QuickSearchView: View {
                     }
                 }
             }
-            .onChange(of: selectedIndex) { newVal in
+            .onChange(of: selectedIndex) { _, newVal in
                 if newVal >= 0, newVal < allResults.count {
                     withAnimation(.none) {
                         proxy.scrollTo(allResults[newVal].id, anchor: .center)

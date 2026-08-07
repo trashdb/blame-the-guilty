@@ -27,6 +27,7 @@ private final class MockURLProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
+@MainActor
 final class ApiClientTests: XCTestCase {
     private func makeClient() -> LiveApiClient {
         let config = URLSessionConfiguration.ephemeral

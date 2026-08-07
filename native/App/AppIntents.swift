@@ -7,7 +7,7 @@ import Foundation
 struct OpenPRIntent: AppIntent {
     static var title: LocalizedStringResource = "Open Pull Request"
     static var description = IntentDescription("Opens a pull request in your browser")
-    static var parameterSummary: ParameterSummary { Summary("Open PR \(\.$prNumber) in \(\.$repository)") }
+    static var parameterSummary: any ParameterSummary { Summary("Open PR \(\.$prNumber) in \(\.$repository)") }
 
     @Parameter(title: "PR Number")
     var prNumber: Int
@@ -17,7 +17,7 @@ struct OpenPRIntent: AppIntent {
 
     func perform() async throws -> some IntentResult {
         let url = URL(string: "https://github.com/\(repository)/pull/\(prNumber)")!
-        await MainActor.run { NSWorkspace.shared.open(url) }
+        _ = await MainActor.run { NSWorkspace.shared.open(url) }
         return .result()
     }
 }
@@ -27,7 +27,7 @@ struct OpenPRIntent: AppIntent {
 struct CopyPRLinkIntent: AppIntent {
     static var title: LocalizedStringResource = "Copy PR Link"
     static var description = IntentDescription("Copies the pull request URL to clipboard")
-    static var parameterSummary: ParameterSummary { Summary("Copy link for PR \(\.$prNumber) in \(\.$repository)") }
+    static var parameterSummary: any ParameterSummary { Summary("Copy link for PR \(\.$prNumber) in \(\.$repository)") }
 
     @Parameter(title: "PR Number")
     var prNumber: Int
@@ -50,7 +50,7 @@ struct CopyPRLinkIntent: AppIntent {
 struct GetPRStatusIntent: AppIntent {
     static var title: LocalizedStringResource = "Get PR Status"
     static var description = IntentDescription("Returns the status of a pull request")
-    static var parameterSummary: ParameterSummary { Summary("Get status of PR \(\.$prNumber) in \(\.$repository)") }
+    static var parameterSummary: any ParameterSummary { Summary("Get status of PR \(\.$prNumber) in \(\.$repository)") }
 
     @Parameter(title: "PR Number")
     var prNumber: Int
@@ -59,7 +59,7 @@ struct GetPRStatusIntent: AppIntent {
     var repository: String
 
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
-        let client = LiveApiClient.fromCurrentSession()
+        let client = await MainActor.run { LiveApiClient.fromCurrentSession() }
         let result = await client.fetchPRDetails(prNumber: Int64(prNumber), repo: repository)
         switch result {
         case .success(let details):
@@ -78,7 +78,7 @@ struct ListMyPRsIntent: AppIntent {
     static var description = IntentDescription("Shows your active pull requests")
 
     func perform() async throws -> some IntentResult & ReturnsValue<[String]> {
-        let client = LiveApiClient.fromCurrentSession()
+        let client = await MainActor.run { LiveApiClient.fromCurrentSession() }
         guard let prs = await client.fetchActivePRs() else {
             return .result(value: [])
         }

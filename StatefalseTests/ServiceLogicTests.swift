@@ -220,6 +220,7 @@ final class SessionExpiryTests: XCTestCase {
         func connectAndListen(token: String, username: String, onEvent: @escaping (HubEvent) -> Void) async throws {}
     }
 
+    @MainActor
     func testSessionExpiryLogsOutAndClearsKeychain() async {
         let keychain = MockKeychainService()
         keychain.savedSession = KeychainService.Session(gitHubId: 123, username: "alice", avatarUrl: nil, token: "jwt")
@@ -248,6 +249,7 @@ final class SessionExpiryTests: XCTestCase {
         XCTAssertNil(keychain.savedSession)
     }
 
+    @MainActor
     func testSessionExpiryIsIdempotent() async {
         let keychain = MockKeychainService()
         keychain.savedSession = KeychainService.Session(gitHubId: 123, username: "alice", avatarUrl: nil, token: "jwt")

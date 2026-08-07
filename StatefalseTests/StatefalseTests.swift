@@ -425,66 +425,75 @@ func gitRepoNameTrailingSlash() {
     #expect(GitService.repoName(from: "/tmp/some-project/") == "some-project")
 }
 
+@MainActor
 @Test("GitService.generatePRTitle strips prefixes")
 func generateTitleStripsPrefix() async {
     let git = GitService()
-    let title = await git.generatePRTitle(from: "feature/add-login")
+    let title = git.generatePRTitle(from: "feature/add-login")
     #expect(title == "Add login")
 }
 
+@MainActor
 @Test("GitService.generatePRTitle includes ticket")
 func generateTitleWithTicket() async {
     let git = GitService()
-    let title = await git.generatePRTitle(from: "fix/LOY-999-crash-on-start")
+    let title = git.generatePRTitle(from: "fix/LOY-999-crash-on-start")
     #expect(title == "[LOY-999] Crash on start")
 }
 
+@MainActor
 @Test("GitService.generatePRTitle without prefix")
 func generateTitleNoPrefix() async {
     let git = GitService()
-    let title = await git.generatePRTitle(from: "update-readme")
+    let title = git.generatePRTitle(from: "update-readme")
     #expect(title == "Update readme")
 }
 
+@MainActor
 @Test("GitService.generatePRTitle with underscore")
 func generateTitleUnderscore() async {
     let git = GitService()
-    let title = await git.generatePRTitle(from: "chore/clean_up_code")
+    let title = git.generatePRTitle(from: "chore/clean_up_code")
     #expect(title == "Clean up code")
 }
 
+@MainActor
 @Test("GitService.generatePRTitle hotfix prefix")
 func generateTitleHotfix() async {
     let git = GitService()
-    let title = await git.generatePRTitle(from: "hotfix/ABC-1-patch")
+    let title = git.generatePRTitle(from: "hotfix/ABC-1-patch")
     #expect(title == "[ABC-1] Patch")
 }
 
+@MainActor
 @Test("GitService.generatePRTitle bugfix prefix")
 func generateTitleBugfix() async {
     let git = GitService()
-    let title = await git.generatePRTitle(from: "bugfix/fix-npe")
+    let title = git.generatePRTitle(from: "bugfix/fix-npe")
     #expect(title == "Fix npe")
 }
 
+@MainActor
 @Test("GitService.generatePRTitle empty branch")
 func generateTitleEmpty() async {
     let git = GitService()
-    let title = await git.generatePRTitle(from: "")
+    let title = git.generatePRTitle(from: "")
     #expect(title == "")
 }
 
+@MainActor
 @Test("GitService.generatePRTitle release prefix")
 func generateTitleRelease() async {
     let git = GitService()
-    let title = await git.generatePRTitle(from: "release/v2.0")
+    let title = git.generatePRTitle(from: "release/v2.0")
     #expect(title == "V2.0")
 }
 
+@MainActor
 @Test("GitService.generatePRTitle already formatted preserves ticket")
 func generateTitleAlreadyFormatted() async {
     let git = GitService()
-    let title = await git.generatePRTitle(from: "feature/[ABC-1]-Add-login")
+    let title = git.generatePRTitle(from: "feature/[ABC-1]-Add-login")
     #expect(title == "[ABC-1] Add login")
 }
 

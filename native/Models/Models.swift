@@ -20,7 +20,7 @@ struct PunishmentEvent {
     let date: Date
 }
 
-struct WorkflowRun: Identifiable, Codable {
+struct WorkflowRun: Identifiable {
     let id: UUID
     let dbId: Int?
     let runId: Int64
@@ -45,7 +45,9 @@ struct WorkflowRun: Identifiable, Codable {
     }
 }
 
-struct PullRequest: Identifiable, Equatable, Codable {
+nonisolated extension WorkflowRun: Codable {}
+
+struct PullRequest: Identifiable {
     var id: String { "\(repo)#\(prNumber)" }
     let prNumber: Int64
     let title: String
@@ -71,13 +73,17 @@ struct PullRequest: Identifiable, Equatable, Codable {
 
     var prUrl: URL { htmlUrl ?? URL(string: "https://github.com/\(repo)/pull/\(prNumber)")! }
     var isMerged: Bool { status == "merged" }
+}
 
+nonisolated extension PullRequest: Equatable {
     static func == (lhs: PullRequest, rhs: PullRequest) -> Bool {
         lhs.prNumber == rhs.prNumber && lhs.repo == rhs.repo
     }
 }
 
-struct WebhookLogEntry: Decodable, Identifiable {
+nonisolated extension PullRequest: Codable {}
+
+struct WebhookLogEntry: Identifiable {
     let id = UUID()
     let eventType: String
     let action: String?
@@ -92,7 +98,9 @@ struct WebhookLogEntry: Decodable, Identifiable {
     }
 }
 
-func extractTicketNumber(from branchName: String) -> String? {
+nonisolated extension WebhookLogEntry: Decodable {}
+
+nonisolated func extractTicketNumber(from branchName: String) -> String? {
     let pattern = try? NSRegularExpression(pattern: "[A-Z]+-\\d+")
     let range = NSRange(branchName.startIndex..., in: branchName)
     guard let match = pattern?.firstMatch(in: branchName, range: range) else { return nil }

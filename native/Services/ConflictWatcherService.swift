@@ -138,7 +138,7 @@ class ConflictWatcherService: ConflictWatcherServiceProtocol {
         notifyResetTask?.cancel()
         notifyResetTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 300_000_000_000)
-            await MainActor.run { self?.recentlyNotified.remove(key) }
+            _ = await MainActor.run { self?.recentlyNotified.remove(key) }
         }
 
         Task { @MainActor in

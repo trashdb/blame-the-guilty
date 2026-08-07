@@ -12,6 +12,8 @@ enum MenuBarConnectionState {
     case disconnected, connected, hasFailures, hasRunning
 }
 
+nonisolated extension MenuBarConnectionState: Equatable {}
+
 class MenuBarBadgeService: ObservableObject {
     static let shared = MenuBarBadgeService()
 

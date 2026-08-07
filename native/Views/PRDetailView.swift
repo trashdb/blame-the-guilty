@@ -59,7 +59,7 @@ struct PRDetailView: View {
         .frame(width: 320, height: 480)
         .animation(DS.Animation.default, value: model.selectedTab)
         .onAppear { model.loadDetails() }
-        .onChange(of: model.selectedTab) { newTab in
+        .onChange(of: model.selectedTab) { _, newTab in
             switch newTab {
             case 1 where model.commits.isEmpty && !model.loadingCommits: model.loadCommits()
             case 2 where model.files.isEmpty && !model.loadingFiles: model.loadFiles()

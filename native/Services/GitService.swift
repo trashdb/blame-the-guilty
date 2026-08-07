@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-private let branchLog = OSLog(subsystem: "com.statefalse", category: "branches")
+private nonisolated let branchLog = OSLog(subsystem: "com.statefalse", category: "branches")
 
 struct ScannedRepo: Identifiable {
     var id: String { path }
@@ -25,9 +25,10 @@ struct RemoteBranch: Identifiable {
 }
 
 private final class RunGitDone: @unchecked Sendable {
-    private var _done = false
+    nonisolated(unsafe) private var _done = false
     private let lock = NSLock()
-    func exchange(_ value: Bool) -> Bool {
+    nonisolated init() {}
+    nonisolated func exchange(_ value: Bool) -> Bool {
         lock.lock(); defer { lock.unlock() }
         let prev = _done
         _done = value
@@ -85,9 +86,11 @@ actor GitService: GitServiceProtocol {
         // Always pull over HTTPS using the token — never fall back to SSH `git pull`,
         // which fails in a GUI app with "permission denied (publickey)".
         guard let t = token,
-              let fullName = await repoFullName(repoPath: repoPath),
-              let branch = try? await currentBranchName(repoPath: repoPath) ?? "",
-              !branch.isEmpty else {
+              let fullName = await repoFullName(repoPath: repoPath) else {
+            return .noToken
+        }
+        let branch = await currentBranchName(repoPath: repoPath) ?? ""
+        guard !branch.isEmpty else {
             return .noToken
         }
         do {
@@ -440,12 +443,12 @@ actor GitService: GitServiceProtocol {
         try await runGit(repoPath: repoPath, args: ["checkout", branch])
         try await runGit(repoPath: repoPath, args: ["pull", "--rebase", "origin", baseBranch])
         // Push via HTTPS using token to avoid SSH key issues
-        let result = try await runGit(repoPath: repoPath, args: ["push", "https://x-access-token:\(token)@github.com/\(ownerRepo).git", branch])
+        try await runGit(repoPath: repoPath, args: ["push", "https://x-access-token:\(token)@github.com/\(ownerRepo).git", branch])
         return "Branch updated: rebased \(branch) onto \(baseBranch)"
     }
 
     func pullBranch(repoPath: String, name: String, token: String? = nil) async throws {
-        let current = try? await currentBranchName(repoPath: repoPath) ?? ""
+        let current = await currentBranchName(repoPath: repoPath) ?? ""
         if current != name {
             try await runGit(repoPath: repoPath, args: ["checkout", name])
         }
@@ -461,7 +464,7 @@ actor GitService: GitServiceProtocol {
         let url = "https://x-access-token:\(t)@github.com/\(fullName).git"
         try await runGit(repoPath: repoPath, args: ["fetch", url, name])
         try await runGit(repoPath: repoPath, args: ["rebase", "FETCH_HEAD"])
-        if let current = current, !current.isEmpty, current != name {
+        if !current.isEmpty, current != name {
             try await runGit(repoPath: repoPath, args: ["checkout", current])
         }
     }
@@ -504,7 +507,7 @@ actor GitService: GitServiceProtocol {
     /// e.g. `github-trashdb` → `github.com`
     private func resolveSSHHostName(for alias: String) -> String? {
         let configPath = NSHomeDirectory() + "/.ssh/config"
-        guard let config = try? String(contentsOfFile: configPath) else { return nil }
+        guard let config = try? String(contentsOfFile: configPath, encoding: .utf8) else { return nil }
         let lines = config.components(separatedBy: "\n")
         var inBlock = false
         for line in lines {
@@ -523,7 +526,7 @@ actor GitService: GitServiceProtocol {
 
     /// Parse ~/.ssh/config to find the IdentityFile for the SSH host in this repo's remote URL.
     private func resolveSSHIdentityFile(for repoPath: String) -> String? {
-        guard let output = try? String(contentsOfFile: "\(repoPath)/.git/config") else { return nil }
+        guard let output = try? String(contentsOfFile: "\(repoPath)/.git/config", encoding: .utf8) else { return nil }
         // Find remote "origin" URL
         var foundOrigin = false
         var remoteLine: String?
@@ -543,7 +546,7 @@ actor GitService: GitServiceProtocol {
 
         // Read SSH config and find matching Host block
         let configPath = NSHomeDirectory() + "/.ssh/config"
-        guard let config = try? String(contentsOfFile: configPath) else { return nil }
+        guard let config = try? String(contentsOfFile: configPath, encoding: .utf8) else { return nil }
 
         var inBlock = false
         for line in config.components(separatedBy: "\n") {

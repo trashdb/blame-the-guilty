@@ -102,9 +102,10 @@ struct ApiPRPreview: Decodable {
     let summaryError: String?
 }
 
-struct ApiBranch: Decodable {
+struct ApiBranch {
     let name: String
 }
+nonisolated extension ApiBranch: Decodable {}
 
 struct ApiCreatePRResult: Decodable {
     let prNumber: Int64
@@ -112,12 +113,13 @@ struct ApiCreatePRResult: Decodable {
     let existing: Bool?
 }
 
-struct ApiAvailableUser: Identifiable, Decodable {
+struct ApiAvailableUser: Identifiable {
     var id: Int64 { gitHubId }
     let gitHubId: Int64
     let login: String
     let avatarUrl: String?
 }
+nonisolated extension ApiAvailableUser: Decodable {}
 
 struct ApiError: Decodable {
     let error: String?

@@ -152,13 +152,9 @@ struct ContentView: View {
             setupQuickSearchShortcut()
             setupResignFocusMonitor()
         }
-        .onChange(of: signalR.activePRs) { updateMenuBarBadge($0) }
-        .onChange(of: signalR.runningWorkflows.count) { _ in
-            updateMenuBarBadge(signalR.activePRs)
-        }
-        .onChange(of: signalR.isConnected) { _ in
-            updateMenuBarBadge(signalR.activePRs)
-        }
+        .onChange(of: signalR.activePRs) { _, newValue in updateMenuBarBadge(newValue) }
+        .onChange(of: signalR.runningWorkflows.count) { updateMenuBarBadge(signalR.activePRs) }
+        .onChange(of: signalR.isConnected) { updateMenuBarBadge(signalR.activePRs) }
         .overlay(QuickSearchView(
             isPresented: $showQuickSearch,
             actions: signalR.isLoggedIn ? quickSearchActions : [],
@@ -245,7 +241,7 @@ struct ContentView: View {
                 Task {
                     let git = deps.gitService
                     try? await git.checkoutBranch(repoPath: fav.repoPath, name: "main")
-                    try? await git.pullCurrentBranch(repoPath: fav.repoPath, token: nil)
+                    _ = await git.pullCurrentBranch(repoPath: fav.repoPath, token: nil)
                     await self.scanCurrentBranches()
                 }
             })

@@ -162,7 +162,7 @@ struct ActivePRsView: View {
         }
         .padding(.top, DS.Spacing.xs)
         .padding(.bottom, DS.Spacing.sm)
-        .onChange(of: prs) { newPRs in
+        .onChange(of: prs) { _, newPRs in
             let activeIDs = Set(newPRs.map(\.id))
             optimisticDrafts = optimisticDrafts.filter { activeIDs.contains($0.key) }
             for pr in newPRs {
