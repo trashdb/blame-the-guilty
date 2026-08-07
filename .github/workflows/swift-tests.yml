@@ -37,4 +37,14 @@ jobs:
           xcodebuild test -scheme StatefalseTests -project statefalse.xcodeproj \
             -destination 'platform=macOS' \
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO \
-            -derivedDataPath /tmp/statefalse-test | xcpretty && exit ${PIPESTATUS[0]}
+            -derivedDataPath /tmp/statefalse-test \
+            -resultBundlePath /tmp/statefalse-test.xcresult 2>&1 | tee /tmp/statefalse-test.log | xcpretty && exit ${PIPESTATUS[0]}
+
+      - name: Upload test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-diagnostics
+          path: |
+            /tmp/statefalse-test.log
+            /tmp/statefalse-test.xcresult
