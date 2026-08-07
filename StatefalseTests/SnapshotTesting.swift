@@ -1,11 +1,15 @@
 import Foundation
-import XCTest
+import Testing
 import SwiftUI
 import AppKit
 
 /// Lightweight snapshot testing without external dependencies.
 /// Renders SwiftUI views to images and compares against reference files.
 enum SnapshotTesting {
+    /// GitHub Actions macOS runners have no GUI session; ImageRenderer can
+    /// crash the test runner there. Validate snapshots on dev machines only.
+    static let isCI = ProcessInfo.processInfo.environment["CI"] != nil
+
     static var referenceDirectory: URL {
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()  // SnapshotTests/
@@ -16,48 +20,38 @@ enum SnapshotTesting {
     }
 
     @MainActor
-    static func assertSnapshot<V: View>(
-        of view: V,
-        named name: String,
-        file: StaticString = #file,
-        line: UInt = #line
-    ) {
+    static func assertSnapshot<V: View>(of view: V, named name: String) {
+        guard !isCI else { return }
+
         let renderer = ImageRenderer(content: view)
         renderer.scale = 2
         guard let nsImage = renderer.nsImage else {
-            XCTFail("Failed to render view to image", file: file, line: line)
+            Issue.record("Failed to render view '\(name)' to image")
+            return
+        }
+        guard let renderedPNG = pngData(from: nsImage) else {
+            Issue.record("Failed to encode '\(name)' to PNG")
             return
         }
 
         let referenceURL = referenceDirectory
             .appendingPathComponent("\(name).png")
 
-        if let existingData = try? Data(contentsOf: referenceURL),
-           let existingImage = NSImage(data: existingData),
-           let existingTiff = existingImage.tiffRepresentation,
-           let newTiff = nsImage.tiffRepresentation {
-            // Compare by raw data
-            if existingTiff == newTiff { return }  // identical
-            // Images differ — save new and fail
-            saveImage(nsImage, to: referenceURL.appendingPathExtension("new"))
-            XCTFail(
-                "Snapshot mismatch for '\(name)'. New image saved to \(referenceURL.path).new",
-                file: file, line: line
-            )
-        } else {
-            // First run — save reference
-            saveImage(nsImage, to: referenceURL)
-            XCTFail(
-                "First snapshot for '\(name)' saved as reference. Re-run tests to verify.",
-                file: file, line: line
-            )
+        guard let existingData = try? Data(contentsOf: referenceURL) else {
+            try? renderedPNG.write(to: referenceURL)
+            Issue.record("First snapshot for '\(name)' saved as reference. Re-run tests to verify.")
+            return
         }
+
+        if existingData == renderedPNG { return }  // identical
+
+        try? renderedPNG.write(to: referenceURL.appendingPathExtension("new"))
+        Issue.record("Snapshot mismatch for '\(name)'. New image saved to \(referenceURL.path).new")
     }
 
-    private static func saveImage(_ image: NSImage, to url: URL) {
+    private static func pngData(from image: NSImage) -> Data? {
         guard let tiff = image.tiffRepresentation,
-              let rep = NSBitmapImageRep(data: tiff),
-              let png = rep.representation(using: .png, properties: [:]) else { return }
-        try? png.write(to: url)
+              let rep = NSBitmapImageRep(data: tiff) else { return nil }
+        return rep.representation(using: .png, properties: [:])
     }
 }
