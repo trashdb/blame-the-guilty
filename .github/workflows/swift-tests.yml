@@ -6,11 +6,13 @@ on:
     paths:
       - 'native/**'
       - 'StatefalseTests/**'
+      - '.github/workflows/**'
   pull_request:
     branches: [main]
     paths:
       - 'native/**'
       - 'StatefalseTests/**'
+      - '.github/workflows/**'
 
 jobs:
   test:
