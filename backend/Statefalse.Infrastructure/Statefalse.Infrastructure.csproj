@@ -18,6 +18,8 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.9" />
+    <!-- Pin SQLitePCLRaw family to patched version (GHSA-2m69-gcr7-jv3q): Microsoft.Data.Sqlite.Core 10.0.9 pulls bundle 2.1.11 (vulnerable) -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
   </ItemGroup>
 
 </Project>
